@@ -7,6 +7,7 @@
 package ttype
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -89,4 +90,15 @@ func (h *H) OnSubneg(s *telnet.Session, data []byte) bool {
 	}
 	s.Subneg(telnet.OptTType, append([]byte{0}, r[i]...)) // IS
 	return true
+}
+
+// SaveState and LoadState carry the position in the answer cycle across /restart.
+func (h *H) SaveState() []byte { b, _ := json.Marshal(h.step); return b }
+func (h *H) LoadState(b []byte) error {
+	var n int
+	if err := json.Unmarshal(b, &n); err != nil || n < 0 || n > 16 {
+		return telnet.ErrBadState
+	}
+	h.step = n
+	return nil
 }

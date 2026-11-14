@@ -48,6 +48,23 @@ type Config struct {
 	Now           func() time.Time
 	// Interactive says whether a human is at the terminal (enables visual).
 	Interactive bool
+
+	// Restore, when set, starts the client from the state a /restart left
+	// (see LoadRestoration): no library, no rc file, no startup commands or
+	// connection; the interpreter, screens and sockets come from the state.
+	Restore *Restoration
+	// ExePath and Args are what /restart starts again (default: os.Executable
+	// and just the path; Main passes os.Args).
+	ExePath string
+	Args    []string
+	// RestartTimeout is how long /restart waits for the new binary to report
+	// ready (default 10 s; the GTF_RESTART_TIMEOUT environment variable
+	// overrides it, for tests).
+	RestartTimeout time.Duration
+	// RestartProbe and RestartExec replace the real rehearsal child and the
+	// exec (tests).
+	RestartProbe func(ProbeRequest) error
+	RestartExec  func(exe string, argv, env []string) error
 }
 
 // Client is the application.
@@ -58,13 +75,14 @@ type Client struct {
 	ui   *ui.UI
 	base *ui.Screen
 
-	sessions map[string]*Session
-	wscreens map[string]*ui.Screen // each world's screen outlives its socket (tf: world->screen)
-	alert    *alertState
-	alertSeq uint64
-	order    []*Session // creation order
-	fg       *Session
-	xworld   string // world whose text/event is being processed
+	sessions   map[string]*Session
+	wscreens   map[string]*ui.Screen // each world's screen outlives its socket (tf: world->screen)
+	alert      *alertState
+	alertSeq   uint64
+	alertUntil time.Time
+	order      []*Session // creation order
+	fg         *Session
+	xworld     string // world whose text/event is being processed
 
 	panels *panelState
 	help   *helpData
@@ -77,6 +95,12 @@ type Client struct {
 	doneOnce      sync.Once
 	libDir        string
 	closed        bool
+
+	// restart state (restart*.go)
+	restarting   bool
+	restored     *Restoration
+	reconnect    []reconnectRec // sessions the old process could not carry: connect again at Start
+	pendingAlert time.Duration  // an alert carried over: its remaining time
 }
 
 // New builds a client. The interpreter is configured and its library loaded
@@ -105,7 +129,11 @@ func New(cfg Config) (*Client, error) {
 	c.ui.Ed = in.Input()
 	in.EnableHookEvents("GMCP", "GMCP_LOGIN", "MSDP")
 	c.install()
-	if err := c.loadLibrary(); err != nil {
+	if cfg.Restore != nil {
+		if err := c.restore(cfg.Restore); err != nil {
+			return nil, fmt.Errorf("restoring after /restart: %w", err)
+		}
+	} else if err := c.loadLibrary(); err != nil {
 		c.echoLine("% " + err.Error())
 	}
 	c.run = gtfparser.NewRunner(in)
@@ -153,7 +181,9 @@ func (c *Client) libraryDir() (string, error) {
 	return gtflib.TFCacheDir()
 }
 
-func (c *Client) loadLibrary() error {
+// setupLibDir finds (and if need be extracts) the tf library directory and
+// adds it to the interpreter's search path.
+func (c *Client) setupLibDir() error {
 	dir, err := c.libraryDir()
 	if err != nil {
 		return err
@@ -165,10 +195,29 @@ func (c *Client) loadLibrary() error {
 		}
 	}
 	c.in.LibDirs = append([]string{dir}, c.in.LibDirs...)
-	c.in.SetVar("TFLIBDIR", dir)
-	c.in.SetVar("TFHELP", filepath.Join(dir, "tf-help"))
+	return nil
+}
+
+// setLibVars sets the variables that describe this build and its library
+// (after a restart they replace the values of the previous binary).
+func (c *Client) setLibVars() {
+	if c.libDir != "" {
+		c.in.SetVar("TFLIBDIR", c.libDir)
+		c.in.SetVar("TFHELP", filepath.Join(c.libDir, "tf-help"))
+	}
 	c.in.SetVar("HOME", c.cfg.HomeDir)
 	c.in.SetVar("version", VersionVar())
+	if d := gtfLibDir(); d != "" {
+		c.in.SetVar("GTFLIBDIR", d)
+	}
+}
+
+func (c *Client) loadLibrary() error {
+	if err := c.setupLibDir(); err != nil {
+		return err
+	}
+	dir := c.libDir
+	c.setLibVars()
 	c.in.SetVar("TERM", envOr("TERM", "xterm"))
 	c.in.Exec(fmt.Sprintf("/set wrapsize=%d", c.ui.W-1))
 	if c.cfg.Interactive {
@@ -226,15 +275,19 @@ func (c *Client) loadRC() {
 // Start begins event processing (keys, resizes, startup connection and
 // commands). It returns immediately; wait on Done.
 func (c *Client) Start() {
-	c.Post(func(in *gtfparser.Interp) {
-		for _, cmd := range c.cfg.Commands {
-			in.Exec(cmd)
-		}
-		if w := c.cfg.World; w != "" && !c.cfg.NoAuto {
-			in.Exec("/connect " + w)
-		}
-		c.afterTask()
-	})
+	if c.restored != nil {
+		c.startRestored()
+	} else {
+		c.Post(func(in *gtfparser.Interp) {
+			for _, cmd := range c.cfg.Commands {
+				in.Exec(cmd)
+			}
+			if w := c.cfg.World; w != "" && !c.cfg.NoAuto {
+				in.Exec("/connect " + w)
+			}
+			c.afterTask()
+		})
+	}
 	if c.cfg.Keys != nil {
 		go c.readKeys()
 	}

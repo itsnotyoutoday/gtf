@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/itsnotyoutoday/gtf/internal/client/data"
@@ -47,6 +48,17 @@ type Session struct {
 	lastSend       time.Time
 	activeNotified bool
 	logfile        io.Closer
+
+	// events from the connection wait here for the client goroutine (see pump);
+	// a restart drains them synchronously once the connection is paused.
+	inboxMu  sync.Mutex
+	inbox    []gnet.Event
+	queued   bool          // a drain is posted to the client goroutine
+	pausedCh chan struct{} // the pump has seen the connection's Paused event
+	// restartEnd says why this session cannot be carried across /restart ("" = it can)
+	restartEnd string
+	// resizeAfterRestore: the window changed size while the old and the new process swapped
+	resizeAfterRestore bool
 }
 
 func (s *Session) open() bool { return s.state == gtfparser.SockConnected }
@@ -54,7 +66,7 @@ func (s *Session) dead() bool { return s.state >= gtfparser.SockZombie }
 
 func (c *Client) newSession(w World, o gtfparser.ConnectOptions, scr *ui.Screen) *Session {
 	now := c.cfg.Now()
-	s := &Session{c: c, World: w, store: data.New(), scr: scr, opts: o, state: gtfparser.SockResolving, lastRecv: now, lastSend: now}
+	s := &Session{c: c, World: w, store: data.New(), scr: scr, opts: o, state: gtfparser.SockResolving, lastRecv: now, lastSend: now, pausedCh: make(chan struct{}, 1)}
 	if scr == nil {
 		s.scr = ui.NewScreen(w.Name, 20000)
 		c.wscreens[w.Name] = s.scr
@@ -240,11 +252,44 @@ func (c *Client) setEnv(conn *gnet.Conn) {
 	})
 }
 
-// pump forwards connection events to the runner.
+// pump forwards connection events to the client goroutine. They are queued in
+// the session's inbox and a single drain is posted, so that a restart (which
+// runs on that goroutine and cannot wait for the queue) can process what is
+// in flight itself: see Restart.
 func (c *Client) pump(s *Session, conn *gnet.Conn) {
 	for ev := range conn.Events() {
-		ev := ev
-		c.Post(func(*gtfparser.Interp) { c.onNet(s, ev); c.afterTask() })
+		if _, ok := ev.(gnet.Paused); ok {
+			select {
+			case s.pausedCh <- struct{}{}:
+			default:
+			}
+			continue
+		}
+		s.inboxMu.Lock()
+		s.inbox = append(s.inbox, ev)
+		post := !s.queued
+		s.queued = true
+		s.inboxMu.Unlock()
+		if post {
+			c.Post(func(*gtfparser.Interp) { c.drain(s) })
+		}
+	}
+}
+
+// drain processes the events a session's connection has delivered so far.
+func (c *Client) drain(s *Session) {
+	for {
+		s.inboxMu.Lock()
+		if len(s.inbox) == 0 {
+			s.queued = false
+			s.inboxMu.Unlock()
+			return
+		}
+		ev := s.inbox[0]
+		s.inbox = s.inbox[1:]
+		s.inboxMu.Unlock()
+		c.onNet(s, ev)
+		c.afterTask()
 	}
 }
 

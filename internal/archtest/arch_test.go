@@ -31,7 +31,8 @@ var rules = []rule{
 	{prefix: ".", allow: nil}, // version.go: the VERSION file, nothing else
 	{prefix: "cmd/gtf", allow: []string{"internal/client", "gtflib"}},
 	{prefix: "cmd/vtdump", allow: []string{"internal/ui/vt"}},
-	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "internal/update", "gtflib"}, engine: true},
+	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "internal/update", "internal/handoff", "gtflib"}, engine: true},
+	{prefix: "internal/handoff", allow: nil},
 	{prefix: "internal/ui", allow: []string{"internal/layout"}},
 	{prefix: "internal/net", allow: []string{"internal/net"}},
 	{prefix: "internal/layout", allow: nil},

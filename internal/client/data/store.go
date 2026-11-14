@@ -160,3 +160,39 @@ func (s *Store) MSDPVars() []string {
 	sort.Strings(out)
 	return out
 }
+
+// State is the store's content as plain data (for /restart): the decoded
+// values round-trip through JSON unchanged because they came from JSON or are
+// strings and lists of strings.
+type State struct {
+	GMCP map[string]any    `json:"gmcp,omitempty"`
+	MSDP map[string]any    `json:"msdp,omitempty"`
+	MSSP map[string]any    `json:"mssp,omitempty"`
+	Raw  map[string]string `json:"raw,omitempty"`
+}
+
+// State captures the store. The maps are shared with the store: encode the
+// result before the store changes again.
+func (s *Store) State() State {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return State{GMCP: s.gmcp, MSDP: s.msdp, MSSP: s.mssp, Raw: s.raw}
+}
+
+// FromState rebuilds a store.
+func FromState(st State) *Store {
+	s := New()
+	if st.GMCP != nil {
+		s.gmcp = st.GMCP
+	}
+	if st.MSDP != nil {
+		s.msdp = st.MSDP
+	}
+	if st.MSSP != nil {
+		s.mssp = st.MSSP
+	}
+	if st.Raw != nil {
+		s.raw = st.Raw
+	}
+	return s
+}
