@@ -1,5 +1,5 @@
-github.com/itsnotyoutoday/gtfparser v0.0.8 h1:9lT2snq+7o++5ms8ZBBLREQ/0Ms2h45uSVXz7dCsL88=
-github.com/itsnotyoutoday/gtfparser v0.0.8/go.mod h1:hEgn5xkOFqtna4Vf2A/HS1XvcSUep/dFddjUH2slacM=
+github.com/itsnotyoutoday/gtfparser v0.0.9 h1:ptwcpb14X6bQU1jCGH9M82oGHk7y+9AWNIscFhe1HJY=
+github.com/itsnotyoutoday/gtfparser v0.0.9/go.mod h1:hEgn5xkOFqtna4Vf2A/HS1XvcSUep/dFddjUH2slacM=
 golang.org/x/image v0.24.0 h1:AN7zRgVsbvmTfNyqIbbOraYL8mSwcKncEj8ofjgzcMQ=
 golang.org/x/image v0.24.0/go.mod h1:4b/ITuLfqYq1hqZcjofwctIhi7sZh2WaCjvsBNjjya8=
 golang.org/x/sys v0.31.0 h1:ioabZlmFYtWhL+TRYpcnNlLwhyxaM9kWTDEmfnprqik=
