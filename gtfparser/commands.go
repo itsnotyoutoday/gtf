@@ -111,8 +111,7 @@ func cmdSet(in *Interp, args string) Value {
 		}
 		return Bool(ok)
 	}
-	in.globals[name] = Str(val)
-	return Int(1)
+	return Bool(in.setGlobal(name, Str(val)))
 }
 
 func cmdLet(in *Interp, args string) Value {

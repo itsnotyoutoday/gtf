@@ -26,6 +26,7 @@ type Value struct {
 	f  float64
 	s  string
 	dt bool // a dtime literal: prints with a fractional part
+	en int  // enumerated variable value: 1 + index into its list (numeric value is the index)
 }
 
 func Int(n int64) Value    { return Value{k: kInt, i: n} }
@@ -100,6 +101,9 @@ func formatReal0(f float64) string {
 
 // Num converts to a number (int or real); strings are parsed by prefix.
 func (v Value) Num() Value {
+	if v.en > 0 {
+		return Int(int64(v.en - 1))
+	}
 	if v.k != kStr {
 		return v
 	}

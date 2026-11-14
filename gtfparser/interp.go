@@ -3,6 +3,7 @@ package gtfparser
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -74,9 +75,17 @@ func New(h Host) *Interp {
 	}
 	in.fr = &frame{vars: map[string]Value{}, name: ""}
 	in.Warn = func(s string) { h.Echo("% " + s) }
-	for k, v := range map[string]string{"matching": "glob", "sub": "off", "max_iter": "0", "backslash": "on", "sigfigs": "15", "TFVERSION": "5.0 beta 8", "version": "TinyFugue (gtf) version 5.0 beta 8"} {
-		in.globals[k] = Str(v)
+	for _, e := range os.Environ() { // the environment is imported as variables
+		if i := strings.IndexByte(e, '='); i > 0 {
+			in.globals[e[:i]] = Str(e[i+1:])
+		}
 	}
+	for name, sp := range specialVars {
+		in.globals[name] = sp.initial()
+	}
+	SigFigs = 15
+	in.globals["TFVERSION"] = Str("5.0 beta 8")
+	in.globals["version"] = Str("TinyFugue (gtf) version 5.0 beta 8")
 	return in
 }
 
@@ -112,7 +121,7 @@ func (in *Interp) assign(name string, v Value) {
 			return
 		}
 	}
-	in.globals[name] = v
+	in.setGlobal(name, v)
 }
 
 func (in *Interp) pushFrame(name, text string) *frame {
