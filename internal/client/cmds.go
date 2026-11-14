@@ -25,13 +25,6 @@ func (c *Client) install() {
 		in.RegisterCommand(n, f)
 	}
 	funcs := map[string]fnf{
-		// TODO(core): these tf functions belong in the engine (limit() is used by the
-		// stock @more status field); remove when it provides them.
-		"limit": func(*gtfparser.Interp, []gtfparser.Value) (gtfparser.Value, error) {
-			return b2i(c.in.LimitActive()), nil
-		},
-		"nread": func(*gtfparser.Interp, []gtfparser.Value) (gtfparser.Value, error) { return gtfparser.Int(0), nil },
-		"nmail": func(*gtfparser.Interp, []gtfparser.Value) (gtfparser.Value, error) { return gtfparser.Int(0), nil },
 		// gmcp()/msdp() keep real tf's meaning (send); the readers are new names.
 		"gmcp": c.fnGmcpSend, "msdp": c.fnMsdpSend,
 		"gmcp_get": c.fnGmcpGet, "gmcp_json": c.fnGmcpJSON, "gmcp_has": c.fnGmcpHas,
