@@ -28,6 +28,10 @@ internal/ui/         terminal UI: raw tty, compositor, scrollback, wrapping, mor
 internal/ui/vt       small VT100/ANSI screen model used by tests (and by scripts/compare_tf.py)
 internal/update/     self-update: GitHub releases lookup, checksums, atomic replacement of the binary and
                      library directory, install record (used by /update and gtf --update)
+internal/squatter/   squatter daemon + tf bridge built into gtf (SquatClient pairs with it); one gtf-specific
+                     package plus copies of the reference wire/auth/tlsutil/proto/scrollback packages
+                     as subdirectories; imports nothing from gtf; only internal/client imports it
+                     (docs/SQUATTER.md)
 internal/layout/     panel/layout system: templates, bindings, widgets, layout engine -> cell grids
 gtflib/              embedded TF library: the unmodified real tf library (gtflib/tf/) and gtf-only scripts (gtflib/gtf/layout.tf, gtflib/gtf/layouts/*.layout)
 docs/                this file, PROTOCOLS.md, LAYOUTS.md, COMMAND-STATUS.md
@@ -45,6 +49,8 @@ in gtf and is loaded on top of it.
 cmd/gtf          -> internal/client, gtflib
 internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/update, internal/handoff, gtflib, the engine module
 internal/handoff -> nothing internal
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/squatter(/...), gtflib, the engine module
+internal/squatter -> itself only (no gtf package, no engine)
 internal/ui      -> internal/layout
 internal/net     -> internal/net/... only
 internal/layout  -> nothing internal
@@ -134,6 +140,18 @@ line state / TLS session export, panels), rehearses the restore in a probe child
 only then execs; any failure before the exec rolls everything back. `Client.RestartPlan` and
 `Client.Restart(force)` are the Go API (used by `/restart` and by whatever updates the binary);
 `RegisterRestartSection` lets other components carry their own descriptors and state.
+## Squatter (remote clients)
+
+`squatter=on` makes gtf serve SquatClient from inside the process (docs/SQUATTER.md). The listener and
+the wire protocol run on their own goroutines; they never touch the interpreter: the squatter calls the
+`squatter.Host` interface, implemented in `internal/client/squatter.go`, whose `Do`/`Post` run closures on
+the engine Runner's goroutine. The other direction is the tap: every line added to a world's `ui.Screen`
+(`Screen.Tap`, called by `UI.AddLine`) is converted to spans and handed to the squatter, which keeps a
+seq-stamped ring per session for replay; connection state changes, prompts, GMCP/MSDP and local sends are
+reported the same way (`squatOpen`, `squatConnected`, `squatEnded`, `squatPrompt`, `squatLocalEcho`).
+The `squatter_*` variables are compared after every task and on the 250 ms poll (`squatCheck`), so a `/set`
+applies at once. A remote `tf.exec` captures output by diverting `addLine` (`c.capture`). Disabled, none of
+this does any work beyond that comparison.
 
 ## Merge checklist (things in the client that exist only because of an engine gap)
 
@@ -147,4 +165,5 @@ Each item is marked `TODO(merge)` / `TODO(core)` in the code.
 4. `hosts.go processLine`: BEL in server text rings the bell through `%beep`; use the
    engine's `LineResult.Bell` only (both are honoured today).
 5. `client.go`: `localecho` events are accepted without telnet ECHO negotiation (server
+   `WILL ECHO` is reported with `SetLocalEcho`, which hides the input line).
    `WILL ECHO` is reported with `SetLocalEcho`, which hides the input line).

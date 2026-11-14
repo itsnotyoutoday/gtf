@@ -18,6 +18,9 @@ type Screen struct {
 	Unseen   int // lines received while this screen was in the background
 	// OnPause is called when the pager engages (the MORE hook).
 	OnPause func()
+	// Tap, if set, sees every logical line added to the screen with UI.AddLine (the squatter
+	// mirrors a world's output to remote clients through it).
+	Tap func(cells []layout.Cell)
 }
 
 // NewScreen makes an empty screen.

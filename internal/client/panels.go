@@ -169,6 +169,7 @@ func (c *Client) onMessage(s *Session, m gnet.Message) {
 	switch m.Proto {
 	case "gmcp":
 		s.store.SetGMCP(m.Name, m.Value, m.Raw)
+		c.sq.gmcp(s, m.Name, m.Raw)
 		c.dataChanged(s, "gmcp:"+m.Name)
 		arg := m.Name
 		if m.Raw != "" {
@@ -177,6 +178,7 @@ func (c *Client) onMessage(s *Session, m gnet.Message) {
 		c.withWorld(s, func() { c.in.FireHook("GMCP", arg) })
 	case "msdp":
 		s.store.SetMSDP(m.Name, m.Value)
+		c.sq.msdp(s, m.Name, m.Value)
 		c.dataChanged(s, "msdp:"+m.Name)
 		c.withWorld(s, func() { c.in.FireHook("MSDP", m.Name+"="+flatten(m.Value)) })
 	case "mssp":

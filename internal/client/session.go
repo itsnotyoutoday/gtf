@@ -59,6 +59,9 @@ type Session struct {
 	restartEnd string
 	// resizeAfterRestore: the window changed size while the old and the new process swapped
 	resizeAfterRestore bool
+	squatID            string // this connection's id in the squatter ("" when it is off)
+	endReason          string // why the connection ended (a squatter end reason), for the squatter
+	endDetail          string
 }
 
 func (s *Session) open() bool { return s.state == gtfparser.SockConnected }
@@ -73,6 +76,7 @@ func (c *Client) newSession(w World, o gtfparser.ConnectOptions, scr *ui.Screen)
 	}
 	s.scr.More = c.in.TermSettings().More
 	s.scr.OnPause = func() { c.in.FireHook("MORE", "") }
+	s.scr.Tap = func(cells []layout.Cell) { c.squatTap(s, cells) }
 	name := w.Name
 	s.scr.SB.Keep = func(cells []layout.Cell) bool { return !c.in.LimitedFor(name, ui.StripCells(cells), "") }
 	return s
@@ -112,6 +116,7 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 		s.numquiet = maxQuiet
 	}
 	c.sessions[w.Name] = s
+	c.squatOpen(s)
 	if old != nil {
 		for i, x := range c.order {
 			if x == old {
@@ -174,6 +179,7 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 			}
 			s.conn = conn
 			s.state = gtfparser.SockConnected
+			c.squatConnected(s)
 			s.connectedAt = c.cfg.Now()
 			conn.Resize(c.ui.W, c.ui.H)
 			c.setEnv(conn)
@@ -217,6 +223,7 @@ func (c *Client) fireWorld(s *Session, ev gtfparser.HookEvent) *gtfparser.HookRe
 // is reported in its world.
 func (c *Client) connectFailed(s *Session, err error) {
 	name := s.World.Name
+	s.endReason, s.endDetail = "connect_failed", err.Error()
 	c.zombie(s)
 	var de *DialError
 	if !errors.As(err, &de) {
@@ -304,6 +311,7 @@ func (c *Client) onNet(s *Session, ev gnet.Event) {
 		if e.Opt == telnet.OptEcho && e.Side == telnet.Them {
 			// the server will echo: do not echo locally (password entry)
 			c.in.SetLocalEcho(s.World.Name, !e.On)
+			c.sq.setRemoteEcho(s, e.On)
 		}
 	case gnet.Message:
 		c.onMessage(s, e)
@@ -314,6 +322,10 @@ func (c *Client) onNet(s *Session, ev gnet.Event) {
 			return
 		}
 		s.flushPartial()
+		s.endReason = "remote_closed"
+		if e.Err != nil {
+			s.endDetail = e.Err.Error()
+		}
 		c.zombie(s)
 		c.fireWorld(s, gtfparser.HookEvent{Name: "DISCONNECT", Args: []string{s.World.Name}, World: s.World.Name})
 	}
@@ -344,7 +356,11 @@ func (s *Session) sendLine(text string) error {
 		return fmt.Errorf("not connected")
 	}
 	s.lastSend = s.c.cfg.Now()
-	return s.conn.SendLine(text)
+	err := s.conn.SendLine(text)
+	if err == nil {
+		s.c.squatLocalEcho(s, text)
+	}
+	return err
 }
 
 // feed splits incoming text into lines and runs each through the pipeline.
@@ -393,7 +409,9 @@ func (s *Session) promptEnd() {
 	line := strings.TrimRight(s.pend, "\r")
 	s.pend = ""
 	var p ui.AnsiParser
-	plain := ui.StripCells(p.Parse(line))
+	pcells := p.Parse(line)
+	plain := ui.StripCells(pcells)
+	s.c.squatPrompt(s, pcells)
 	s.c.withWorld(s, func() {
 		if r := s.c.in.FireHookArgs("PROMPT", plain); r.Count == 0 {
 			s.setPrompt(plain)
@@ -419,6 +437,7 @@ func (c *Client) zombie(s *Session) {
 		return
 	}
 	s.state = gtfparser.SockZombie
+	c.squatEnded(s)
 	s.close()
 	s.setPrompt("")
 	s.pend = ""

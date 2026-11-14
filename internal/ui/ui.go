@@ -152,6 +152,9 @@ func (u *UI) AddLine(s *Screen, cells []layout.Cell) {
 	if s != u.Scr {
 		s.Unseen++
 	}
+	if s.Tap != nil {
+		s.Tap(cells)
+	}
 }
 
 // Submit takes the built-in editor's line (see NoteSubmitted).
