@@ -463,6 +463,9 @@ func (s *Screen) AttrRow(y int) string {
 	return strings.Join(parts, " ")
 }
 
+// Size makes a Screen usable as a ui.Terminal.
+func (s *Screen) Size() (int, int) { return s.W, s.H }
+
 // Dump renders the screen with a row-number gutter and the cursor position.
 func (s *Screen) Dump() string {
 	var b strings.Builder
