@@ -88,6 +88,11 @@ func formatReal0(f float64) string {
 			return dec
 		}
 	default:
+		if sig > SigFigs { // e.g. 0.1+0.2: round to the significant figures
+			if r := strconv.FormatFloat(f, 'g', SigFigs, 64); !strings.Contains(r, "e") {
+				return r
+			}
+		}
 		return dec
 	}
 	return strconv.FormatFloat(f, 'g', SigFigs, 64)
