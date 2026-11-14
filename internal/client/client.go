@@ -57,6 +57,9 @@ type Client struct {
 	base *ui.Screen
 
 	sessions map[string]*Session
+	wscreens map[string]*ui.Screen // each world's screen outlives its socket (tf: world->screen)
+	alert    *alertState
+	alertSeq uint64
 	order    []*Session // creation order
 	fg       *Session
 	xworld   string // world whose text/event is being processed
@@ -86,7 +89,7 @@ func New(cfg Config) (*Client, error) {
 	if cfg.Dialer == nil {
 		cfg.Dialer = NetDialer{}
 	}
-	c := &Client{cfg: cfg, sessions: map[string]*Session{}, done: make(chan struct{}), started: cfg.Now()}
+	c := &Client{cfg: cfg, sessions: map[string]*Session{}, wscreens: map[string]*ui.Screen{}, done: make(chan struct{}), started: cfg.Now()}
 	c.ui = ui.New(cfg.Term)
 	c.base = ui.NewScreen("", 20000)
 	c.ui.SetScreen(c.base)
@@ -367,7 +370,9 @@ func (c *Client) syncUI() {
 		u.Hidden = false
 		u.Prompt = ""
 	}
-	u.SetStatus(c.statusCells(u.W))
+	cells := c.statusCells(u.W)
+	c.applyAlert(cells)
+	u.SetStatus(cells)
 	u.Layout = c.panels.current(c)
 	u.Resolver = c.panels
 	c.feedMoreState()

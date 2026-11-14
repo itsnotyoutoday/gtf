@@ -15,10 +15,11 @@ go build ./cmd/gtf && ./gtf -f -c'/addworld mymud host 4000' mymud
 Options follow tf: `-L<dir> -f -c<cmd> -n -l -q -v`, then a world name or `host port`.
 
 Docs: `docs/ARCHITECTURE.md` (layout, import rules, merge checklist), `docs/PROTOCOLS.md`,
-`docs/LAYOUTS.md`, `docs/COMMAND-STATUS.md`.
+`docs/LAYOUTS.md`, `docs/COMMAND-STATUS.md`, `docs/ENGINE-REQUESTS.md` (open requests to the engine).
 
 Tests: `GOWORK=off go test ./...`. Against real tf: `python3 scripts/compare_tf.py`
-(needs `TF_REF`/`TF_LIB`, see `scripts/env.sh`). Against the local Evennia test game:
+(needs `TF_REF`/`TF_LIB`, see `scripts/env.sh`; `conn-*` scenarios drive both clients against local TCP
+servers the harness starts; `TF_CACHE=dir` reuses real-tf screens between runs). Against the local Evennia test game:
 `python3 scripts/e2e_evennia.py` (skipped when it is not running).
 
 ## Building

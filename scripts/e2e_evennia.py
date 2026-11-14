@@ -85,6 +85,9 @@ def main():
     vtdump, gtf = os.path.join(tmp, "gtf-vtdump"), os.path.join(tmp, "gtf-bin")
     subprocess.check_call(["go", "build", "-o", vtdump, "./cmd/vtdump"], cwd=ROOT, env=env)
     subprocess.check_call(["go", "build", "-o", gtf, "./cmd/gtf"], cwd=ROOT, env=env)
+    # Evennia throttles connections that follow each other closely (the probe in
+    # game_up() counts): give it a moment or the login line is ignored
+    time.sleep(2.5)
     home = tempfile.mkdtemp()
     s = Session([gtf, "-f", "-c/addworld ev god layouttest %s %d" % (HOST, PORT), "-c/layout use sidebar", "ev"], 100, 30, {"HOME": home})
     try:
@@ -103,6 +106,7 @@ def main():
         s.send("/quit\r", 0.5)
     finally:
         s.close()
+    time.sleep(2.5)
     # a narrow terminal hides the sidebar (its -minw is 80) but the client works
     n = Session([gtf, "-f", "-c/addworld ev god layouttest %s %d" % (HOST, PORT), "-c/layout use sidebar", "ev"], 70, 24, {"HOME": home})
     try:

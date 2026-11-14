@@ -71,22 +71,55 @@ func (c *Client) EchoAttr(s gtfparser.AttrString) {
 }
 
 // HookMessage implements gtfparser.HookDisplayHost: tf's default messages for
-// hook events (connected, closed, activity, ...), placed by class.
+// hook events (connected, closed, activity, ...), placed by class. A message
+// about a world is output in that world (as if the server had sent it); when
+// that world is not the foreground one it is also an alert, so it shows on the
+// status line. Alerts are drawn over the status row (alert.go).
 func (c *Client) HookMessage(m gtfparser.HookMessage) {
-	scr := c.screenFor()
 	switch m.Class {
 	case gtfparser.HookWorld:
-		if s := c.sessions[m.World]; s != nil {
-			scr = s.scr
+		s := c.sessions[m.World]
+		if s == nil {
+			c.echoFg(m.Text)
+			break
+		}
+		c.worldOutput(s, m.Text)
+		if s != c.fg {
+			c.alertOrEcho(m.Text)
 		}
 	case gtfparser.HookAlert:
-		// TODO: a status-line alert; until then it goes to the foreground screen
-		scr = c.fgScreen()
+		c.alertOrEcho(m.Text)
+	default:
+		c.echoFg(m.Text)
 	}
-	c.ui.AddLine(scr, c.attrCells(m.Text))
-	if scr == c.fgScreen() {
-		c.in.RecordLocalLine(m.Text.Text)
+	if m.XSock {
+		if s := c.sessions[m.World]; s != nil {
+			s.alertID = c.alertSeq
+		}
 	}
+}
+
+// echoFg prints a message on the foreground screen.
+func (c *Client) echoFg(t gtfparser.AttrString) {
+	c.ui.AddLine(c.fgScreen(), c.attrCells(t))
+	c.in.RecordLocalLine(t.Text)
+	c.scheduleRender()
+}
+
+// alertOrEcho shows msg as an alert, or as a line when there is no status line.
+func (c *Client) alertOrEcho(t gtfparser.AttrString) {
+	if !c.in.TermSettings().Visual {
+		c.echoFg(t)
+		return
+	}
+	c.raiseAlert(t.Text)
+}
+
+// worldOutput displays text in s's world as a line of that world's output
+// (tf: world_output): history, log, the screen, and the activity bookkeeping
+// when the world is in the background. Triggers do not see it.
+func (c *Client) worldOutput(s *Session, t gtfparser.AttrString) {
+	c.showWorldLine(s, c.attrCells(t), t.Text, nil)
 	c.scheduleRender()
 }
 
@@ -152,17 +185,21 @@ type errNoWorld string
 
 func (e errNoWorld) Error() string { return "No world " + string(e) }
 
-// Disconnect implements gtfparser.WorldHost.
+// Disconnect implements gtfparser.WorldHost (/dc): tf reports the close in
+// the world (and on the foreground screen when that is another world), and the
+// socket becomes a zombie. No DISCONNECT hook runs.
 func (c *Client) Disconnect(world string) error {
 	s := c.sessions[world]
 	if s == nil {
 		return errNoWorld(world)
 	}
-	if s.conn == nil { // still dialing
-		c.removeSession(s)
-		return nil
+	s.flushPartial()
+	msg := gtfparser.AttrString{Text: "% Connection to " + s.World.Name + " closed."}
+	c.worldOutput(s, msg)
+	if s != c.fg {
+		c.echoFg(msg)
 	}
-	s.close()
+	c.zombie(s)
 	return nil
 }
 
@@ -172,14 +209,14 @@ func (c *Client) Foreground(world string) error { return c.ForegroundQuiet(world
 // ForegroundQuiet implements gtfparser.FgHost.
 func (c *Client) ForegroundQuiet(world string, quiet bool) error {
 	if world == "" {
-		c.foreground(nil)
+		c.foreground(nil, quiet)
 		return nil
 	}
 	s := c.sessions[world]
 	if s == nil {
 		return errNoWorld(world)
 	}
-	c.foreground(s)
+	c.foreground(s, quiet)
 	return nil
 }
 
@@ -197,25 +234,26 @@ func (c *Client) Connected(world string) bool {
 	return s != nil && s.open()
 }
 
-// Sockets implements gtfparser.SocketHost: the foreground first, then the
-// most recently opened.
+// Sockets implements gtfparser.SocketHost: tf's socket list, oldest first
+// (what "/fg" without an argument selects is the first).
 func (c *Client) Sockets() []gtfparser.SocketInfo {
-	var out []gtfparser.SocketInfo
-	add := func(s *Session) {
+	out := make([]gtfparser.SocketInfo, 0, len(c.order))
+	for _, s := range c.order {
 		held := s.scr.Held()
+		host, port := s.World.Host, s.World.Port
+		ip := ""
+		if i := strings.IndexByte(s.addr, ' '); i > 0 {
+			ip = s.addr[:i]
+		}
+		if s.dead() {
+			// tf frees the dead socket's host and port strings but keeps its address
+			host, port = "(null)", "(null)"
+		}
 		out = append(out, gtfparser.SocketInfo{
-			World: s.World.Name, Host: s.World.Host, Port: s.World.Port, State: s.state,
+			World: s.World.Name, Host: host, Port: port, Addr: ip, State: s.state,
 			SSL: s.World.SSL, Login: !s.opts.NoLogin, NewLines: held + s.scr.Unseen, OldLines: 0,
 			Active: s != c.fg && s.scr.Unseen > 0, LastRecv: s.lastRecv, LastSend: s.lastSend,
 		})
-	}
-	if c.fg != nil {
-		add(c.fg)
-	}
-	for i := len(c.order) - 1; i >= 0; i-- {
-		if c.order[i] != c.fg {
-			add(c.order[i])
-		}
 	}
 	return out
 }
@@ -326,7 +364,7 @@ func (c *Client) processLine(s *Session, line string) {
 	if res.Bell {
 		c.bell()
 	}
-	if res.Gag {
+	if res.Gag || s.isQuiet(plain) {
 		return
 	}
 	c.showWorldLine(s, c.overlay(cells, plain, res), res.Line.Text, res)

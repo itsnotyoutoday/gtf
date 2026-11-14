@@ -21,7 +21,7 @@ type fakeDialer struct {
 	srv chan *nettest.Server
 }
 
-func (d *fakeDialer) Dial(ctx context.Context, w World) (*gnet.Conn, error) {
+func (d *fakeDialer) Dial(ctx context.Context, w World, tr *DialTrace) (*gnet.Conn, error) {
 	rw, srv := nettest.Pair(d.t)
 	d.srv <- srv
 	return gnet.NewConn(rw, gnet.Options{}), nil

@@ -89,8 +89,10 @@ func canBreakBefore(s []layout.Cell, i int) bool {
 		}
 	}
 	switch {
-	case c == lbSP || c == lbCP || c == lbCL || c == lbIS || c == lbSY || c == lbEX || c == lbHY:
-		return false // LB13/LB21: never before these, even after spaces
+	case c == lbSP || c == lbCP || c == lbCL || c == lbIS || c == lbSY || c == lbEX:
+		return false // LB13: never before these, even after spaces
+	case c == lbHY:
+		return p == lbSP // LB18 (break after spaces) precedes LB21 (no break before a hyphen)
 	case p == lbSP:
 		return true
 	case p == lbOP || c == lbQU || p == lbQU:
@@ -101,6 +103,8 @@ func canBreakBefore(s []layout.Cell, i int) bool {
 		return false
 	case (p == lbSY || p == lbHY) && c == lbNU:
 		return false
+	case p == lbHY && (i < 2 || lbClass(s[i-2].R) == lbSP):
+		return false // ICU keeps an option-style "-x" together: no break after a hyphen that starts a word
 	case (p == lbAL || p == lbNU) && (c == lbAL || c == lbNU || c == lbOP):
 		return false
 	}
@@ -292,6 +296,27 @@ func (s *Scrollback) Rewrap(width int, cfg WrapConfig) (remap func(old int) int)
 		}
 		return end
 	}
+}
+
+// InsertAt puts a logical line before logical line idx (idx >= Logical appends).
+// It returns the physical index where its first physical line landed and how
+// many physical lines it became (0 when the /limit filter hides it).
+func (s *Scrollback) InsertAt(idx int, cells []layout.Cell) (at, k int) {
+	idx = min(max(idx, 0), len(s.lines))
+	at = len(s.phys)
+	for i, o := range s.owner {
+		if o >= idx {
+			at = i
+			break
+		}
+	}
+	s.lines = append(s.lines, Line{})
+	copy(s.lines[idx+1:], s.lines[idx:])
+	s.lines[idx] = Line{cells}
+	before := len(s.phys)
+	s.dirty = true
+	s.Rewrap(s.width, s.cfg)
+	return at, len(s.phys) - before
 }
 
 // Relayout rebuilds the physical lines at the current width (after Keep changed).
