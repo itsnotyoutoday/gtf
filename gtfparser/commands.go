@@ -54,7 +54,7 @@ func cmdEcho(in *Interp, args string) Value {
 		}
 		break
 	}
-	in.Host.Echo(args)
+	in.echo(args)
 	return Int(1)
 }
 
@@ -107,7 +107,7 @@ func cmdSet(in *Interp, args string) Value {
 	if !has {
 		v, ok := in.lookup(name)
 		if ok {
-			in.Host.Echo("% " + name + "=" + v.String())
+			in.echo("% " + name + "=" + v.String())
 		}
 		return Bool(ok)
 	}
@@ -155,7 +155,7 @@ func cmdReturn(in *Interp, args string) Value {
 func cmdResult(in *Interp, args string) Value {
 	v := cmdReturn(in, args)
 	if !in.fr.asFunc {
-		in.Host.Echo(v.String())
+		in.echo(v.String())
 	}
 	return v
 }
@@ -194,6 +194,9 @@ func cmdFor(in *Interp, args string) Value {
 	b, body := firstWord(r)
 	lo, hi := Value(Str(a)).Int(), Value(Str(b)).Int()
 	res := Int(1)
+	oldExp := in.noExp
+	in.noExp = false // the body is expanded afresh on every pass
+	defer func() { in.noExp = oldExp }()
 	in.pushFrame(in.fr.name, in.fr.text)
 	in.fr.words, in.fr.offs = in.fr.parent.words, in.fr.parent.offs
 	for i := lo; i <= hi; i++ {
@@ -257,13 +260,20 @@ func (in *Interp) findFile(name string) (string, bool) {
 }
 
 func cmdLoad(in *Interp, args string) Value {
+	quiet := false
 	for strings.HasPrefix(args, "-") {
-		_, args = firstWord(args)
+		var w string
+		w, args = firstWord(args)
+		if strings.Contains(w, "q") {
+			quiet = true
+		}
 	}
 	name, _ := firstWord(args)
 	p, ok := in.findFile(name)
 	if !ok {
-		in.warn("/load: %s: no such file", name)
+		if !quiet {
+			in.warn("/load: %s: no such file", name)
+		}
 		return Int(0)
 	}
 	if err := in.LoadFile(p); err != nil {

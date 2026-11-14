@@ -436,9 +436,21 @@ func (p *exprParser) call(name string) (eval, error) {
 	p.ws()
 	if !p.take(")") {
 		for {
-			a, err := p.parseAssign()
-			if err != nil {
-				return nil, err
+			var a eval
+			var err error
+			if name == "tfread" { // the last argument is a variable passed by name
+				save := p.pos
+				if id, ok := p.ident(); ok && p.peek(")") {
+					a = func() (Value, error) { return Str(id), nil }
+				} else {
+					p.pos = save
+				}
+			}
+			if a == nil {
+				a, err = p.parseAssign()
+				if err != nil {
+					return nil, err
+				}
 			}
 			args = append(args, a)
 			if p.take(",") {

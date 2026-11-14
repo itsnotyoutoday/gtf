@@ -157,7 +157,7 @@ func init() {
 			}
 			return Int(0), nil
 		},
-		"echo": func(in *Interp, a []Value) (Value, error) { in.Host.Echo(str(a, 0)); return Int(1), nil }, // echo(text [, attrs [, inline [, dest]]])
+		"echo": func(in *Interp, a []Value) (Value, error) { in.echo(str(a, 0)); return Int(1), nil }, // echo(text [, attrs [, inline [, dest]]])
 		"send": func(in *Interp, a []Value) (Value, error) { return Bool(in.Host.Send(str(a, 1), str(a, 0))), nil },
 	}
 }
@@ -222,3 +222,6 @@ func fnRegmatch(in *Interp, a []Value) (Value, error) {
 	in.fr.regs, in.fr.pl, in.fr.pr = regs, s[:loc[0]], s[loc[1]:]
 	return Int(int64(len(regs))), nil
 }
+
+func log10(x float64) float64 { return math.Log10(x) }
+func tan(x float64) float64   { return math.Tan(x) }

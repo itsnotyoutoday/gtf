@@ -35,6 +35,7 @@ type frame struct {
 	regs   []string // %P0.. from the last regexp match in scope
 	pl, pr string
 	asFunc bool
+	noOut  bool // tfout closed in this scope
 }
 
 // Interp is one TinyFugue scripting environment.
@@ -53,6 +54,9 @@ type Interp struct {
 	loaded  map[string]bool
 	noExp   bool
 	Quit    bool
+	streams map[string]*stream
+	nextFd  int
+	tfin    []string
 	// LibDirs are searched by /load and /require for relative names.
 	LibDirs []string
 	// Warn receives interpreter diagnostics (TF prints these as "% ...").
@@ -469,6 +473,7 @@ func (in *Interp) captureCmd(cmd string) string {
 func splitList(text string) []string {
 	var out []string
 	st := 0
+	pipeNext := false
 	for i := 0; i < len(text); i++ {
 		switch text[i] {
 		case '\\':
@@ -478,8 +483,15 @@ func splitList(text string) []string {
 				switch text[i+1] {
 				case ';', '|':
 					out = append(out, strings.TrimRight(text[st:i], " \t"))
+					if text[i+1] == '|' {
+						pipeNext = true
+					}
 					st = i + 2
 					i++
+					if pipeNext {
+						pipeNext = false
+						text = text[:st] + "\x00" + text[st:] // marks a statement fed by a pipe
+					}
 				case '%':
 					i++
 				}
@@ -535,9 +547,15 @@ func (in *Interp) execStmts(stmts []string) Value {
 		if in.ctl != ctlNone {
 			break
 		}
-		st := strings.TrimLeft(stmts[i], " \t\r\n")
+		st := strings.TrimLeft(strings.TrimPrefix(stmts[i], "\x00"), " \t\r\n")
 		if st == "" {
 			continue
+		}
+		stmts[i] = st // marker (if any) consumed
+		var pipeHost *captureHost
+		if i+1 < len(stmts) && strings.HasPrefix(stmts[i+1], "\x00") {
+			pipeHost = &captureHost{Host: in.Host}
+			in.Host = pipeHost
 		}
 		var w string
 		if st[0] == '/' {
@@ -558,6 +576,10 @@ func (in *Interp) execStmts(stmts []string) Value {
 			res = in.execOne(st)
 		}
 		in.lastRet = res
+		if pipeHost != nil {
+			in.Host = pipeHost.Host
+			in.tfin = pipeHost.lines
+		}
 	}
 	return res
 }
@@ -896,4 +918,14 @@ func globToRegexp(pat string) string {
 		}
 	}
 	return b.String()
+}
+
+// echo writes to tfout unless a scope in the chain has closed it.
+func (in *Interp) echo(text string) {
+	for f := in.fr; f != nil; f = f.parent {
+		if f.noOut {
+			return
+		}
+	}
+	in.Host.Echo(text)
 }

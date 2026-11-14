@@ -10,21 +10,22 @@ import (
 
 // Macro is a /def'd macro: optionally a trigger, hook or key binding.
 type Macro struct {
-	ID       int
-	Name     string
-	Body     string
-	Trigger  string
-	Hook     string
-	Bind     string
-	Matching string // simple, glob, regexp
-	Shots    int
-	Priority int
-	Fall     bool // -F fall-through
-	Gag      bool
-	Cond     string // -E
-	Attrs    string
-	World    string
-	re       *regexp.Regexp
+	ID        int
+	Name      string
+	Body      string
+	Trigger   string
+	Hook      string
+	Bind      string
+	Matching  string // simple, glob, regexp
+	Shots     int
+	Priority  int
+	Fall      bool // -F fall-through
+	Gag       bool
+	Cond      string // -E
+	Invisible bool   // -i
+	Attrs     string
+	World     string
+	re        *regexp.Regexp
 }
 
 // rawCmds take their argument text unexpanded (their bodies are code).
@@ -76,7 +77,8 @@ func (in *Interp) parseDef(args string) (*Macro, error) {
 		w, rest = splitOptWord(rest)
 		opt, val := w[1], w[2:]
 		switch opt {
-		case 'i': // invisible: ignored
+		case 'i':
+			m.Invisible = true
 		case 'm':
 			m.Matching = val
 		case 'n':
