@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package client wires the interpreter (the gtfparser engine), the network
 // stack and the terminal UI together. Everything runs on the engine Runner's
 // goroutine: key bytes, socket events, timers and resizes are posted to it,
@@ -157,6 +160,7 @@ func (c *Client) loadLibrary() error {
 	c.in.SetVar("TFLIBDIR", dir)
 	c.in.SetVar("TFHELP", filepath.Join(dir, "tf-help"))
 	c.in.SetVar("HOME", c.cfg.HomeDir)
+	c.in.SetVar("version", VersionVar())
 	c.in.SetVar("TERM", envOr("TERM", "xterm"))
 	c.in.Exec(fmt.Sprintf("/set wrapsize=%d", c.ui.W-1))
 	if c.cfg.Interactive {
@@ -183,12 +187,12 @@ func (c *Client) banner() {
 		return
 	}
 	for _, l := range []string{
-		"TinyFugue version 5.0 beta 8 (gtf)",
-		"Copyright (C) 1993 - 2007 Ken Keys (kenkeys@users.sourceforge.net)",
+		VersionLine() + ", a TinyFugue-compatible client",
+		CopyrightLine(),
 		"Type `/help copyright' for more information.",
 		"+gmcp +msdp +mssp +mccp +tls +layouts",
 		"Type `/help', `/help topics', or `/help intro' for help.",
-		"Type `/quit' to quit tf.",
+		"Type `/quit' to quit gtf.",
 		"",
 	} {
 		c.echoLine(l)

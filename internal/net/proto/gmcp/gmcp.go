@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package gmcp implements the Generic MUD Communication Protocol (telnet
 // option 201): "Package.Name <json>" packets in IAC SB 201 ... IAC SE.
 // Incoming packets become telnet.Message{Proto:"gmcp"} events; on enabling,

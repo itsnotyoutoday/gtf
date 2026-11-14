@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package msdp implements the MUD Server Data Protocol (telnet option 69):
 // tables, arrays and variables encoded with VAR/VAL/OPEN/CLOSE bytes.
 // Incoming variables become telnet.Message{Proto:"msdp"} events.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package sga implements SUPPRESS-GO-AHEAD (RFC 858) and ECHO (RFC 857).
 // ECHO from the server (WILL ECHO) means the server will echo what we type,
 // so the client hides input (password mode); the telnet layer reports it as an

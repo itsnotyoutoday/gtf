@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package nettest is a fake telnet server for unit tests: it scripts
 // negotiations byte for byte over an in-memory pipe.
 package nettest

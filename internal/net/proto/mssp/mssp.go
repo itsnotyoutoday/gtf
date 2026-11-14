@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package mssp implements the MUD Server Status Protocol (option 70):
 // the server announces VAR/VAL pairs (NAME, PLAYERS, ...). Each pair is
 // emitted as telnet.Message{Proto:"mssp"}.

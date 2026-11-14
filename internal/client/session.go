@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 package client
 
 import (
@@ -133,7 +136,7 @@ func (c *Client) setEnv(conn *gnet.Conn) {
 		ct := envOr("COLORTERM", "")
 		e.TrueColor = strings.Contains(ct, "truecolor") || strings.Contains(ct, "24bit")
 		e.Cols, e.Rows = c.ui.W, c.ui.H
-		e.ClientName, e.ClientVer = "GTF", "0.1"
+		e.ClientName, e.ClientVer = "GTF", Version
 	})
 }
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package telnet implements the telnet protocol state machine (RFC 854/855
 // with the RFC 1143 "Q method" for option negotiation) and a registry of
 // option handlers. It knows nothing about the interpreter or the UI: it turns

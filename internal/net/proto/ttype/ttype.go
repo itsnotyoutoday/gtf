@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package ttype implements TERMINAL-TYPE (RFC 1091) with MTTS (Mud Terminal
 // Type Standard): the client answers successive SEND requests with its name
-// (TINYFUGUE, as real tf does), the terminal type, then "MTTS <bits>".
+// (TINYFUGUE as real tf does, then GTF), the terminal type, then "MTTS <bits>".
 package ttype
 
 import (
@@ -66,11 +69,8 @@ func Replies(e telnet.EnvInfo) []string {
 	if term == "" {
 		term = "ANSI"
 	}
-	name := strings.ToUpper(e.ClientName)
-	if name == "" || name == "GTF" {
-		name = "TINYFUGUE"
-	}
-	return []string{name, term, "MTTS " + strconv.Itoa(Bits(e))}
+	// TINYFUGUE first: servers key on it; then our own name.
+	return []string{"TINYFUGUE", "GTF", term, "MTTS " + strconv.Itoa(Bits(e))}
 }
 
 func (h *H) OnSubneg(s *telnet.Session, data []byte) bool {

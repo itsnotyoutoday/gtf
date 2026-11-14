@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package mccp2 implements MUD Client Compression Protocol v2 (option 86):
 // the server sends IAC SB MCCP2 IAC SE and everything after is a zlib
 // stream. The decompression itself lives in the telnet machine; this handler

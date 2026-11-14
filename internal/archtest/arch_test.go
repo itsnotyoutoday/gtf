@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package archtest enforces the directory/import structure documented in
 // docs/ARCHITECTURE.md by parsing every package's imports.
 package archtest

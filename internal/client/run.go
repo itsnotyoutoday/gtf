@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 package client
 
 import (
@@ -26,7 +29,10 @@ func Main(args []string) int {
 		a := args[i]
 		switch {
 		case a == "-v" || a == "--version":
-			fmt.Println("TinyFugue (gtf) version 5.0 beta 8")
+			fmt.Println(VersionLine())
+			if ev := EngineVersion(); ev != "" {
+				fmt.Println("engine: gtfparser " + ev + ", TinyFugue " + TFVersion + " compatible")
+			}
 			return 0
 		case a == "-h" || a == "--help" || a == "-?":
 			fmt.Println(usage)

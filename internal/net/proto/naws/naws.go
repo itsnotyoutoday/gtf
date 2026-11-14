@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package naws implements Negotiate About Window Size (RFC 1073).
 package naws
 

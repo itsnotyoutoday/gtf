@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package charset implements the TELNET CHARSET option (RFC 2066): when the
 // server sends REQUEST with a list of charsets we accept UTF-8 (or ISO-8859-1
 // as a fallback) and record the choice in the shared Env.

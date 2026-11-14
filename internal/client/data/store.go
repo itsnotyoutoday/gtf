@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package data is the per-session store of out-of-band data from a world:
 // GMCP packages, MSDP variables and MSSP status, addressable as
 // gmcp:Char.Vitals.hp, msdp:HEALTH, mssp:NAME.

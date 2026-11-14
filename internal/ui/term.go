@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package ui is the terminal user interface: raw tty handling, scrollback,
 // the more-pager, the input window, status line(s) and docked panels. It
 // draws by composing a cell grid and diffing it against what the terminal
