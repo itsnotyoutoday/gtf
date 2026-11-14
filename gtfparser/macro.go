@@ -2,7 +2,6 @@ package gtfparser
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,7 +24,7 @@ type Macro struct {
 	Invisible bool   // -i
 	Attrs     string
 	World     string
-	re        *regexp.Regexp
+	re        *rx
 }
 
 // rawCmds take their argument text unexpanded (their bodies are code).
@@ -56,10 +55,11 @@ func splitOptWord(s string) (word, rest string) {
 
 func unquoteOpt(v string) string {
 	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'' || v[0] == '`') && v[len(v)-1] == v[0] {
+		q := v[0]
 		inner := v[1 : len(v)-1]
 		var b strings.Builder
 		for i := 0; i < len(inner); i++ {
-			if inner[i] == '\\' && i+1 < len(inner) {
+			if inner[i] == '\\' && i+1 < len(inner) && (inner[i+1] == q || inner[i+1] == '\\') {
 				i++
 			}
 			b.WriteByte(inner[i])
@@ -143,7 +143,10 @@ func (in *Interp) Define(m *Macro) {
 	in.nextID++
 	m.ID = in.nextID
 	if m.Matching == "regexp" && m.Trigger != "" {
-		m.re, _ = regexp.Compile(m.Trigger)
+		var err error
+		if m.re, err = compileRegexp(m.Trigger); err != nil {
+			in.warn("DEF -t: %v", err)
+		}
 	}
 	in.list = append(in.list, m)
 }
@@ -183,7 +186,7 @@ func (m *Macro) matches(line string) (ok bool, regs []string, left, right string
 		if m.re == nil {
 			return false, nil, "", ""
 		}
-		loc := m.re.FindStringSubmatchIndex(line)
+		loc := m.re.match(line, 0)
 		if loc == nil {
 			return false, nil, "", ""
 		}
@@ -197,6 +200,8 @@ func (m *Macro) matches(line string) (ok bool, regs []string, left, right string
 		return true, regs, line[:loc[0]], line[loc[1]:]
 	case "simple":
 		return line == m.Trigger, nil, "", ""
+	case "substr":
+		return strings.Contains(line, m.Trigger), nil, "", ""
 	}
 	return globMatch(m.Trigger, line), nil, "", ""
 }

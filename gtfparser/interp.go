@@ -888,60 +888,6 @@ func (in *Interp) callFunc(name string, args []Value) (Value, error) {
 	return Int(0), fmt.Errorf("%s: no such function", name)
 }
 
-// globMatch matches s against a TF glob: * ? [set] {a|b} and \ escapes.
-func globMatch(pat, s string) bool {
-	re, err := regexp.Compile("(?s)^" + globToRegexp(pat) + "$")
-	if err != nil {
-		return false
-	}
-	return re.MatchString(s)
-}
-
-func globToRegexp(pat string) string {
-	var b strings.Builder
-	for i := 0; i < len(pat); i++ {
-		c := pat[i]
-		switch c {
-		case '*':
-			b.WriteString(".*")
-		case '?':
-			b.WriteString(".")
-		case '\\':
-			if i+1 < len(pat) {
-				i++
-				b.WriteString(regexp.QuoteMeta(string(pat[i])))
-			}
-		case '[':
-			j := strings.IndexByte(pat[i:], ']')
-			if j < 0 {
-				b.WriteString(`\[`)
-				continue
-			}
-			set := pat[i+1 : i+j]
-			if strings.HasPrefix(set, "^") || strings.HasPrefix(set, "!") {
-				set = "^" + set[1:]
-			}
-			b.WriteString("[" + set + "]")
-			i += j
-		case '{':
-			j := strings.IndexByte(pat[i:], '}')
-			if j < 0 {
-				b.WriteString(`\{`)
-				continue
-			}
-			var alts []string
-			for _, a := range strings.Split(pat[i+1:i+j], "|") {
-				alts = append(alts, globToRegexp(a))
-			}
-			b.WriteString("(?:" + strings.Join(alts, "|") + ")")
-			i += j
-		default:
-			b.WriteString(regexp.QuoteMeta(string(c)))
-		}
-	}
-	return b.String()
-}
-
 // echo writes to tfout unless a scope in the chain has closed it.
 func (in *Interp) echo(text string) {
 	for f := in.fr; f != nil; f = f.parent {

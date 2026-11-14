@@ -31,7 +31,7 @@ func TestDocExamples(t *testing.T) {
 		{"greet arg", "/set ending=meister\n/def greet = :waves to %{1-Jack}%{ending}.\n/greet Dave", "sent::waves to Davemeister."},
 		{"expr table", "/set X=5\n/echo $[3 + X * 2]", "out:13"},
 		{"str eq", `/echo $["foo" =~ "bar"]`, "out:0"},
-		{"glob", "/set name=Hawkeye\n/echo $[name =/ 'hawk*'] $[name =/ 'Hawk*']", "out:0 1"},
+		{"glob", "/set name=Hawkeye\n/echo $[name =/ 'hawk*'] $[name =/ 'Hawk*']", "out:1 1"},
 		{"string vs num", "/set X=5\n/echo $[X =~ \"+5\"] $[X == \"+5\"]", "out:0 1"},
 		{"visual", "/set X=5\n/set visual=1\n/echo $[visual & (X > 0)]", "out:1"},
 		{"int div", "/echo $[7/2] $[7.0/2]", "out:3 3.5"},

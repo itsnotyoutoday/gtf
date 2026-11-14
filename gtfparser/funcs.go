@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -193,12 +192,12 @@ func minmax(a []Value, max bool) (Value, error) {
 // fnRegmatch implements regmatch(pattern, string): on a match it sets the
 // %P0.. substitutions for the current scope.
 func fnRegmatch(in *Interp, a []Value) (Value, error) {
-	re, err := regexp.Compile(str(a, 0))
+	re, err := compileRegexp(str(a, 0))
 	if err != nil {
 		return Int(0), err
 	}
 	s := str(a, 1)
-	loc := re.FindStringSubmatchIndex(s)
+	loc := re.match(s, 0)
 	if loc == nil {
 		return Int(0), nil
 	}
