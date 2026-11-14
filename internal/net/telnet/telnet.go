@@ -9,9 +9,7 @@
 package telnet
 
 import (
-	"bufio"
 	"bytes"
-	"compress/zlib"
 	"errors"
 	"io"
 	"sync"
@@ -205,7 +203,14 @@ type Machine struct {
 
 	emit     func(Event)
 	compress bool
-	mccpOn   bool
+
+	// scanner state (see the ps* constants) and the text run being collected
+	ps    uint8
+	cmd   byte // WILL/WONT/DO/DONT waiting for its option byte
+	sbOpt byte
+	sb    []byte
+	txt   []byte
+	z     *inflater // the MCCP2 stream being inflated, nil when the stream is raw
 }
 
 // NewMachine creates a machine writing to w. If handlers is nil the globally
@@ -434,119 +439,163 @@ var ErrSubnegTooLong = errors.New("telnet: subnegotiation too long")
 
 const maxSubneg = 1 << 20
 
+// parse states of the byte-stream scanner; they are part of the snapshot, so a
+// connection handed to another process can stop in the middle of a sequence.
+const (
+	psData  uint8 = iota
+	psIAC         // after IAC
+	psNeg         // after IAC WILL/WONT/DO/DONT: the option byte follows
+	psSB          // after IAC SB: the option byte follows
+	psSBDat       // inside a subnegotiation
+	psSBIAC       // IAC inside a subnegotiation
+)
+
 // Run reads r until it fails, calling emit for each Event. It owns the
 // reading side; call it from one goroutine. emit is called synchronously.
 func (m *Machine) Run(r io.Reader, emit func(Event)) error {
 	m.emit = emit
 	m.Start()
-	raw := bufio.NewReaderSize(r, 32768)
-	br := raw
-	var txt []byte
-	flush := func() {
-		if len(txt) > 0 {
-			emit(Text{Data: txt})
-			txt = nil
-		}
-	}
-	read := func() (byte, error) {
-		if br.Buffered() == 0 {
-			flush()
-		}
-		b, err := br.ReadByte()
-		if err == io.EOF && m.mccpOn && br != raw {
-			// compressed stream ended; carry on with the raw stream
-			br, m.mccpOn = raw, false
-			return read0(raw, flush)
-		}
-		return b, err
-	}
+	buf := make([]byte, 32768)
 	for {
-		c, err := read()
+		n, err := r.Read(buf)
+		if n > 0 {
+			if ferr := m.Feed(buf[:n], emit); ferr != nil {
+				return ferr
+			}
+		}
 		if err != nil {
-			flush()
+			if err == io.EOF && m.z != nil {
+				// a compressed stream cut short: nothing more to decode
+				m.z = nil
+			}
 			return err
 		}
-		if c != IAC {
-			if c != 0 {
-				txt = append(txt, c)
+	}
+}
+
+// Feed processes bytes read from the server, calling emit for each event.
+// Text is delivered in one event per run (flushed before any other event and
+// at the end of the call). A returned error (corrupt zlib stream, oversized
+// subnegotiation) ends the connection.
+func (m *Machine) Feed(p []byte, emit func(Event)) error {
+	m.emit = emit
+	defer m.flushText()
+	for len(p) > 0 {
+		if m.z != nil {
+			out, rest, done, err := m.z.feed(p)
+			if len(out) > 0 {
+				if _, perr := m.scan(out); perr != nil {
+					return perr
+				}
+				m.compress = false // no nested compression
 			}
+			if err != nil {
+				return err
+			}
+			if !done {
+				return nil
+			}
+			m.z = nil // the compressed stream ended: the raw stream resumes
+			p = rest
 			continue
 		}
-		flush()
-		c, err = read()
+		rest, err := m.scan(p)
 		if err != nil {
 			return err
 		}
-		switch c {
-		case IAC:
-			txt = append(txt, IAC)
-		case GA:
-			emit(Prompt{Kind: "GA"})
-		case EORc:
-			emit(Prompt{Kind: "EOR"})
-		case WILL, WONT, DO, DONT:
-			o, err := read()
-			if err != nil {
-				return err
+		if !m.compress {
+			return nil
+		}
+		m.compress = false
+		m.z = newInflater()
+		p = rest
+	}
+	return nil
+}
+
+func (m *Machine) flushText() {
+	if len(m.txt) > 0 {
+		t := m.txt
+		m.txt = nil
+		m.emitEv(Text{Data: t})
+	}
+}
+
+func (m *Machine) event(e Event) {
+	m.flushText()
+	m.emitEv(e)
+}
+
+// scan runs the scanner over p. It stops early, returning the unread rest,
+// when a subnegotiation switched compression on.
+func (m *Machine) scan(p []byte) ([]byte, error) {
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		switch m.ps {
+		case psData:
+			if c == IAC {
+				m.ps = psIAC
+			} else if c != 0 {
+				m.txt = append(m.txt, c)
 			}
-			m.negotiate(c, o)
-		case SB:
-			o, err := read()
-			if err != nil {
-				return err
+		case psIAC:
+			m.ps = psData
+			switch c {
+			case IAC:
+				m.txt = append(m.txt, IAC)
+			case GA:
+				m.event(Prompt{Kind: "GA"})
+			case EORc:
+				m.event(Prompt{Kind: "EOR"})
+			case WILL, WONT, DO, DONT:
+				m.cmd, m.ps = c, psNeg
+			case SB:
+				m.ps = psSB
+			default:
+				// NOP, DM, BRK, ... ignored
 			}
-			var data []byte
-			for {
-				b, err := read()
-				if err != nil {
-					return err
-				}
-				if b == IAC {
-					b2, err := read()
-					if err != nil {
-						return err
-					}
-					if b2 == SE {
-						break
-					}
-					if b2 == IAC {
-						data = append(data, IAC)
-					}
-					continue
-				}
-				data = append(data, b)
-				if len(data) > maxSubneg {
-					return ErrSubnegTooLong
-				}
+		case psNeg:
+			m.ps = psData
+			m.flushText()
+			m.negotiate(m.cmd, c)
+		case psSB:
+			m.sbOpt, m.sb, m.ps = c, nil, psSBDat
+		case psSBDat:
+			if c == IAC {
+				m.ps = psSBIAC
+				continue
 			}
-			m.subneg(o, data, emit)
-			if m.compress {
-				m.compress = false
-				zr, err := zlib.NewReader(br)
-				if err != nil {
-					return err
-				}
-				br = bufio.NewReaderSize(zr, 32768)
-				m.mccpOn = true
+			m.sb = append(m.sb, c)
+			if len(m.sb) > maxSubneg {
+				return nil, ErrSubnegTooLong
 			}
-		default:
-			// NOP, DM, BRK, ... ignored
+		case psSBIAC:
+			switch c {
+			case SE:
+				m.ps = psData
+				data := m.sb
+				m.sb = nil
+				m.flushText()
+				m.subneg(m.sbOpt, data)
+				if m.compress {
+					return p[i+1:], nil
+				}
+			case IAC:
+				m.sb = append(m.sb, IAC)
+				m.ps = psSBDat
+			default:
+				m.ps = psSBDat
+			}
 		}
 	}
+	return nil, nil
 }
 
-func read0(r *bufio.Reader, flush func()) (byte, error) {
-	if r.Buffered() == 0 {
-		flush()
-	}
-	return r.ReadByte()
-}
-
-func (m *Machine) subneg(opt byte, data []byte, emit func(Event)) {
+func (m *Machine) subneg(opt byte, data []byte) {
 	if h := m.handlers[opt]; h != nil {
 		if h.OnSubneg(&Session{m}, data) {
 			return
 		}
 	}
-	emit(Subneg{Opt: opt, Data: data})
+	m.emitEv(Subneg{Opt: opt, Data: data})
 }

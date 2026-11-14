@@ -11,6 +11,8 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
+
+	"github.com/itsnotyoutoday/gtf/internal/net/tlsmigrate"
 )
 
 // Transport opens a byte stream to host:port.
@@ -41,7 +43,10 @@ type TLS struct {
 
 func (TLS) Name() string { return "tls" }
 
-// Dial connects and handshakes.
+// Dial connects and handshakes. The session is made with the vendored,
+// migratable crypto/tls (internal/net/tlsmigrate) so that it can be handed to
+// a new process by /restart; a tls.Config it cannot express falls back to the
+// standard library (such a session works but cannot be carried).
 func (t TLS) Dial(ctx context.Context, host, port string) (net.Conn, error) {
 	cfg := &tls.Config{}
 	if t.Config != nil {
@@ -52,6 +57,24 @@ func (t TLS) Dial(ctx context.Context, host, port string) (net.Conn, error) {
 		cfg.ServerName = t.ServerName
 	}
 	cfg.InsecureSkipVerify = !t.Verify //nolint:gosec // user-selected
-	d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: t.Timeout, KeepAlive: 30 * time.Second}, Config: cfg}
-	return d.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
+	d := &net.Dialer{Timeout: t.Timeout, KeepAlive: 30 * time.Second}
+	raw, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
+	if err != nil {
+		return nil, err
+	}
+	type tlsConn interface {
+		net.Conn
+		HandshakeContext(context.Context) error
+	}
+	var tc tlsConn
+	if mc, err := tlsmigrate.Client(raw, cfg); err == nil {
+		tc = mc
+	} else {
+		tc = tls.Client(raw, cfg)
+	}
+	if err := tc.HandshakeContext(ctx); err != nil {
+		raw.Close()
+		return nil, err
+	}
+	return tc, nil
 }
