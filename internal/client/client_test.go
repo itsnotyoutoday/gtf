@@ -197,3 +197,27 @@ func TestIdentityBannerVersionAndCopyright(t *testing.T) {
 		}
 	}
 }
+
+// A panel bound to a variable that a timer-driven /repeat changes must repaint
+// on its own, without any keyboard or network activity.
+func TestPanelRepaintsOnTimerWork(t *testing.T) {
+	c, scr, _ := newTestClient(t)
+	c.Start()
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/set tickv=0")
+		in.Exec("/def -i bump = /set tickv=$[tickv + 1]%; /repeat -1 1 /bump")
+		in.Exec("/panel -dock top -h 1 t = TICK {tickv}")
+		in.Exec("/bump")
+	})
+	waitScreen(t, c, scr, "TICK 1")
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		seen := false
+		c.Do(func(*gtfparser.Interp) { seen = strings.Contains(scr.Text(), "TICK 3") }) // no Flush: the client must repaint by itself
+		if seen {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("panel never advanced to TICK 3")
+}

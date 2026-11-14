@@ -152,3 +152,19 @@ func TestEngineDockingAndDegrade(t *testing.T) {
 		t.Fatal("unrelated change dirtied side")
 	}
 }
+
+func TestCondBareWordIsLiteral(t *testing.T) {
+	r := mapRes{"var:aa": "red", "var:hp": 5.0, "var:maxhp": 10.0}
+	c := &Ctx{R: r, deps: map[string]bool{}}
+	for _, tc := range []struct {
+		cond string
+		want bool
+	}{
+		{"aa == red", true}, {`aa == "red"`, true}, {"aa != red", false}, {"aa == blue", false},
+		{"hp < maxhp", true}, {"hp > maxhp", false},
+	} {
+		if got := c.cond(tc.cond); got != tc.want {
+			t.Errorf("cond(%q) = %v, want %v", tc.cond, got, tc.want)
+		}
+	}
+}

@@ -150,9 +150,10 @@
     /done
 
 /def -i lc_tick = \
-    /if (lc_gen == {1}) \
+    /let g=%1%; \
+    /if (lc_gen == g) \
         /lc_move%; /lc_radar%; /lc_view%; \
-        /repeat -1 1 /lc_tick %1%; \
+        /repeat -1 1 /lc_tick %g%; \
     /endif
 
 ;; ---------------------------------------------------------------- the panels
@@ -202,7 +203,7 @@
     /if ({1} =~ "eng") /lc_eng%; \
     /else /lc_sensors%; \
     /endif%; \
-    /repeat -1 1 /lc_tick %lc_gen
+    /repeat -1 1 /lc_tick %{lc_gen}
 
 /def -i lcars = \
     /if ({1} =~ "stop" | {1} =~ "off") /lcars_stop%; \

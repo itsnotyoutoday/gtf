@@ -241,6 +241,33 @@ func (c *Client) Start() {
 		}()
 	}
 	go c.clockLoop()
+	go c.pollLoop()
+}
+
+// pollLoop notices panel bindings changed by timer-driven script work (/repeat,
+// /at, triggers fired from timers), which run on the engine's runner without
+// passing through afterTask. It does nothing unless a layout is active.
+func (c *Client) pollLoop() {
+	t := time.NewTicker(250 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-t.C:
+			c.Post(func(*gtfparser.Interp) { c.pollPanels() })
+		}
+	}
+}
+
+// pollPanels re-checks the active layout's variable bindings and repaints when
+// one changed.
+func (c *Client) pollPanels() {
+	if c.panels.current(c) == nil {
+		return
+	}
+	c.checkLayoutDeps()
+	c.scheduleRender()
 }
 
 func (c *Client) clockLoop() {

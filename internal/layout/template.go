@@ -504,7 +504,9 @@ func isOp(s string) bool {
 func (c *Ctx) compare(a, op, b string) bool {
 	av, _ := c.lookup(a)
 	bv, bok := c.lookup(b)
-	if !bok {
+	if !bok || toString(bv) == "" {
+		// a bare word on the right is a literal ("aa == red"), unless it names a
+		// variable that holds a value ("hp < maxhp")
 		bv = b
 	}
 	af, aok := toFloat(av)
