@@ -1,6 +1,6 @@
-# gtf architecture
+# GoTinyFugue (gtf) architecture
 
-gtf is a terminal MU* client that looks and behaves like TinyFugue (tf). It is
+GoTinyFugue (binary `gtf`) is a terminal MU* client that looks and behaves like, and is compatible with, TinyFugue (tf) by Ken Keys. It is
 **only the client**: the scripting language and tf's state live in the shared
 engine module [`github.com/itsnotyoutoday/gtfparser`](https://github.com/itsnotyoutoday/gtfparser),
 which this repository consumes as an ordinary pinned dependency (the same

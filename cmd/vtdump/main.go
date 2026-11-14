@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Command vtdump renders a captured terminal byte stream through the vt
 // emulator (developer tool): vtdump [-w 80] [-h 24] file
 package main

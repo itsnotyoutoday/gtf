@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package vt is a small VT100/ANSI screen model used to test the terminal UI
 // (and to compare it with the real tf). It understands the subset of control
 // sequences that tf and gtf emit: cursor movement, erase, scroll regions,

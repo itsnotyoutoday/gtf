@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package layout is the panel/layout system: a small template language with
 // data bindings, widgets (bars, gauges, sparklines, lists), and a layout
 // engine that docks panels around the main scrollback region. It performs no

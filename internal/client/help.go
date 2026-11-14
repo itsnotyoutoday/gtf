@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 package client
 
 import (
@@ -96,6 +99,11 @@ func (c *Client) showHelp(topic string) {
 			c.echoLine("% Help on subject " + topic + " not found.")
 		}
 		return
+	}
+	if topic == "copyright" {
+		for _, l := range ownNotice {
+			c.echoLine(l)
+		}
 	}
 	for _, l := range body {
 		c.echoLine(l)

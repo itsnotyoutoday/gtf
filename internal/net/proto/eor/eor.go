@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package eor implements the TELNET END-OF-RECORD option (RFC 885): once
 // negotiated, IAC EOR (and IAC GA) mark prompts. The telnet machine itself
 // raises Prompt events for those commands; this handler only negotiates.

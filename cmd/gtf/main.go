@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Command gtf is the gtf terminal client. All logic lives in internal/client.
 package main
 

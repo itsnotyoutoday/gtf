@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 package net_test
 
 import (
@@ -74,6 +77,8 @@ func TestNAWSAndTType(t *testing.T) {
 	ask := nettest.SB(telnet.OptTType, 1)
 	srv.Send(ask)
 	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "TINYFUGUE"...)...))
+	srv.Send(ask)
+	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "GTF"...)...))
 	srv.Send(ask)
 	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "XTERM-256COLOR"...)...))
 	srv.Send(ask)

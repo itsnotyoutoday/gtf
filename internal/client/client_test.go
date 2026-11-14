@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 package client
 
 import (
@@ -62,7 +65,7 @@ func TestConnectGmcpPanelAndInput(t *testing.T) {
 	srv.Expect([]byte("connect god pw\r\n"))
 	srv.Send(nettest.IAC(telnet.WILL, telnet.OptGMCP))
 	srv.Expect(nettest.IAC(telnet.DO, telnet.OptGMCP))
-	srv.Read(len(nettest.SB(telnet.OptGMCP, []byte(`Core.Hello {"client":"GTF","version":"0.1"}`)...)))
+	srv.Read(len(nettest.SB(telnet.OptGMCP, []byte(`Core.Hello {"client":"GTF","version":"0.0.1"}`)...)))
 	srv.Read(len(nettest.SB(telnet.OptGMCP, []byte(`Core.Supports.Set ["Char 1","Room 1","Comm 1","Core 1","Group 1","Client.Media 1"]`)...)))
 	srv.Send([]byte("Welcome to the test game\r\nsecret plans\r\n"))
 	srv.Send(nettest.SB(telnet.OptGMCP, []byte(`Char.Vitals {"hp":40,"maxhp":80}`)...))
@@ -147,4 +150,50 @@ func TestPagerAndRecall(t *testing.T) {
 	// /recall shows history through the engine
 	c.Do(func(in *gtfparser.Interp) { in.Exec("/recall -2") })
 	c.Flush()
+}
+
+func TestIdentityBannerVersionAndCopyright(t *testing.T) {
+	scr := vt.New(130, 150)
+	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Interactive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.Close)
+	c.Flush()
+	txt := scr.Text()
+	for _, w := range []string{
+		"GoTinyFugue version 0.0.1 (gtf), a TinyFugue-compatible client",
+		"Copyright (C) 2026 Rick Bird. Inspired by and compatible with TinyFugue 5.0 beta 8, Copyright (C) 1993-2007 Ken Keys.",
+		"Type `/quit' to quit gtf.",
+	} {
+		if !strings.Contains(txt, w) {
+			t.Errorf("banner lacks %q:\n%s", w, scr.Dump())
+		}
+	}
+	c.Do(func(in *gtfparser.Interp) {
+		if v := in.Var("version"); v != "GoTinyFugue version 0.0.1 (gtf), compatible with TinyFugue 5.0 beta 8" {
+			t.Errorf("version = %q", v)
+		}
+		in.Exec("/version")
+		in.Exec("/ver")
+		in.Exec("/help copyright")
+	})
+	c.Flush()
+	txt = scr.Text()
+	for _, w := range []string{"% GoTinyFugue version 0.0.1 (gtf), compatible with", "\n5.0 beta 8\n"} {
+		if !strings.Contains(txt, w) {
+			t.Errorf("missing %q:\n%s", w, scr.Dump())
+		}
+	}
+	// own notice first, then the original TinyFugue text
+	own := strings.Index(txt, "Copyright (C) 2026 Rick Bird\n")
+	orig := strings.Index(txt, "TinyFugue - programmable mud client")
+	if own < 0 || orig < 0 || own > orig {
+		t.Errorf("copyright order wrong (own=%d orig=%d):\n%s", own, orig, scr.Dump())
+	}
+	for _, w := range []string{"WITHOUT ANY WARRANTY", "gtfparser", "Ken Keys"} {
+		if !strings.Contains(txt, w) {
+			t.Errorf("copyright lacks %q", w)
+		}
+	}
 }

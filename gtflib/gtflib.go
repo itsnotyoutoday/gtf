@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package gtflib embeds the gtf-only TF library: scripts that add commands
 // and macros on top of the unmodified real tf library (which the engine's
 // tflib package ships). Nothing here is part of the core TF language.

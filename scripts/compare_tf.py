@@ -90,6 +90,16 @@ def render(vtdump, data, cols=80, rows=24):
     return out.splitlines()
 
 
+# Lines that differ on purpose (GoTinyFugue's own identity); everything else is strict.
+IDENTITY = [
+    (r"^(TinyFugue|GoTinyFugue) version .*", "<version line>"),
+    (r"^Copyright \(C\) .*(Ken Keys|Rick Bird).*", "<copyright line>"),
+    (r"^(    2005, 2006-2007 Ken Keys.*)$", "<copyright line>"),
+    (r"^Type `/quit' to quit (tf|gtf)\.", "<quit hint>"),
+    (r"^\+gmcp .*", "<features>"),
+]
+
+
 def normalize(lines):
     out = []
     for l in lines:
@@ -100,6 +110,10 @@ def normalize(lines):
         # the clock differs between the two runs only by timing: mask HH:MM
         import re
         body = re.sub(r"\b\d\d:\d\d$", "HH:MM", body.rstrip())
+        import re
+        for pat, rep in IDENTITY:
+            if re.match(pat, body):
+                body = rep
         out.append(body)
     return out
 

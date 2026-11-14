@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 package ui
 
 import "github.com/itsnotyoutoday/gtf/internal/layout"

@@ -1,6 +1,6 @@
-# gtf
+# GoTinyFugue (gtf)
 
-A terminal MU* client that looks and behaves like TinyFugue, built on the shared
+GoTinyFugue (`gtf`) is a terminal MU* client that looks and behaves like TinyFugue, built on the shared
 scripting engine [gtfparser](https://github.com/itsnotyoutoday/gtfparser).
 
 - Same screen as tf (output window, status line, input window), same key bindings
@@ -41,4 +41,14 @@ checkout of the engine next to this one and add a git-ignored `go.work`:
 (`go.work` is in `.gitignore`; use the version number that `go.mod` requires.) Any change the client needs
 in the scripting engine is made in the engine repository, not here.
 
-Licensed GPL-3.0-or-later; TinyFugue is GPL-2.0-or-later.
+## License and credits
+
+Copyright (C) 2026 Rick Bird. GoTinyFugue is free software, licensed
+GPL-3.0-or-later; see `LICENSE`.
+
+- [TinyFugue](https://tf.tcp.com/~hawkeye/tf/) by Ken Keys (GPL-2.0-or-later) is the
+  inspiration for GoTinyFugue and its compatibility target. Its standard library is embedded
+  unmodified through the engine's `tflib` package (see the NOTICE there); the original
+  copyright notice is shown by `/help copyright`.
+- The [PCRE2](https://www.pcre.org/) project, whose regexp semantics the engine's `pcre`
+  package follows.

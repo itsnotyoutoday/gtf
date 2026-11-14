@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
 // Package net is the transport and protocol stack: byte transports (tcp, tls)
 // and Conn, which runs the telnet machine over one and yields typed events.
 // It has no knowledge of the interpreter or the UI.
