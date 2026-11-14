@@ -30,6 +30,9 @@ const (
 	VarPairTTL     = "squatter_pair_ttl"
 	VarPairRole    = "squatter_pair_role"
 	VarCommands    = "squatter_commands"
+	VarGTF         = "squatter_gtf"
+	VarNAWS        = "squatter_naws"
+	VarWorldSave   = "squatter_world_save"
 
 	// output variables, written by the squatter (never read back)
 	VarState       = "squatter_state"
@@ -41,7 +44,7 @@ const (
 
 // ConfigVars are the configuration variables, in the order /squatter status shows them.
 var ConfigVars = []string{VarEnabled, VarPort, VarBind, VarName, VarDir, VarKind, VarTLS, VarCert, VarKey,
-	VarScrollback, VarMaxClients, VarMaxSessions, VarPairTTL, VarPairRole, VarCommands}
+	VarScrollback, VarMaxClients, VarMaxSessions, VarPairTTL, VarPairRole, VarCommands, VarGTF, VarNAWS, VarWorldSave}
 
 // Defaults.
 const (
@@ -52,6 +55,14 @@ const (
 	DefaultMaxSessions = 32
 	DefaultPairTTL     = 10 * time.Minute
 	DefaultPairRole    = "admin"
+)
+
+// NAWS policies (squatter_naws): which terminal width the game is told.
+const (
+	NAWSActive = "active" // the client (peer or local terminal) that last sent input
+	NAWSMin    = "min"    // the smallest of all attached clients
+	NAWSMax    = "max"    // the largest of all attached clients
+	NAWSLocal  = "local"  // only gtf's own terminal (the behaviour before the gtf extension)
 )
 
 // Server kinds (squatter_kind).
@@ -77,6 +88,9 @@ type Config struct {
 	PairTTL     time.Duration
 	PairRole    string
 	Commands    bool
+	GTF         bool   // negotiate the gtf extension (docs/SWP-GTF.md)
+	NAWS        string // NAWSActive, NAWSMin, NAWSMax or NAWSLocal
+	WorldSave   bool   // save the world file after a peer changed a world
 }
 
 // DefaultConfig is the configuration with every variable unset.
@@ -87,7 +101,8 @@ func DefaultConfig(home string) Config {
 	}
 	return Config{Port: DefaultPort, Bind: DefaultBind, Name: name, Dir: filepath.Join(home, ".gtf", "squatter"),
 		Kind: KindTF, TLS: true, Scrollback: DefaultScrollback, MaxClients: DefaultMaxClients,
-		MaxSessions: DefaultMaxSessions, PairTTL: DefaultPairTTL, PairRole: DefaultPairRole, Commands: true}
+		MaxSessions: DefaultMaxSessions, PairTTL: DefaultPairTTL, PairRole: DefaultPairRole, Commands: true,
+		GTF: true, NAWS: NAWSActive, WorldSave: true}
 }
 
 func isOn(s string) (on, ok bool) {
@@ -168,6 +183,16 @@ func ConfigFromVars(get func(string) string, home string) (Config, []string) {
 		}
 	}
 	boolVar(VarCommands, &c.Commands)
+	boolVar(VarGTF, &c.GTF)
+	boolVar(VarWorldSave, &c.WorldSave)
+	if v := strings.ToLower(strings.TrimSpace(get(VarNAWS))); v != "" {
+		switch v {
+		case NAWSActive, NAWSMin, NAWSMax, NAWSLocal:
+			c.NAWS = v
+		default:
+			warn = append(warn, fmt.Sprintf("%s: %q is not active, min, max or local; keeping %s", VarNAWS, v, c.NAWS))
+		}
+	}
 	return c, warn
 }
 
@@ -210,4 +235,9 @@ func (c Config) BindWarning() string {
 	return fmt.Sprintf("squatter: listening on %s:%d, which other machines can reach. Connections need TLS and a paired "+
 		"device key, but a paired device with role admin can run commands in this client: pair only your own devices, "+
 		"and prefer %s=127.0.0.1 behind an ssh tunnel or VPN.", c.Bind, c.Port, VarBind)
+}
+
+// ConfigFromVarsMap is ConfigFromVars over a map (for tests and tools).
+func ConfigFromVarsMap(m map[string]string) (Config, []string) {
+	return ConfigFromVars(func(n string) string { return m[n] }, "/home")
 }

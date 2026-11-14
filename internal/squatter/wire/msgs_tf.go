@@ -139,6 +139,12 @@ type WorldChangedMsg struct {
 	Created bool   `json:"created,omitempty"`
 	// OldName is set when the world was renamed (Name is the new name).
 	OldName string `json:"oldName,omitempty"`
+	// gtf extension (docs/SWP-GTF.md, feature "worlds"), all optional: the kind of change
+	// ("put", "delete", "rename"), the record after it, its revision and who made the change.
+	Op     string         `json:"op,omitempty"`
+	Rev    uint64         `json:"rev,omitempty"`
+	Author string         `json:"author,omitempty"`
+	World  *proto.TFWorld `json:"world,omitempty"`
 }
 
 // GmcpSendReq is gmcp.send: Package plus optional JSON Data, sent to the game.

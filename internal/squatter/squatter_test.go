@@ -33,6 +33,9 @@ type fakeHost struct {
 	vars    map[string]string
 	notices []string
 	execs   []string
+	db      *fakeDB
+	saves   int
+	naws    []nawsCall
 }
 
 func newFakeHost(t *testing.T) *fakeHost {
@@ -104,9 +107,6 @@ func (h *fakeHost) Exec(line string) (bool, []string) {
 	h.execs = append(h.execs, line)
 	h.mu.Unlock()
 	return true, []string{"ran " + line}
-}
-func (h *fakeHost) Worlds() []proto.TFWorld {
-	return []proto.TFWorld{{Name: "mud", Host: "h", Port: "4000", PassSet: true, MFile: "secret.tf"}}
 }
 func (h *fakeHost) Hook(ev string, a ...string) {
 	h.mu.Lock()
@@ -402,7 +402,7 @@ func TestRevokedDeviceAndKick(t *testing.T) {
 	if devs, err := func() ([]DeviceInfo, error) { return r.sq.Devices() }(); err != nil || len(devs) != 1 || !devs[0].Online || devs[0].Role != "operator" {
 		t.Fatalf("devices %+v %v", devs, err)
 	}
-	if n := r.sq.Kick("phone"); n != 1 {
+	if n, err := r.sq.Kick("phone"); n != 1 || err != nil {
 		t.Fatalf("kicked %d", n)
 	}
 	select {
@@ -608,7 +608,7 @@ func TestTFExtensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	var pe *wire.ProtoError
-	if _, err := c.PutScript(ctx, "a.tf", "/echo", false); !errors.As(err, &pe) || pe.Code != proto.ErrBadRequest {
+	if _, err := c.PutScript(ctx, "a.tf", "/echo", false); !errors.As(err, &pe) || pe.Code != ErrUnsupported || strings.Contains(pe.Message, "/addworld") {
 		t.Fatalf("script upload: %v", err)
 	}
 	if err := c.Attach(ctx, id, nil, 0); err != nil {

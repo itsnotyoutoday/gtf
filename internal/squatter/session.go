@@ -221,7 +221,7 @@ func (ss *session) infoLocked(device string) proto.SessionInfo {
 	return proto.SessionInfo{ID: ss.id, Name: ss.world, Host: ss.host, Port: ss.port, TLS: ss.tls, State: ss.state,
 		StartedAt: ss.startedAt, FirstSeq: first, LastSeq: last, Unread: unread, Attached: len(ss.attached),
 		RemoteEcho: ss.remoteEcho, EndedAt: ss.endedAt, EndReason: ss.endReason, EndDetail: ss.endDetail, LastText: ss.lastText,
-		TF: &proto.TFInfo{World: ss.world, Fg: false, Input: wire.ModeBoth, Automation: wire.ModeTF}}
+		TF: &proto.TFInfo{World: ss.world, Fg: ss.s.isLocalView(ss.id), Input: wire.ModeBoth, Automation: wire.ModeTF}}
 }
 
 func (ss *session) info(device string) proto.SessionInfo {
@@ -249,13 +249,60 @@ func (ss *session) appendLocked(e scrollback.Entry) {
 	case e.Msdp != nil:
 		e.Msdp.Seq = seq
 	}
-	raw, err := json.Marshal(e)
+	raw, err := entryJSON(e, true)
 	if err != nil {
 		return
 	}
-	for _, p := range ss.attached {
-		p.SendRaw(raw)
+	plain := raw
+	if e.Line != nil && e.Line.Author != "" {
+		if plain, err = entryJSON(e, false); err != nil {
+			return
+		}
 	}
+	for _, p := range ss.attached {
+		if ss.s.peerHasFeature(p, FeatAuthor) {
+			p.SendRaw(raw)
+		} else {
+			p.SendRaw(plain)
+		}
+	}
+}
+
+// entryJSON marshals a scrollback entry; without ext the gtf-only "author" member is left out, so
+// a peer that did not negotiate the extension sees exactly the entries it always saw.
+func entryJSON(e scrollback.Entry, ext bool) ([]byte, error) {
+	if !ext && e.Line != nil && e.Line.Author != "" {
+		l := *e.Line
+		l.Author = ""
+		e.Line = &l
+	}
+	return json.Marshal(e)
+}
+
+// peerHasFeature reports whether p negotiated the gtf extension with the given feature.
+func (s *Squatter) peerHasFeature(p wire.Peer, f string) bool {
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	if pi := s.peers[p.ID()]; pi != nil {
+		return pi.gtf.has(f)
+	}
+	return false
+}
+
+// authorOf names who sent an echoed line: "local" for gtf's own terminal or a script, else the
+// device's name.
+func (s *Squatter) authorOf(origin string) string {
+	if origin == "" || origin == "tf" {
+		return "local"
+	}
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	for _, pi := range s.peers {
+		if pi.p.DeviceID() == origin {
+			return pi.p.DeviceName()
+		}
+	}
+	return origin
 }
 
 // Line records one line shown in the session's world: kind is proto.KindGame, KindEcho or
@@ -286,6 +333,7 @@ func (s *Squatter) Line(id, kind string, spans []proto.Span, prompt bool, origin
 	}
 	if kind == proto.KindEcho {
 		l.Origin = origin
+		l.Author = ss.s.authorOf(origin)
 	}
 	if kind == proto.KindGame && !prompt {
 		if t := strings.TrimSpace(plain(spans)); t != "" {
@@ -409,8 +457,9 @@ func (ss *session) attach(p wire.Peer, req wire.AttachReq) error {
 		p.Send(wire.BacklogMsg{V: proto.Version, T: wire.TBacklog, Session: ss.id, Entries: frame, Done: done})
 		frame, size = make([]json.RawMessage, 0, wire.BacklogChunk), 0
 	}
+	ext := ss.s.peerHasFeature(p, FeatAuthor)
 	for _, e := range rp.Entries {
-		raw, err := json.Marshal(e)
+		raw, err := entryJSON(e, ext)
 		if err != nil {
 			continue
 		}

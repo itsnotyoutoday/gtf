@@ -68,7 +68,12 @@ type Host interface {
 	SendMSDP(session, name string, value any) error
 	// Exec runs a tf command line and returns what it printed (ok=false when it reported an error).
 	Exec(line string) (ok bool, out []string)
-	Worlds() []proto.TFWorld
+	Worlds() []proto.TFWorld // with Rev set
+	// EditWorld applies a peer's world edit (gtf extension). Errors: *WorldConflict, ErrWorldMissing,
+	// ErrWorldExists, ErrWorldBusy, or any other error (reported as bad_request).
+	EditWorld(e WorldEdit) (WorldResult, error)
+	// ApplyNAWS tells the game of a session the terminal width cols (the rows stay gtf's own).
+	ApplyNAWS(session string, cols int)
 	Hook(event string, args ...string)
 	SetVars(vars map[string]string) // the read-only status variables
 	Notice(text string)             // a line for the local user
@@ -99,14 +104,23 @@ type Squatter struct {
 	announce map[string]bool // device ids already announced as paired
 	inherit  net.Listener    // an inherited listening socket for the next start (AdoptListener)
 
-	pmu   sync.Mutex // peers
+	pmu   sync.Mutex // peers, presence, the local terminal's state
 	peers map[uint64]*peerInfo
+	local localState
+
+	nmu     sync.Mutex // NAWS debounce
+	ntimers map[string]*time.Timer
+	nsent   map[string]int // the width last handed to the game, per session
+
+	wmu     sync.Mutex // world edit bookkeeping (naws.go / worlds_x.go)
+	wlimits map[string]bool
 }
 
 type peerInfo struct {
 	p      wire.Peer
 	role   string
 	joined time.Time
+	gtf    *gtfPeer // the gtf extension state; nil for a plain peer
 }
 
 // running is one listener generation.
@@ -137,7 +151,8 @@ func New(h Host, o Options) *Squatter {
 		v = "dev"
 	}
 	return &Squatter{host: h, log: l, version: v, state: StateOff, cfg: DefaultConfig(o.Home),
-		sessions: map[string]*session{}, peers: map[uint64]*peerInfo{}, announce: map[string]bool{}}
+		sessions: map[string]*session{}, peers: map[uint64]*peerInfo{}, announce: map[string]bool{},
+		ntimers: map[string]*time.Timer{}, nsent: map[string]int{}, local: localState{cols: 80, rows: 24}}
 }
 
 // Active reports whether the squatter is running (cheap; the taps check it first).
@@ -420,28 +435,75 @@ func (s *Squatter) Devices() ([]DeviceInfo, error) {
 	return out, nil
 }
 
-// Kick disconnects the clients whose device name or id (prefix) is name; it returns how many.
-func (s *Squatter) Kick(name string) int {
-	var victims []wire.Peer
+// MinIDPrefix is the shortest device id prefix accepted by Kick and Unpair.
+const MinIDPrefix = 4
+
+type devRef struct{ id, name string }
+
+func (d devRef) String() string { return fmt.Sprintf("%s (%s)", d.name, d.id[:min(8, len(d.id))]) }
+
+// pick resolves what a user typed to exactly one device: an exact device name (case-insensitive;
+// names may contain spaces), else an id prefix of MinIDPrefix or more characters. Several different
+// devices matching is an error that lists them.
+func pick(name string, devs []devRef) ([]devRef, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, nil
+	}
+	var hit []devRef
+	for _, d := range devs {
+		if strings.EqualFold(d.name, name) {
+			hit = append(hit, d)
+		}
+	}
+	if len(hit) == 0 && len(name) >= MinIDPrefix {
+		for _, d := range devs {
+			if strings.HasPrefix(d.id, strings.ToLower(name)) {
+				hit = append(hit, d)
+			}
+		}
+	}
+	if len(hit) > 1 {
+		parts := make([]string, len(hit))
+		for i, h := range hit {
+			parts[i] = h.String()
+		}
+		return nil, fmt.Errorf("%q is ambiguous, it matches %s: use the id", name, strings.Join(parts, ", "))
+	}
+	return hit, nil
+}
+
+// Kick disconnects the connections of the device whose name or id prefix is name; it returns how
+// many. Several devices matching is an error naming them.
+func (s *Squatter) Kick(name string) (int, error) {
+	var devs []devRef
+	seen := map[string]bool{}
+	var conns []wire.Peer
 	s.pmu.Lock()
 	for _, p := range s.peers {
-		if matches(p.p, name) {
-			victims = append(victims, p.p)
+		conns = append(conns, p.p)
+		if !seen[p.p.DeviceID()] {
+			seen[p.p.DeviceID()] = true
+			devs = append(devs, devRef{p.p.DeviceID(), p.p.DeviceName()})
 		}
 	}
 	s.pmu.Unlock()
-	for _, p := range victims {
-		p.Close("kicked from gtf")
+	hit, err := pick(name, devs)
+	if err != nil || len(hit) == 0 {
+		return 0, err
 	}
-	return len(victims)
+	n := 0
+	for _, p := range conns {
+		if p.DeviceID() == hit[0].id {
+			p.Close("kicked from gtf")
+			n++
+		}
+	}
+	return n, nil
 }
 
-func matches(p wire.Peer, name string) bool {
-	return name != "" && (strings.EqualFold(p.DeviceName(), name) || strings.HasPrefix(p.DeviceID(), strings.ToLower(name)))
-}
-
-// Unpair removes paired devices whose name or id (prefix) is name and disconnects them. It
-// returns the names removed.
+// Unpair removes the paired device whose name or id (prefix) is name and disconnects it. It returns
+// the names removed; several devices matching is an error naming them.
 func (s *Squatter) Unpair(name string) ([]string, error) {
 	as := s.store()
 	if as == nil {
@@ -451,17 +513,19 @@ func (s *Squatter) Unpair(name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var removed []string
-	for _, d := range ds {
-		if strings.EqualFold(d.Name, name) || (len(name) >= 4 && strings.HasPrefix(d.DeviceID, strings.ToLower(name))) {
-			if err := as.Revoke(d.DeviceID); err != nil {
-				return removed, err
-			}
-			removed = append(removed, d.Name)
-			s.Kick(d.DeviceID)
-		}
+	devs := make([]devRef, len(ds))
+	for i, d := range ds {
+		devs[i] = devRef{d.DeviceID, d.Name}
 	}
-	return removed, nil
+	hit, err := pick(name, devs)
+	if err != nil || len(hit) == 0 {
+		return nil, err
+	}
+	if err := as.Revoke(hit[0].id); err != nil {
+		return nil, err
+	}
+	_, _ = s.Kick(hit[0].id)
+	return []string{hit[0].name}, nil
 }
 
 // PairInfo is a fresh pairing code with what the client needs to verify the server.

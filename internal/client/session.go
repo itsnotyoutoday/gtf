@@ -182,7 +182,7 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 			s.state = gtfparser.SockConnected
 			c.squatConnected(s)
 			s.connectedAt = c.cfg.Now()
-			conn.Resize(c.ui.W, c.ui.H)
+			conn.Resize(c.nawsCols(s), c.ui.H)
 			c.setEnv(conn)
 			c.fireWorld(s, gtfparser.HookEvent{Name: "CONNECT", Args: []string{w.Name}, World: w.Name})
 			if !c.cfg.NoLogin && !o.NoLogin && w.Character != "" && w.Password != "" && loginOn(c.in.Var("login")) {
