@@ -134,7 +134,7 @@ func (p *parser) block() ([]tnode, string, error) {
 					return nil, "", fmt.Errorf("template: {%s} needs {/%s}", name, name)
 				}
 				out = append(out, tStyle{ap, body})
-			case name == "bar" || name == "gauge" || name == "spark" || name == "hr" || name == "br":
+			case name == "bar" || name == "gauge" || name == "spark" || name == "hr" || name == "br" || name == "radar" || name == "scope" || name == "ansi" || name == "canvas":
 				out = append(out, tWidget{name, splitArgs(rest)})
 			default:
 				ref, filt := splitFilters(tag)
@@ -373,7 +373,7 @@ func (c *Ctx) each(v any, body []tnode) {
 	}
 }
 
-var schemes = map[string]bool{"gmcp": true, "msdp": true, "var": true, "expr": true, "mssp": true}
+var schemes = map[string]bool{"canvas": true, "gmcp": true, "msdp": true, "var": true, "expr": true, "mssp": true}
 
 // lookup resolves a reference: scope refs (".", ".name", "#"), scheme refs,
 // numeric/quoted literals, or a bare identifier meaning var:ident.

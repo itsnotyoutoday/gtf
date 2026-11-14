@@ -64,6 +64,18 @@ func (c *Ctx) widget(w tWidget) {
 		c.gauge(cur, max, kw, pos)
 	case "spark":
 		c.spark(pos, kw)
+	case "radar":
+		c.radar(kw)
+	case "scope":
+		c.scopeWidget(pos, kw)
+	case "ansi":
+		if len(pos) > 0 {
+			c.ansi(pos[0])
+		}
+	case "canvas":
+		if len(pos) > 0 {
+			c.canvasWidget(pos[0])
+		}
 	}
 }
 
@@ -130,10 +142,17 @@ func (c *Ctx) bar(cur, max float64, kw map[string]string) {
 	part := eighths % 8
 	fa := Attr{FG: fg, BG: bg}
 	ea := Attr{FG: emptyCol, BG: bg}
+	ga, gb, grad := gradientColors(kw["gradient"])
 	used := 0
 	for i := 0; i < full; i++ {
+		if grad { // the ramp spans the whole bar, so a half-full bar shows the first half of it
+			fa.FG = lerpColor(ga, gb, float64(i)/float64(maxInt(width-1, 1)))
+		}
 		c.emitWith(fill, fa)
 		used++
+	}
+	if grad {
+		fa.FG = lerpColor(ga, gb, float64(used)/float64(maxInt(width-1, 1)))
 	}
 	if part > 0 && used < width && fill == "█" && kw["chars"] == "" {
 		c.emitWith(string(partials[part]), fa)

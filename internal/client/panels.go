@@ -18,16 +18,17 @@ import (
 //	var:name           a TF global variable
 //	expr:...           a TF expression evaluated by the interpreter
 type panelState struct {
-	layouts map[string]*layout.Layout
-	cur     string            // default layout name
-	world   map[string]string // per-world layout assignment
-	seen    map[string]string // last values of var:/expr: dependencies
-	c       *Client
-	files   map[string]string // layout name -> file it was loaded from
+	layouts  map[string]*layout.Layout
+	cur      string            // default layout name
+	world    map[string]string // per-world layout assignment
+	seen     map[string]string // last values of var:/expr: dependencies
+	c        *Client
+	files    map[string]string         // layout name -> file it was loaded from
+	canvases map[string]*layout.Canvas // /canvas surfaces, shown by {canvas NAME}
 }
 
 func newPanelState() *panelState {
-	return &panelState{layouts: map[string]*layout.Layout{}, world: map[string]string{}, seen: map[string]string{}}
+	return &panelState{layouts: map[string]*layout.Layout{}, world: map[string]string{}, seen: map[string]string{}, canvases: map[string]*layout.Canvas{}}
 }
 
 // layoutNamed returns (creating if asked) a layout.
@@ -77,6 +78,11 @@ func (p *panelState) Resolve(ref string) (any, bool) {
 			return nil, false
 		}
 		return c.fg.store.Resolve(ref)
+	case "canvas":
+		if cv, ok := p.canvases[ref[i+1:]]; ok {
+			return cv, true
+		}
+		return nil, false
 	case "var":
 		name := ref[i+1:]
 		if v, ok := p.varValue(name); ok {
