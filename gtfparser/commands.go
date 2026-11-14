@@ -132,7 +132,7 @@ func cmdUnset(in *Interp, args string) Value {
 }
 
 func cmdTest(in *Interp, args string) Value {
-	v, err := in.EvalExpr(args)
+	v, err := in.evalExpr(args)
 	if err != nil {
 		in.warn("/test: %v", err)
 		return Int(0)
@@ -143,7 +143,7 @@ func cmdTest(in *Interp, args string) Value {
 func cmdReturn(in *Interp, args string) Value {
 	in.retv = Str("")
 	if strings.TrimSpace(args) != "" {
-		v, err := in.EvalExpr(args)
+		v, err := in.evalExpr(args)
 		if err != nil {
 			in.warn("/return: %v", err)
 		}

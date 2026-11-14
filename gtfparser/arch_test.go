@@ -131,7 +131,7 @@ type lockedHost struct {
 	out *[]string
 }
 
-func (h *lockedHost) Echo(s string) { h.mu.Lock(); *h.out = append(*h.out, s); h.mu.Unlock() }
+func (h *lockedHost) Echo(s string)         { h.mu.Lock(); *h.out = append(*h.out, s); h.mu.Unlock() }
 func (h *lockedHost) Send(w, s string) bool { return true }
 
 func TestTwoInterpsDoNotInterfere(t *testing.T) {

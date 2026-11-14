@@ -19,18 +19,40 @@ type exprParser struct {
 	pos int
 }
 
+type exprEntry struct {
+	f   eval
+	err error
+}
+
 // EvalExpr evaluates a TF expression.
 func (in *Interp) EvalExpr(src string) (Value, error) {
-	p := &exprParser{in: in, s: src}
-	f, err := p.parseComma()
-	if err != nil {
-		return Int(0), err
+	defer in.enter()()
+	return in.evalExpr(src)
+}
+
+// evalExpr compiles src once (the compiled closure tree is cached per
+// interpreter, keyed by source text) and runs it.
+func (in *Interp) evalExpr(src string) (Value, error) {
+	e := in.exprCache[src]
+	if e == nil {
+		p := &exprParser{in: in, s: src}
+		f, err := p.parseComma()
+		if err == nil {
+			p.ws()
+			if p.pos < len(p.s) {
+				err = fmt.Errorf("expression: unexpected %q", p.s[p.pos:])
+			}
+		}
+		e = &exprEntry{f: f, err: err}
+		if len(in.exprCache) >= cacheMax {
+			in.exprCache = map[string]*exprEntry{}
+		}
+		in.exprCache[src] = e
 	}
-	p.ws()
-	if p.pos < len(p.s) {
-		return Int(0), fmt.Errorf("expression: unexpected %q", p.s[p.pos:])
+	if e.err != nil {
+		return Int(0), e.err
 	}
-	return f()
+	return e.f()
 }
 
 func (p *exprParser) ws() {

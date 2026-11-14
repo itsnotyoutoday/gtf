@@ -116,7 +116,7 @@ func (in *Interp) parseDef(args string) (*Macro, error) {
 			case 'n':
 				m.Shots = int(Str(val).Int())
 			case 'p':
-				if v, err := in.EvalExpr(val); err == nil {
+				if v, err := in.evalExpr(val); err == nil {
 					m.Priority = int(v.Int())
 				}
 			case 'c':

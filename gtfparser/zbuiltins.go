@@ -220,7 +220,7 @@ func (in *Interp) listMatch(spec, m *Macro, style string) bool {
 				return false
 			}
 		case 'p':
-			if x, err := in.EvalExpr(v); err != nil || m.Priority != int(x.Int()) {
+			if x, err := in.evalExpr(v); err != nil || m.Priority != int(x.Int()) {
 				return false
 			}
 		case 'w':

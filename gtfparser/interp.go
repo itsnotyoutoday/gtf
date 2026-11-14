@@ -54,6 +54,9 @@ type Interp struct {
 	nextFd      int
 	tfin        []string
 	pendingArgs []string
+	templates   map[string]*template
+	stmtCache   map[string][]string
+	exprCache   map[string]*exprEntry
 	procs       []*Proc
 	nextPID     int
 	cmds        map[string]cmdFunc // this interpreter's builtin commands (see registry.go)
@@ -95,13 +98,16 @@ func WithoutEnvironment() Option { return func(in *Interp) { in.noEnv = true } }
 
 func New(h Host, opts ...Option) *Interp {
 	in := &Interp{
-		limits:   DefaultLimits(),
-		exported: map[string]bool{},
-		Host:     h,
-		globals:  map[string]Value{},
-		macros:   map[string]*Macro{},
-		loaded:   map[string]bool{},
-		lastRet:  Int(1),
+		limits:    DefaultLimits(),
+		templates: map[string]*template{},
+		stmtCache: map[string][]string{},
+		exprCache: map[string]*exprEntry{},
+		exported:  map[string]bool{},
+		Host:      h,
+		globals:   map[string]Value{},
+		macros:    map[string]*Macro{},
+		loaded:    map[string]bool{},
+		lastRet:   Int(1),
 	}
 	in.fr = &frame{vars: map[string]Value{}, name: ""}
 	for _, o := range opts {
@@ -315,27 +321,91 @@ func (in *Interp) selValue(name string) string {
 
 // ---------------------------------------------------------------- expansion
 
-// expand performs TF macro-body substitution on s.
+// expand performs TF macro-body substitution on s. The text is compiled once
+// into a template of literal and substitution segments (cached per
+// interpreter), so a hot macro body is not re-scanned on every run.
 func (in *Interp) expand(s string) string {
-	if in.noExp {
+	if in.noExp || strings.IndexAny(s, "\\%$") < 0 {
 		return s
 	}
+	t := in.templates[s]
+	if t == nil {
+		t = compileTemplate(s)
+		if len(in.templates) >= cacheMax {
+			in.templates = map[string]*template{}
+		}
+		in.templates[s] = t
+	}
+	if len(t.segs) == 1 && t.segs[0].kind == segLit {
+		return t.segs[0].lit
+	}
 	var b strings.Builder
+	b.Grow(len(s))
+	raw := false
+	if len(t.segs) > 0 && t.hasBack {
+		if v, ok := in.globals["backslash"]; ok && v.String() == "off" {
+			raw = true
+		}
+	}
+	for i := range t.segs {
+		sg := &t.segs[i]
+		switch sg.kind {
+		case segLit:
+			b.WriteString(sg.lit)
+		case segBack:
+			if raw {
+				b.WriteString(sg.alt)
+			} else {
+				b.WriteString(sg.lit)
+			}
+		default:
+			b.WriteString(in.runSub(sg.sub, sg.lit))
+		}
+	}
+	return b.String()
+}
+
+const (
+	segLit byte = iota
+	segBack
+	segSub
+)
+
+type seg struct {
+	kind byte
+	sub  byte
+	lit  string // literal text, or the substitution argument
+	alt  string // segBack: the text when %backslash is off
+}
+
+type template struct {
+	segs    []seg
+	hasBack bool
+}
+
+const cacheMax = 8192
+
+func compileTemplate(s string) *template {
+	t := &template{}
+	var lit strings.Builder
+	flush := func() {
+		if lit.Len() > 0 {
+			t.segs = append(t.segs, seg{kind: segLit, lit: lit.String()})
+			lit.Reset()
+		}
+	}
 	for i := 0; i < len(s); {
 		c := s[i]
 		switch c {
 		case '\\':
 			if i+1 >= len(s) {
-				b.WriteByte('\\')
-				i++
-				continue
-			}
-			if v, ok := in.globals["backslash"]; ok && v.String() == "off" {
-				b.WriteByte(c)
+				lit.WriteByte('\\')
 				i++
 				continue
 			}
 			n := s[i+1]
+			out := string(n)
+			adv := 2
 			if n >= '0' && n <= '9' {
 				j := i + 1
 				base := 10
@@ -350,37 +420,46 @@ func (in *Interp) expand(s string) string {
 				}
 				if j > st {
 					v, _ := strconv.ParseInt(s[st:j], base, 32)
-					b.WriteRune(rune(v))
-					i = j
-					continue
+					out, adv = string(rune(v)), j-i
 				}
 			}
-			b.WriteByte(n)
-			i += 2
+			flush()
+			t.segs = append(t.segs, seg{kind: segBack, lit: out, alt: "\\"})
+			t.hasBack = true
+			// when backslash processing is off only the backslash itself is
+			// emitted and scanning resumes right after it
+			if adv != 1 {
+				i += adv
+				// the character(s) after the backslash must still be emitted
+				// literally in raw mode
+				t.segs[len(t.segs)-1].alt = "\\" + s[i-adv+1:i]
+			}
 		case '%', '$':
 			j := i
 			for j < len(s) && s[j] == c {
 				j++
 			}
 			if j-i >= 2 { // compression: n signs become n-1
-				b.WriteString(strings.Repeat(string(c), j-i-1))
+				lit.WriteString(strings.Repeat(string(c), j-i-1))
 				i = j
 				continue
 			}
-			n, run := in.scanSub(s[i:])
+			n, kind, arg := parseSub(s[i:])
 			if n == 0 {
-				b.WriteByte(c)
+				lit.WriteByte(c)
 				i++
 				continue
 			}
-			b.WriteString(run())
+			flush()
+			t.segs = append(t.segs, seg{kind: segSub, sub: kind, lit: arg})
 			i += n
 		default:
-			b.WriteByte(c)
+			lit.WriteByte(c)
 			i++
 		}
 	}
-	return b.String()
+	flush()
+	return t
 }
 
 func digitIn(c byte, base int) bool {
@@ -399,8 +478,48 @@ func (in *Interp) expandOne(s string) (int, func() string) { return in.scanSub(s
 // scanSub recognises one substitution at the start of s and returns how many
 // bytes it spans and a function producing its text. n == 0: not a substitution.
 func (in *Interp) scanSub(s string) (int, func() string) {
-	if len(s) < 2 {
+	n, kind, arg := parseSub(s)
+	if n == 0 {
 		return 0, nil
+	}
+	return n, func() string { return in.runSub(kind, arg) }
+}
+
+// substitution kinds
+const (
+	subBrace byte = iota // %{selector[-default]}
+	subBare              // %name %1 %* ...
+	subExpr              // $[expr]
+	subCmd               // $(cmd)
+	subMacro             // ${name}
+)
+
+func (in *Interp) runSub(kind byte, arg string) string {
+	switch kind {
+	case subBrace:
+		return in.selector(arg)
+	case subBare:
+		return in.selValue(arg)
+	case subExpr:
+		v, err := in.evalExpr(arg)
+		if err != nil {
+			in.warn("%v", err)
+		}
+		return v.String()
+	case subCmd:
+		return in.captureCmd(arg)
+	}
+	if m, ok := in.macros[arg]; ok {
+		return m.Body
+	}
+	return ""
+}
+
+// parseSub recognises one substitution at the start of s: its length (0 = not
+// a substitution), kind and argument. It does not depend on interpreter state.
+func parseSub(s string) (int, byte, string) {
+	if len(s) < 2 {
+		return 0, 0, ""
 	}
 	switch s[0] {
 	case '%':
@@ -408,10 +527,9 @@ func (in *Interp) scanSub(s string) (int, func() string) {
 		if c == '{' {
 			end := matchClose(s, 1, '{', '}')
 			if end < 0 {
-				return 0, nil
+				return 0, 0, ""
 			}
-			sel := s[2:end]
-			return end + 1, func() string { return in.selector(sel) }
+			return end + 1, subBrace, s[2:end]
 		}
 		j := 1
 		switch {
@@ -434,47 +552,26 @@ func (in *Interp) scanSub(s string) (int, func() string) {
 				j++
 			}
 		default:
-			return 0, nil
+			return 0, 0, ""
 		}
-		sel := s[1:j]
-		return j, func() string { return in.selValue(sel) }
+		return j, subBare, s[1:j]
 	case '$':
 		switch s[1] {
 		case '[':
-			end := matchClose(s, 1, '[', ']')
-			if end < 0 {
-				return 0, nil
-			}
-			src := s[2:end]
-			return end + 1, func() string {
-				v, err := in.EvalExpr(src)
-				if err != nil {
-					in.warn("%v", err)
-				}
-				return v.String()
+			if end := matchClose(s, 1, '[', ']'); end >= 0 {
+				return end + 1, subExpr, s[2:end]
 			}
 		case '(':
-			end := matchCloseCmd(s, 1)
-			if end < 0 {
-				return 0, nil
+			if end := matchCloseCmd(s, 1); end >= 0 {
+				return end + 1, subCmd, s[2:end]
 			}
-			cmd := s[2:end]
-			return end + 1, func() string { return in.captureCmd(cmd) }
 		case '{':
-			end := matchClose(s, 1, '{', '}')
-			if end < 0 {
-				return 0, nil
-			}
-			name := s[2:end]
-			return end + 1, func() string {
-				if m, ok := in.macros[name]; ok {
-					return m.Body
-				}
-				return ""
+			if end := matchClose(s, 1, '{', '}'); end >= 0 {
+				return end + 1, subMacro, s[2:end]
 			}
 		}
 	}
-	return 0, nil
+	return 0, 0, ""
 }
 
 // matchCloseCmd finds the ')' ending $( ... ); a literal ')' is written "\)".
@@ -584,7 +681,21 @@ func (in *Interp) ExecFull(text string) Value {
 }
 
 func (in *Interp) execText(text string) Value {
-	return in.execStmts(splitList(text))
+	return in.execStmts(in.split(text))
+}
+
+// split is splitList with a per-interpreter cache; the result must not be
+// modified (execStmts copies before it does).
+func (in *Interp) split(text string) []string {
+	if st, ok := in.stmtCache[text]; ok {
+		return st
+	}
+	st := splitList(text)
+	if len(in.stmtCache) >= cacheMax {
+		in.stmtCache = map[string][]string{}
+	}
+	in.stmtCache[text] = st
+	return st
 }
 
 func firstWord(s string) (w, rest string) {
@@ -598,6 +709,7 @@ func firstWord(s string) (w, rest string) {
 
 func (in *Interp) execStmts(stmts []string) Value {
 	res := Int(1)
+	copied := false
 	for i := 0; i < len(stmts); i++ {
 		if in.ctl != ctlNone || !in.tick() {
 			break
@@ -606,7 +718,13 @@ func (in *Interp) execStmts(stmts []string) Value {
 		if st == "" {
 			continue
 		}
-		stmts[i] = st // marker (if any) consumed
+		if stmts[i] != st {
+			if !copied {
+				stmts = append([]string(nil), stmts...)
+				copied = true
+			}
+			stmts[i] = st // marker (if any) consumed
+		}
 		var pipeHost *captureHost
 		if i+1 < len(stmts) && strings.HasPrefix(stmts[i+1], "\x00") {
 			pipeHost = &captureHost{Host: in.Host}
@@ -640,7 +758,7 @@ func (in *Interp) execStmts(stmts []string) Value {
 }
 
 func (in *Interp) condition(expr string) bool {
-	v, err := in.EvalExpr(expr)
+	v, err := in.evalExpr(expr)
 	if err != nil {
 		in.warn("%v", err)
 		return false

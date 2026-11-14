@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/pprof"
 
 	"github.com/itsnotyoutoday/gtf/gtfparser"
 )
@@ -20,7 +21,13 @@ func main() {
 	file := flag.String("f", "", "script file to load")
 	lib := flag.String("L", "", "library directory")
 	nolib := flag.Bool("n", false, "do not load stdlib.tf")
+	prof := flag.String("cpuprofile", "", "write a CPU profile to this file")
 	flag.Parse()
+	if *prof != "" {
+		f, _ := os.Create(*prof)
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 	h := &stdHost{bufio.NewWriter(os.Stdout)}
 	defer h.w.Flush()
 	in := gtfparser.New(h)
