@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Host connects the interpreter to a front end (a terminal, squatterd, ...).
@@ -60,6 +61,10 @@ type Interp struct {
 	nextFd      int
 	tfin        []string
 	pendingArgs []string
+	procs       []*Proc
+	nextPID     int
+	// Now replaces the clock (tests); nil means time.Now.
+	Now func() time.Time
 	// LibDirs are searched by /load and /require for relative names.
 	LibDirs []string
 	// Warn receives interpreter diagnostics (TF prints these as "% ...").

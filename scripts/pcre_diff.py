@@ -39,17 +39,19 @@ def tf_string(s):
 
 
 def unescape(s):
-    out, i = [], 0
+    out, i = bytearray(), 0
     m = {'n': '\n', 't': '\t', 'r': '\r', 'f': '\f', 'v': '\v', 'e': '\x1b', '\\': '\\'}
     while i < len(s):
         if s[i] != '\\':
-            out.append(s[i]); i += 1; continue
+            out += s[i].encode('utf-8'); i += 1; continue
         c = s[i + 1]
         if c == 'x':
-            out.append(chr(int(s[i + 2:i + 4], 16))); i += 4
+            out.append(int(s[i + 2:i + 4], 16)); i += 4
+        elif c == 'u':
+            out += chr(int(s[i + 2:i + 6], 16)).encode('utf-8'); i += 6
         else:
-            out.append(m[c]); i += 2
-    return ''.join(out)
+            out += m[c].encode(); i += 2
+    return out.decode('utf-8')
 
 
 def esc(s):

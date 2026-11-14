@@ -337,7 +337,7 @@ func init() {
 	for _, n := range []string{"beep", "localecho", "listsockets", "listworlds", "liststreams", "status_add", "status_clear",
 		"status_edit", "status_rm", "dokey", "histsize", "recordline", "recall", "log", "limit", "unlimit",
 		"relimit", "save", "saveworld", "unworld", "renameworld", "suspend", "restrict", "watchdog", "watchname", "input",
-		"core", "fg", "connect", "dc", "kill", "ps", "repeat", "quote", "sh", "edit", "reboot", "undefn", "help", "lcd"} {
+		"core", "fg", "connect", "dc", "sh", "edit", "reboot", "undefn", "help", "lcd"} {
 		builtinCmds[n] = noop
 	}
 	builtinCmds["bind"] = cmdBind
