@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -300,6 +301,12 @@ func TestPingTimeoutDropsOnlyThatClient(t *testing.T) {
 }
 
 func TestSlowClientIsDropped(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		// The test floods a peer that never reads and expects the server's queue to overflow. How much loopback
+		// data the kernel absorbs before a write backs up differs between Linux and macOS, so the outcome
+		// depends on the OS, not on this code. It runs on Linux in CI.
+		t.Skip("depends on the kernel's loopback socket buffering; covered on Linux")
+	}
 	r := newRig(t, func(c *ServerConfig) { c.QueueLimit = 5 })
 	good, err := r.dial(ClientOptions{})
 	if err != nil {
