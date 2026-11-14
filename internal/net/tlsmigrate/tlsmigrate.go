@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Rick Bird
 
-
 // Package tlsmigrate lets a live TLS client session be moved to another process
 // (squatterd reload) without a new handshake. It wraps a vendored, lightly
 // patched copy of the Go standard library's crypto/tls (subpackage tls; see
