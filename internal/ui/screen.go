@@ -117,3 +117,12 @@ func (s *Screen) rewrap(width int, cfg WrapConfig) {
 		s.vis = s.SB.Len()
 	}
 }
+
+// Refilter re-applies the Keep filter (a /limit changed) and returns the
+// number of visible physical lines.
+func (s *Screen) Refilter() int {
+	s.SB.Relayout()
+	s.vis = s.SB.Len()
+	s.Paused = false
+	return s.SB.Len()
+}

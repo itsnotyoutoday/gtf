@@ -1,0 +1,463 @@
+// Package client wires the interpreter (the gtfparser engine), the network
+// stack and the terminal UI together. Everything runs on the engine Runner's
+// goroutine: key bytes, socket events, timers and resizes are posted to it,
+// so the UI and the sessions need no locking.
+//
+// The engine owns tf's state (input buffer, key bindings, status fields,
+// history, world database, /limit, /log, ...). The client implements the
+// engine's optional host interfaces (WorldHost, SocketHost, MoreHost,
+// LimitHost, ...), feeds it (RecordWorldLine, SetMoreState, KeyPressed) and
+// draws from it (Input(), StatusRows).
+package client
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/itsnotyoutoday/gtf/internal/layout"
+	"github.com/itsnotyoutoday/gtf/internal/ui"
+	"github.com/itsnotyoutoday/gtfparser"
+	"github.com/itsnotyoutoday/gtfparser/tflib"
+)
+
+// Config describes how to run the client.
+type Config struct {
+	Term     ui.Terminal
+	Keys     io.Reader // raw key bytes (nil: no keyboard)
+	Resized  <-chan struct{}
+	Suspend  func() // SIGTSTP handler (nil: /suspend warns)
+	LibDir   string // directory with the tf library (empty: the embedded copy)
+	HomeDir  string // default os.UserHomeDir
+	NoRC     bool   // -f: do not load the personal config
+	NoLogin  bool   // -l
+	NoAuto   bool   // -n: no autoconnect
+	Quiet    bool   // -q
+	Commands []string
+	World    string // world (or host port) to connect at startup
+	Dialer   Dialer // nil: real network
+	Now      func() time.Time
+	// Interactive says whether a human is at the terminal (enables visual).
+	Interactive bool
+}
+
+// Client is the application.
+type Client struct {
+	cfg  Config
+	in   *gtfparser.Interp
+	run  *gtfparser.Runner
+	ui   *ui.UI
+	base *ui.Screen
+
+	sessions map[string]*Session
+	order    []*Session // creation order
+	fg       *Session
+
+	panels *panelState
+	help   *helpData
+
+	keyTimer      *time.Timer
+	renderMu      sync.Mutex
+	renderPending bool
+	started       time.Time
+	done          chan struct{}
+	doneOnce      sync.Once
+	libDir        string
+	closed        bool
+}
+
+// New builds a client. The interpreter is configured and its library loaded
+// (stdlib.tf and the personal config) before New returns.
+func New(cfg Config) (*Client, error) {
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	if cfg.HomeDir == "" {
+		cfg.HomeDir, _ = os.UserHomeDir()
+	}
+	if cfg.Dialer == nil {
+		cfg.Dialer = NetDialer{}
+	}
+	c := &Client{cfg: cfg, sessions: map[string]*Session{}, done: make(chan struct{}), started: cfg.Now()}
+	c.ui = ui.New(cfg.Term)
+	c.base = ui.NewScreen("", 20000)
+	c.ui.SetScreen(c.base)
+	c.panels = newPanelState()
+	c.help = &helpData{}
+
+	in := gtfparser.New(c, gtfparser.WithoutEnvironment())
+	c.in = in
+	in.Warn = func(s string) { c.echoLine("% " + s) }
+	in.Input().OnChange = c.scheduleRender
+	c.ui.Ed = in.Input()
+	c.install()
+	if err := c.loadLibrary(); err != nil {
+		c.echoLine("% " + err.Error())
+	}
+	c.run = gtfparser.NewRunner(in)
+	c.scheduleRender()
+	return c, nil
+}
+
+// Interp returns the interpreter (for tests; use Do from other goroutines).
+func (c *Client) Interp() *gtfparser.Interp { return c.in }
+
+// UI returns the user interface (tests).
+func (c *Client) UI() *ui.UI { return c.ui }
+
+// Do runs f on the client's goroutine and waits.
+func (c *Client) Do(f func(*gtfparser.Interp)) { c.run.Do(f) }
+
+// Post queues f on the client's goroutine.
+func (c *Client) Post(f func(*gtfparser.Interp)) { c.run.Post(f) }
+
+// Done is closed when the client has quit.
+func (c *Client) Done() <-chan struct{} { return c.done }
+
+// Close stops everything.
+func (c *Client) Close() {
+	c.doneOnce.Do(func() { close(c.done) })
+	if !c.closed {
+		c.closed = true
+		for _, s := range c.order {
+			s.close()
+		}
+		c.run.Close()
+	}
+}
+
+func (c *Client) libraryDir() (string, error) {
+	if c.cfg.LibDir != "" {
+		return c.cfg.LibDir, nil
+	}
+	return tflib.CacheDir()
+}
+
+func (c *Client) loadLibrary() error {
+	dir, err := c.libraryDir()
+	if err != nil {
+		return err
+	}
+	c.libDir = dir
+	c.in.LibDirs = append([]string{dir}, c.in.LibDirs...)
+	c.in.SetVar("TFLIBDIR", dir)
+	c.in.SetVar("TFHELP", filepath.Join(dir, "tf-help"))
+	c.in.SetVar("HOME", c.cfg.HomeDir)
+	c.in.SetVar("TERM", envOr("TERM", "xterm"))
+	c.in.Exec(fmt.Sprintf("/set wrapsize=%d", c.ui.W-1))
+	if c.cfg.Interactive {
+		c.in.Exec("/set visual=on")
+	}
+	c.banner()
+	std := filepath.Join(dir, "stdlib.tf")
+	if _, err := os.Stat(std); err == nil {
+		c.echoLine("% Loading commands from " + std + ".")
+		if err := c.in.LoadFile(std); err != nil {
+			return err
+		}
+	}
+	// gtf additions (layout.tf etc.) sit on top of the real library
+	c.loadGtfLib()
+	if !c.cfg.NoRC {
+		c.loadRC()
+	}
+	return nil
+}
+
+func (c *Client) banner() {
+	if c.cfg.Quiet {
+		return
+	}
+	for _, l := range []string{
+		"TinyFugue version 5.0 beta 8 (gtf)",
+		"Copyright (C) 1993 - 2007 Ken Keys (kenkeys@users.sourceforge.net)",
+		"Type `/help copyright' for more information.",
+		"+gmcp +msdp +mssp +mccp +tls +layouts",
+		"Type `/help', `/help topics', or `/help intro' for help.",
+		"Type `/quit' to quit tf.",
+		"",
+	} {
+		c.echoLine(l)
+	}
+}
+
+func (c *Client) loadRC() {
+	for _, p := range []string{"~/.tfrc", "~/tfrc", "./.tfrc", "./tfrc"} {
+		path := p
+		if strings.HasPrefix(p, "~/") {
+			path = filepath.Join(c.cfg.HomeDir, p[2:])
+		}
+		if _, err := os.Stat(path); err == nil {
+			c.echoLine("% Loading commands from " + path + ".")
+			if err := c.in.LoadFile(path); err != nil {
+				c.echoLine("% " + err.Error())
+			}
+			return
+		}
+	}
+}
+
+// Start begins event processing (keys, resizes, startup connection and
+// commands). It returns immediately; wait on Done.
+func (c *Client) Start() {
+	c.Post(func(in *gtfparser.Interp) {
+		for _, cmd := range c.cfg.Commands {
+			in.Exec(cmd)
+		}
+		if w := c.cfg.World; w != "" && !c.cfg.NoAuto {
+			in.Exec("/connect " + w)
+		}
+		c.afterTask()
+	})
+	if c.cfg.Keys != nil {
+		go c.readKeys()
+	}
+	if c.cfg.Resized != nil {
+		go func() {
+			for range c.cfg.Resized {
+				c.Post(func(*gtfparser.Interp) { c.onResize(); c.afterTask() })
+			}
+		}()
+	}
+	go c.clockLoop()
+}
+
+func (c *Client) clockLoop() {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	last := ""
+	for {
+		select {
+		case <-c.done:
+			return
+		case now := <-t.C:
+			cur := now.Format("15:04")
+			if cur != last {
+				last = cur
+				c.Post(func(*gtfparser.Interp) { c.scheduleRender() })
+			}
+		}
+	}
+}
+
+func (c *Client) readKeys() {
+	buf := make([]byte, 4096)
+	for {
+		n, err := c.cfg.Keys.Read(buf)
+		if n > 0 {
+			b := append([]byte(nil), buf[:n]...)
+			c.Post(func(in *gtfparser.Interp) { c.onKeys(string(b)); c.afterTask() })
+		}
+		if err != nil {
+			c.Post(func(in *gtfparser.Interp) { c.quit() })
+			return
+		}
+	}
+}
+
+func (c *Client) onResize() {
+	oldW := c.ui.W
+	c.ui.Resize()
+	// tf (tty.c): wrapsize follows the width
+	ws := atoi(c.in.Var("wrapsize"), oldW-1)
+	nw := c.ui.W - (oldW - ws)
+	if nw < 1 {
+		nw = max(c.ui.W-1, 1)
+	}
+	c.in.Exec(fmt.Sprintf("/set wrapsize=%d", nw))
+	for _, s := range c.order {
+		s.resize(c.ui.W, c.ui.H)
+	}
+	c.in.FireHook("RESIZE", fmt.Sprintf("%d %d", c.ui.W, c.ui.H))
+}
+
+func (c *Client) quit() {
+	c.doneOnce.Do(func() { close(c.done) })
+}
+
+// afterTask is called at the end of every unit of work on the client
+// goroutine: it notices quit, and schedules a repaint.
+func (c *Client) afterTask() {
+	if c.in.Quit {
+		c.quit()
+		return
+	}
+	c.checkLayoutDeps()
+	c.scheduleRender()
+}
+
+// scheduleRender coalesces repaints: the screen is redrawn a few ms after
+// the last change so bursts of output cost one repaint.
+func (c *Client) scheduleRender() {
+	if c.run == nil {
+		return
+	}
+	c.renderMu.Lock()
+	if c.renderPending {
+		c.renderMu.Unlock()
+		return
+	}
+	c.renderPending = true
+	c.renderMu.Unlock()
+	time.AfterFunc(6*time.Millisecond, func() {
+		c.run.Post(func(*gtfparser.Interp) { c.Render() })
+	})
+}
+
+// Render repaints now (on the client goroutine).
+func (c *Client) Render() {
+	c.renderMu.Lock()
+	c.renderPending = false
+	c.renderMu.Unlock()
+	c.syncUI()
+	c.ui.Render()
+}
+
+// Flush performs any pending repaint synchronously (for tests).
+func (c *Client) Flush() { c.Do(func(*gtfparser.Interp) { c.checkLayoutDeps(); c.Render() }) }
+
+// syncUI copies interpreter state that affects the display into the UI.
+func (c *Client) syncUI() {
+	in := c.in
+	u := c.ui
+	ts := in.TermSettings()
+	u.SetVisual(ts.Visual)
+	if ts.Isize >= 1 {
+		u.ISize = min(ts.Isize, max(u.H-3, 1))
+	}
+	u.StatH = min(max(ts.StatusHeight, 0), 1)
+	u.Wrap.Wrap = ts.Wrap
+	u.Wrap.Size = ts.WrapSize
+	u.Wrap.Space = ts.WrapSpace
+	u.Wrap.Punct = ts.WrapPunct
+	for _, s := range c.screens() {
+		s.More = ts.More
+		if !ts.More && s.Paused {
+			s.Flush(u.Winlines())
+		}
+	}
+	if c.fg != nil {
+		u.Hidden = !in.LocalEcho(c.fg.World.Name)
+		u.Prompt = c.fg.prompt
+	} else {
+		u.Hidden = false
+		u.Prompt = ""
+	}
+	u.SetStatus(c.statusCells(u.W))
+	u.Layout = c.panels.current(c)
+	u.Resolver = c.panels
+	c.feedMoreState()
+}
+
+func (c *Client) screens() []*ui.Screen {
+	out := []*ui.Screen{c.base}
+	for _, s := range c.order {
+		out = append(out, s.scr)
+	}
+	return out
+}
+
+// feedMoreState tells the engine each world's paging state (nactive(), the
+// @more status field and moresize() read it).
+func (c *Client) feedMoreState() {
+	for _, s := range c.order {
+		st := gtfparser.MoreState{Paused: s.scr.Paused, Back: s.scr.Held(), New: s.scr.Held(), Above: max(s.scr.Vis()-c.ui.Winlines(), 0)}
+		st.BackFiltered, st.NewFiltered = st.Back, st.New
+		st.Active = s != c.fg && s.scr.Unseen > 0
+		c.in.SetMoreState(s.World.Name, st)
+	}
+}
+
+func atoi(s string, def int) int {
+	n := 0
+	neg := false
+	if s == "" {
+		return def
+	}
+	for i, ch := range s {
+		if i == 0 && ch == '-' {
+			neg = true
+			continue
+		}
+		if ch < '0' || ch > '9' {
+			return def
+		}
+		n = n*10 + int(ch-'0')
+	}
+	if neg {
+		n = -n
+	}
+	return n
+}
+
+// statusCells renders the engine's status rows (attributes apply to field
+// values only, as in tf).
+func (c *Client) statusCells(w int) [][]layout.Cell {
+	rows := c.in.StatusRows(w)
+	out := make([][]layout.Cell, len(rows))
+	for i, r := range rows {
+		base := c.parseTfAttrs(r.Attrs).onto(layout.Attr{})
+		cells := ui.PlainCells(r.Text, base)
+		// field attributes apply to the value runes only
+		col := 0
+		for _, sp := range r.Spans {
+			if sp.Attrs != "" && sp.ValueLen > 0 {
+				a := c.parseTfAttrs(sp.Attrs)
+				for k := 0; k < sp.ValueLen && sp.Col+sp.ValueStart+k < len(cells); k++ {
+					idx := sp.Col + sp.ValueStart + k
+					cells[idx].A = a.onto(cells[idx].A)
+				}
+			}
+			col = sp.Col + sp.Width
+		}
+		_ = col
+		out[i] = cells
+	}
+	return out
+}
+
+// screenFor is where output for the interpreter's current context goes.
+func (c *Client) screenFor() *ui.Screen {
+	if cw := c.in.CurrentWorld(); cw != "" {
+		if s := c.sessions[cw]; s != nil {
+			return s.scr
+		}
+	}
+	if c.fg != nil {
+		return c.fg.scr
+	}
+	return c.base
+}
+
+func (c *Client) echoLine(text string) {
+	c.echoTo(c.screenFor(), "", text)
+}
+
+func (c *Client) echoTo(scr *ui.Screen, attrs, text string) {
+	for _, ln := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		cells := c.attrsCells(ln, attrs)
+		c.ui.AddLine(scr, cells)
+		if scr == c.base || scr == c.fgScreen() {
+			c.in.RecordLocalLine(ln)
+		}
+	}
+	c.scheduleRender()
+}
+
+func (c *Client) fgScreen() *ui.Screen {
+	if c.fg != nil {
+		return c.fg.scr
+	}
+	return c.base
+}
+
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}

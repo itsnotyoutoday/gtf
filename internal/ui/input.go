@@ -9,13 +9,11 @@ import (
 // cursor ("point"), an input history, and the editing primitives the kb*()
 // functions and /dokey need.
 type Input struct {
-	buf    []rune
-	pt     int
-	hist   []string
-	hpos   int // index into hist while recalling; len(hist) = the live line
-	draft  string
-	Hidden bool // password mode: the typed text is not echoed
-	Prompt string
+	buf   []rune
+	pt    int
+	hist  []string
+	hpos  int // index into hist while recalling; len(hist) = the live line
+	draft string
 	// WordPunct are the characters that are word characters besides
 	// alphanumerics (tf's wordpunct variable).
 	WordPunct string
@@ -27,6 +25,12 @@ type Input struct {
 
 // NewInput makes an empty editor.
 func NewInput() *Input { return &Input{WordPunct: "_"} }
+
+// Text is the current line (Editor).
+func (in *Input) Text() string { return string(in.buf) }
+
+// Cursor is the cursor's byte offset (Editor).
+func (in *Input) Cursor() int { return len(string(in.buf[:in.pt])) }
 
 // String is the current line.
 func (in *Input) String() string { return string(in.buf) }
@@ -198,9 +202,7 @@ func (in *Input) AddHistory(s string) {
 // Submit returns the line, records it in the history and clears the editor.
 func (in *Input) Submit() string {
 	s := in.String()
-	if !in.Hidden {
-		in.AddHistory(s)
-	}
+	in.AddHistory(s)
 	in.buf, in.pt = nil, 0
 	in.hpos = len(in.hist)
 	in.draft = ""

@@ -1,0 +1,3 @@
+;;;; sidebar: vitals bars, room and who list on the left (hidden on narrow terminals)
+/layout new sidebar
+/panel -dock left -w 26 -minw 80 -border rounded -title Vitals vitals = {color brgreen}HP{/color} {bar "gmcp:Char.Vitals.hp" "gmcp:Char.Vitals.maxhp" width=14 color=auto} {gmcp:Char.Vitals.hp|rpad:4}\n{color brblue}MP{/color} {bar "gmcp:Char.Vitals.mp" "gmcp:Char.Vitals.maxmp" width=14 color=blue} {gmcp:Char.Vitals.mp|rpad:4}\n{color yellow}XP{/color} {bar "gmcp:Char.Vitals.xp" "gmcp:Char.Vitals.maxxp" width=14 color=yellow} {gmcp:Char.Vitals.xp|rpad:4}\n{hr}\n{if gmcp:Room.Info.name}{bold}{gmcp:Room.Info.name}{/bold}{/if}\n{if gmcp:Room.Info.exits}Exits: {gmcp:Room.Info.exits}{/if}

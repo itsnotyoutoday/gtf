@@ -115,7 +115,13 @@ type Scrollback struct {
 	cfg   WrapConfig
 	Max   int // max logical lines kept
 	drop  int // logical lines dropped from the front so far
+	// Keep, if set, decides which logical lines are shown (/limit).
+	Keep  func([]layout.Cell) bool
+	dirty bool
 }
+
+// Invalidate forces the next Rewrap to rebuild (the Keep filter changed).
+func (s *Scrollback) Invalidate() { s.dirty = true }
 
 // NewScrollback makes a scrollback keeping at most max logical lines.
 func NewScrollback(max int) *Scrollback { return &Scrollback{Max: max} }
@@ -133,7 +139,10 @@ func (s *Scrollback) Phys(i int) []layout.Cell { return s.phys[i] }
 // and how many physical lines were dropped from the front.
 func (s *Scrollback) Add(cells []layout.Cell) (added, dropped int) {
 	s.lines = append(s.lines, Line{cells})
-	p := Wrap(cells, s.width, s.cfg)
+	var p [][]layout.Cell
+	if s.Keep == nil || s.Keep(cells) {
+		p = Wrap(cells, s.width, s.cfg)
+	}
 	for _, l := range p {
 		s.phys = append(s.phys, l)
 		s.owner = append(s.owner, len(s.lines)-1)
@@ -161,9 +170,10 @@ func (s *Scrollback) Add(cells []layout.Cell) (added, dropped int) {
 // mapping function from an old physical index to the new one (by owning
 // logical line and offset ratio).
 func (s *Scrollback) Rewrap(width int, cfg WrapConfig) (remap func(old int) int) {
-	if width == s.width && cfg == s.cfg {
+	if width == s.width && cfg == s.cfg && !s.dirty {
 		return func(i int) int { return i }
 	}
+	s.dirty = false
 	oldOwner := append([]int(nil), s.owner...)
 	s.width, s.cfg = width, cfg
 	s.phys = nil
@@ -171,6 +181,9 @@ func (s *Scrollback) Rewrap(width int, cfg WrapConfig) (remap func(old int) int)
 	first := make([]int, len(s.lines)) // first physical index per logical line
 	for i, l := range s.lines {
 		first[i] = len(s.phys)
+		if s.Keep != nil && !s.Keep(l.Cells) {
+			continue
+		}
 		for _, p := range Wrap(l.Cells, width, cfg) {
 			s.phys = append(s.phys, p)
 			s.owner = append(s.owner, i)
@@ -195,6 +208,9 @@ func (s *Scrollback) Rewrap(width int, cfg WrapConfig) (remap func(old int) int)
 		return end
 	}
 }
+
+// Relayout rebuilds the physical lines at the current width (after Keep changed).
+func (s *Scrollback) Relayout() { s.dirty = true; s.Rewrap(s.width, s.cfg) }
 
 // Text returns the plain text of the logical lines (for /recall-like uses).
 func (s *Scrollback) Text(i int) string { return StripCells(s.lines[i].Cells) }

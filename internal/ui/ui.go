@@ -3,6 +3,7 @@ package ui
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 )
@@ -21,7 +22,12 @@ type UI struct {
 	Wrap   WrapConfig
 
 	Scr *Screen
-	In  *Input
+	In  *Input // the built-in editor (used when Ed is nil; tests)
+	// Ed supplies the input line; a client that owns the editor elsewhere
+	// (the engine's InputBuffer) plugs it in here.
+	Ed     Editor
+	Hidden bool   // do not echo typed text (password mode)
+	Prompt string // text shown before the input
 
 	status [][]layout.Cell
 	old    []string // lines already entered, shown above the current one in the input window
@@ -43,6 +49,19 @@ type UI struct {
 	hideAll   int // physical lines hidden by dokey clear
 	// Cursor position after the last render (for tests).
 	CursorX, CursorY int
+}
+
+// Editor is the input line the UI displays.
+type Editor interface {
+	Text() string
+	Cursor() int // byte offset
+}
+
+func (u *UI) editor() Editor {
+	if u.Ed != nil {
+		return u.Ed
+	}
+	return u.In
 }
 
 // New creates a UI drawing on term.
@@ -131,21 +150,25 @@ func (u *UI) AddLine(s *Screen, cells []layout.Cell) {
 	}
 }
 
-// Submit takes the current input line, moves it into the scrolled-up part of
-// the input window and clears the editor.
+// Submit takes the built-in editor's line (see NoteSubmitted).
 func (u *UI) Submit() string {
-	hidden := u.In.Hidden
+	hidden := u.Hidden
 	line := u.In.Submit()
-	if !hidden {
-		u.old = append(u.old, line)
-	} else {
-		u.old = append(u.old, "")
+	if hidden {
+		line = ""
 	}
+	u.NoteSubmitted(line)
+	return line
+}
+
+// NoteSubmitted records that line was entered: it stays visible, scrolled up
+// in the input window, as tf shows it, and the pager is re-armed.
+func (u *UI) NoteSubmitted(line string) {
+	u.old = append(u.old, line)
 	if len(u.old) > 64 {
 		u.old = u.old[len(u.old)-64:]
 	}
 	u.Scr.ResetCount(u.Winlines())
-	return line
 }
 
 // ---- composition ----
@@ -182,13 +205,16 @@ func (g *grid) putLine(x, y, maxw int, cells []layout.Cell) {
 // cursor position inside the window.
 func (u *UI) inputRows() ([][]layout.Cell, int, int) {
 	w := u.W
-	ph := []rune(u.In.Prompt)
+	ph := []rune(u.Prompt)
 	var text []rune
 	text = append(text, ph...)
 	cur := len(ph)
-	if !u.In.Hidden {
-		text = append(text, []rune(u.In.String())...)
-		cur += u.In.Point()
+	if !u.Hidden {
+		ed := u.editor()
+		t := ed.Text()
+		bc := min(max(ed.Cursor(), 0), len(t))
+		text = append(text, []rune(t)...)
+		cur += utf8.RuneCountInString(t[:bc])
 	}
 	var cur_rows [][]layout.Cell
 	for i := 0; i == 0 || i < len(text); i += w {
