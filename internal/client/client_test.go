@@ -221,3 +221,30 @@ func TestPanelRepaintsOnTimerWork(t *testing.T) {
 	}
 	t.Fatal("panel never advanced to TICK 3")
 }
+
+func TestParseUpdateArgs(t *testing.T) {
+	a := parseUpdateArgs([]string{"-y"})
+	if !a.install || a.restart {
+		t.Errorf("-y: %+v", a)
+	}
+	a = parseUpdateArgs([]string{"-y", "-r"})
+	if !a.install || !a.restart {
+		t.Errorf("-y -r: %+v", a)
+	}
+	a = parseUpdateArgs([]string{"-channel=stable", "-check=off"})
+	if a.channel != "stable" || a.check != "off" || a.install {
+		t.Errorf("settings: %+v", a)
+	}
+	if a = parseUpdateArgs([]string{"--bogus"}); a.bad != "bogus" {
+		t.Errorf("bad option not reported: %+v", a)
+	}
+}
+
+// A development build (no release version) must never check or install anything.
+func TestUpdateCheckSkippedForDevBuild(t *testing.T) {
+	old := Version
+	Version = "dev"
+	defer func() { Version = old }()
+	c, _, _ := newTestClient(t)
+	c.startUpdateCheck() // must neither panic nor contact anything
+}

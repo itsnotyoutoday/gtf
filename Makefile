@@ -1,0 +1,41 @@
+# GoTinyFugue (gtf)
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//; s/-rel$$//' || echo 0.0.0-dev)
+LDFLAGS := -s -w -X github.com/itsnotyoutoday/gtf/internal/client.Version=$(VERSION)
+
+.PHONY: all build run test vet fmt dist dist-all clean
+
+all: build
+
+build:
+	go build -trimpath -ldflags "$(LDFLAGS)" -o gtf ./cmd/gtf
+
+# go run, as a development build
+run:
+	go run ./cmd/gtf
+
+test:
+	go test ./...
+
+vet:
+	go vet ./...
+
+fmt:
+	gofmt -w cmd internal gtflib
+
+# The release tarball for this machine: dist/gtf-VERSION-<os>-<arch>.tar.gz (+ SHA256SUMS)
+dist:
+	@mkdir -p dist
+	@./scripts/dist.sh "$(VERSION)" "$$(go env GOOS)" "$$(go env GOARCH)"
+	@./scripts/dist.sh --sums
+
+# Every platform the installer supports.
+dist-all:
+	@mkdir -p dist
+	@set -e; for t in linux/amd64 linux/arm64 linux/386 linux/arm/7 freebsd/amd64 freebsd/arm64 darwin/amd64 darwin/arm64; do \
+	  os=$${t%%/*}; rest=$${t#*/}; arch=$${rest%%/*}; arm=""; case "$$rest" in */*) arm=$${rest#*/};; esac; \
+	  ./scripts/dist.sh "$(VERSION)" "$$os" "$$arch" "$$arm"; \
+	done
+	@./scripts/dist.sh --sums
+
+clean:
+	rm -rf dist gtf

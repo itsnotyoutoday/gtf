@@ -22,6 +22,13 @@ Tests: `GOWORK=off go test ./...`. Against real tf: `python3 scripts/compare_tf.
 servers the harness starts; `TF_CACHE=dir` reuses real-tf screens between runs). Against the local Evennia test game:
 `python3 scripts/e2e_evennia.py` (skipped when it is not running).
 
+## Install
+
+    curl -fsSL https://raw.githubusercontent.com/itsnotyoutoday/gtf/main/install.sh | sh              # just you (~/bin)
+    curl -fsSL https://raw.githubusercontent.com/itsnotyoutoday/gtf/main/install.sh | sh -s -- --global   # everyone (/usr/local)
+
+Then `/update` checks for a newer version and `/update -y` installs it. See `docs/INSTALL.md`.
+
 ## Building
 
 The scripting engine is a separate module, [gtfparser](https://github.com/itsnotyoutoday/gtfparser),

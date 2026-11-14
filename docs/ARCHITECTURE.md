@@ -24,6 +24,8 @@ internal/net/nettest fake-server harness: scripts telnet negotiations byte for b
 internal/ui/         terminal UI: raw tty, compositor, scrollback, wrapping, more-pager, input
                      window, status line, panels
 internal/ui/vt       small VT100/ANSI screen model used by tests (and by scripts/compare_tf.py)
+internal/update/     self-update: GitHub releases lookup, checksums, atomic replacement of the binary and
+                     library directory, install record (used by /update and gtf --update)
 internal/layout/     panel/layout system: templates, bindings, widgets, layout engine -> cell grids
 gtflib/              embedded TF library: the unmodified real tf library (gtflib/tf/) and gtf-only scripts (gtflib/gtf/layout.tf, gtflib/gtf/layouts/*.layout)
 docs/                this file, PROTOCOLS.md, LAYOUTS.md, COMMAND-STATUS.md
@@ -39,10 +41,11 @@ in gtf and is loaded on top of it.
 
 ```
 cmd/gtf          -> internal/client, gtflib
-internal/client  -> internal/ui, internal/net(/...), internal/layout, gtflib, the engine module
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/update, gtflib, the engine module
 internal/ui      -> internal/layout
 internal/net     -> internal/net/... only
 internal/layout  -> nothing internal
+internal/update  -> nothing internal
 gtflib           -> nothing internal
 ```
 

@@ -145,6 +145,9 @@ func (c *Client) libraryDir() (string, error) {
 	if c.cfg.LibDir != "" {
 		return c.cfg.LibDir, nil
 	}
+	if d, rec, ok := installedLib(c.cfg.HomeDir); ok && rec.Version == Version {
+		return filepath.Join(d, "tf"), nil // the installed library, for this exact version
+	}
 	return gtflib.TFCacheDir()
 }
 

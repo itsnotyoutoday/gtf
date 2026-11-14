@@ -30,10 +30,11 @@ type rule struct {
 var rules = []rule{
 	{prefix: "cmd/gtf", allow: []string{"internal/client", "gtflib"}},
 	{prefix: "cmd/vtdump", allow: []string{"internal/ui/vt"}},
-	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "gtflib"}, engine: true},
+	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "internal/update", "gtflib"}, engine: true},
 	{prefix: "internal/ui", allow: []string{"internal/layout"}},
 	{prefix: "internal/net", allow: []string{"internal/net"}},
 	{prefix: "internal/layout", allow: nil},
+	{prefix: "internal/update", allow: nil}, // releases, checksums, replacing the binary and library; no gtf imports
 	{prefix: "gtflib", allow: nil},
 }
 

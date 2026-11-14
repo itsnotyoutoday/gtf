@@ -13,9 +13,6 @@ import (
 const (
 	Name      = "GoTinyFugue"
 	ShortName = "gtf"
-	// Version is the release string; change it here only.
-	Version = "0.0.1"
-
 	// TFVersion is the TinyFugue release gtf is compatible with.
 	TFVersion = "5.0 beta 8"
 
@@ -25,6 +22,11 @@ const (
 	ClientURL = "https://github.com/itsnotyoutoday/gtf"
 	EngineURL = "https://github.com/itsnotyoutoday/gtfparser"
 )
+
+// Version is the release string. Release builds set it with
+// -ldflags "-X github.com/itsnotyoutoday/gtf/internal/client.Version=0.0.2"; a build without
+// that is the development version below.
+var Version = "0.0.1"
 
 // VersionLine is "GoTinyFugue version 0.0.1 (gtf)".
 func VersionLine() string {

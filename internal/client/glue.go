@@ -19,6 +19,10 @@ var cachedGtfLib string
 // gtfLibDir is the directory the gtf-only library was extracted to.
 func gtfLibDir() string {
 	if cachedGtfLib == "" {
+		if d, rec, ok := installedLib(os.Getenv("HOME")); ok && rec.Version == Version {
+			cachedGtfLib = d // the library an installer put next to this binary
+			return d
+		}
 		d, err := gtflib.CacheDir()
 		if err != nil {
 			return ""
@@ -30,6 +34,7 @@ func gtfLibDir() string {
 
 // loadGtfLib loads the gtf-only scripts layered on top of the tf library.
 func (c *Client) loadGtfLib() {
+	c.startUpdateCheck()
 	d := gtfLibDir()
 	if d == "" {
 		return

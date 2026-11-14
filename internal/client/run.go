@@ -18,7 +18,8 @@ const usage = `usage: gtf [-L<dir>] [-f[file]] [-c<cmd>] [-nlq] [-v] [<world> | 
   -n        no automatic connection
   -l        no automatic login
   -q        quiet login
-  -v        show the version`
+  -v        show the version
+       gtf --update [-y] [-channel=stable|prerelease]   check for (or with -y install) a newer gtf`
 
 // Main is the program entry point (cmd/gtf is only a call to it). It returns
 // the process exit status.
@@ -34,6 +35,8 @@ func Main(args []string) int {
 				fmt.Println("engine: gtfparser " + ev + ", TinyFugue " + TFVersion + " compatible")
 			}
 			return 0
+		case a == "--update":
+			return RunUpdateCLI(args[i+1:])
 		case a == "-h" || a == "--help" || a == "-?":
 			fmt.Println(usage)
 			return 0

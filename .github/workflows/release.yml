@@ -1,0 +1,70 @@
+# Builds static binaries (no Go needed to run them) for Linux, FreeBSD and macOS and publishes them,
+# with checksums, as a GitHub Release when a version tag is pushed:
+#
+#   git tag v0.0.2-rel && git push origin v0.0.2-rel           final release (files and version are 0.0.2)
+#   git tag v0.0.2-alpha1 && git push origin v0.0.2-alpha1     pre-release (also -beta1)
+#
+# It can also be run by hand from the Actions tab to try the build; the files are then kept as artifacts.
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+-rel', 'v[0-9]+.[0-9]+.[0-9]+-alpha*', 'v[0-9]+.[0-9]+.[0-9]+-beta*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Tests
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+      - name: Version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; v="${v%-rel}"; else v="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Build every platform
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 linux/386 linux/arm/7 freebsd/amd64 freebsd/arm64 darwin/amd64 darwin/arm64; do
+            IFS=/ read -r os arch arm <<< "$target"
+            ./scripts/dist.sh "$VERSION" "$os" "$arch" "$arm"
+          done
+          ./scripts/dist.sh --sums
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gtf
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gtf
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ !endsWith(github.ref_name, '-rel') }}
