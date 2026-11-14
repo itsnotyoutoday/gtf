@@ -21,7 +21,24 @@ Tests: `GOWORK=off go test ./...`. Against real tf: `python3 scripts/compare_tf.
 (needs `TF_REF`/`TF_LIB`, see `scripts/env.sh`). Against the local Evennia test game:
 `python3 scripts/e2e_evennia.py` (skipped when it is not running).
 
-`_engine/` holds the `tflib` package (the unmodified real tf library embedded for both clients)
-staged for the engine repository; see docs/ARCHITECTURE.md.
+## Building
+
+The scripting engine is a separate module, [gtfparser](https://github.com/itsnotyoutoday/gtfparser),
+pulled in as a normal dependency (`go.mod` pins its version). It is not part of this repository.
+
+    go build ./cmd/gtf          # builds against the version pinned in go.mod
+
+To work on the client and the engine together (one compile, edits to the engine seen at once), keep a
+checkout of the engine next to this one and add a git-ignored `go.work`:
+
+    git clone https://github.com/itsnotyoutoday/gtfparser ../gtfparser
+    cat > go.work <<'EOF'
+    go 1.24
+    use ( . ../gtfparser )
+    replace github.com/itsnotyoutoday/gtfparser v0.0.5 => ../gtfparser
+    EOF
+
+(`go.work` is in `.gitignore`; use the version number that `go.mod` requires.) Any change the client needs
+in the scripting engine is made in the engine repository, not here.
 
 Licensed GPL-3.0-or-later; TinyFugue is GPL-2.0-or-later.

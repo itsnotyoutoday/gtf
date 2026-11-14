@@ -1,0 +1,7 @@
+# local development: a go.work that points at a checkout of the engine
+# (github.com/itsnotyoutoday/gtfparser) gives one compile across both repos.
+go.work
+go.work.sum
+/gtf
+/vtdump
+.claude/
