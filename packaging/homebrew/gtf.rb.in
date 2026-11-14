@@ -1,0 +1,54 @@
+# Homebrew formula for gtf, rendered by scripts/homebrew_formula.sh for each release and published in the tap
+# (github.com/itsnotyoutoday/homebrew-tap, Formula/gtf.rb):
+#
+#   brew install itsnotyoutoday/tap/gtf
+#
+# Brew owns these files, so /update only reports new versions and says to run `brew upgrade gtf`
+# (lib/gtf/install.json records managed_by "brew").
+class Gtf < Formula
+  desc "GoTinyFugue (gtf), a TinyFugue-compatible terminal MU* client"
+  homepage "https://github.com/itsnotyoutoday/gtf"
+  version "@VERSION@"
+  license "GPL-3.0-or-later"
+
+  on_macos do
+    on_arm do
+      url "@URL_DARWIN_ARM64@"
+      sha256 "@SHA_DARWIN_ARM64@"
+    end
+    on_intel do
+      url "@URL_DARWIN_AMD64@"
+      sha256 "@SHA_DARWIN_AMD64@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "@URL_LINUX_ARM64@"
+      sha256 "@SHA_LINUX_ARM64@"
+    end
+    on_intel do
+      url "@URL_LINUX_AMD64@"
+      sha256 "@SHA_LINUX_AMD64@"
+    end
+  end
+
+  def install
+    bin.install "bin/gtf"
+    (lib/"gtf").install Dir["lib/gtf/*"]
+    (lib/"gtf"/"install.json").write <<~JSON
+      {
+        "scope": "package",
+        "managed_by": "brew",
+        "bindir": "#{bin}",
+        "libdir": "#{lib}/gtf",
+        "version": "#{version}"
+      }
+    JSON
+    doc.install "README.md", "LICENSE"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/gtf --version")
+  end
+end

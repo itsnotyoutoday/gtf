@@ -31,7 +31,7 @@ func (u *Updater) Run(ctx context.Context, channel string, install bool, w io.Wr
 	}
 	if u.Managed() {
 		fmt.Fprintf(w, "Update available: gtf %s -> %s (%s channel).\n", u.Version, res.Latest, channel)
-		fmt.Fprintln(w, ManagedAdvice)
+		fmt.Fprintln(w, u.ManagedAdvice())
 		return res, nil
 	}
 	if !install {

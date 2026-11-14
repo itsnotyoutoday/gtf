@@ -119,11 +119,18 @@ type Updater struct {
 var ErrManaged = errors.New("gtf was installed by the system package manager (deb/rpm)")
 
 // Managed reports whether this installation may not be changed by /update.
-func (u *Updater) Managed() bool { return u.Rec.IsManaged() || IsSystemPath(u.ExePath) }
+func (u *Updater) Managed() bool {
+	return u.Rec.IsManaged() || IsSystemPath(u.ExePath) || IsBrewPath(u.ExePath)
+}
 
 // ManagedAdvice is what to tell the user of a package-managed installation.
-const ManagedAdvice = "This copy was installed with the system package manager (deb/rpm), so /update cannot install it. " +
-	"Ask your system administrator to upgrade the gtf package (for example: sudo apt install --only-upgrade gtf, or sudo dnf upgrade gtf)."
+func (u *Updater) ManagedAdvice() string {
+	if u.Rec.ManagedBy == "brew" || IsBrewPath(u.ExePath) {
+		return "This copy was installed with Homebrew, so /update cannot install it. Upgrade it with: brew upgrade gtf"
+	}
+	return "This copy was installed with the system package manager (deb/rpm), so /update cannot install it. " +
+		"Ask your system administrator to upgrade the gtf package (for example: sudo apt install --only-upgrade gtf, or sudo dnf upgrade gtf)."
+}
 
 // Result is the outcome of Check or Update.
 type Result struct {

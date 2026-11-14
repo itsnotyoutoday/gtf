@@ -53,6 +53,8 @@ jobs:
             ./scripts/package.sh "$VERSION" "$arch" "$arm"
           done
           ./scripts/dist.sh --sums
+          # the Homebrew formula for this release (copy it into the tap's Formula/ directory)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then ./scripts/homebrew_formula.sh "$GITHUB_REF_NAME" > dist/gtf.rb; fi
       - uses: actions/upload-artifact@v4
         with:
           name: gtf

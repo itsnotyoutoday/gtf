@@ -346,14 +346,18 @@ func TestManagedInstallNeverUpdates(t *testing.T) {
 	root := t.TempDir()
 	exe := filepath.Join(root, "gtf")
 	_ = os.WriteFile(exe, []byte("OLD"), 0o755)
-	for _, rec := range []Record{{Scope: "package"}, {Scope: "global", ManagedBy: "rpm"}} {
+	for _, rec := range []Record{{Scope: "package"}, {Scope: "global", ManagedBy: "rpm"}, {Scope: "package", ManagedBy: "brew"}} {
 		u := &Updater{Client: c, Version: "0.2.0", ExePath: exe, Rec: rec, GOOS: "linux", GOARCH: "amd64"}
 		var out strings.Builder
 		res, err := u.Run(context.Background(), ChannelStable, true, &out)
 		if err != nil || !res.Newer || res.Applied {
 			t.Fatalf("%+v: %+v %v", rec, res, err)
 		}
-		if !strings.Contains(out.String(), "system administrator") || !strings.Contains(out.String(), "0.3.0") {
+		want := "system administrator"
+		if rec.ManagedBy == "brew" {
+			want = "brew upgrade gtf"
+		}
+		if !strings.Contains(out.String(), want) || !strings.Contains(out.String(), "0.3.0") {
 			t.Fatalf("advice missing: %q", out.String())
 		}
 		_, rel, _ := u.Check(context.Background(), ChannelStable)
@@ -363,6 +367,12 @@ func TestManagedInstallNeverUpdates(t *testing.T) {
 		if b, _ := os.ReadFile(exe); string(b) != "OLD" {
 			t.Fatal("a package-managed binary was replaced")
 		}
+	}
+	cellar := filepath.Join(root, "opt", "homebrew", "Cellar", "gtf", "0.2.0", "bin")
+	_ = os.MkdirAll(cellar, 0o755)
+	_ = os.WriteFile(filepath.Join(cellar, "gtf"), nil, 0o755)
+	if !IsBrewPath(filepath.Join(cellar, "gtf")) || IsBrewPath(filepath.Join(root, "gtf")) {
+		t.Fatal("IsBrewPath")
 	}
 	if !IsSystemPath("/usr/bin/gtf") || IsSystemPath("/usr/local/bin/gtf") || IsSystemPath(filepath.Join(root, "gtf")) {
 		t.Fatal("IsSystemPath")

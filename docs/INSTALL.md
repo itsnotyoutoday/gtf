@@ -60,6 +60,18 @@ version is waiting. A normal-build gtf that happens to live in `/usr/bin` or has
 same way and never overwrites those files. The shell installer above stays the way to install without a package
 manager (and without root).
 
+### macOS and Linux: Homebrew
+
+```
+brew install itsnotyoutoday/tap/gtf          # the tap is github.com/itsnotyoutoday/homebrew-tap
+brew upgrade gtf
+```
+
+Brew installs the release binary and library under its Cellar and records `managed_by: brew` in `lib/gtf/install.json`.
+Like the deb/rpm packages, brew owns those files: `/update` only reports a newer version and says `brew upgrade gtf`.
+Each release publishes the formula as `gtf.rb` (rendered by `scripts/homebrew_formula.sh`); copying it to the tap's
+`Formula/gtf.rb` is the one manual step of a release (it can be automated with a token for the tap repository).
+
 ## Update
 
 | | |

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // RecordFile is written by install.sh (and kept by /update) in the library directory.
@@ -19,13 +20,21 @@ type Record struct {
 	LibDir  string `json:"libdir"`  // the library directory (contains tf/, gtf/, examples/)
 	Version string `json:"version"` // the version installed
 	Repo    string `json:"repo,omitempty"`
-	// ManagedBy is "deb" or "rpm" for a copy installed by the system package manager. Such a copy
-	// is never replaced by /update: only the package manager (the system administrator) may change it.
+	// ManagedBy names the package manager that owns this copy: "package" (deb/rpm) or "brew". Such a
+	// copy is never replaced by /update: only that package manager may change it.
 	ManagedBy string `json:"managed_by,omitempty"`
 }
 
 // IsManaged reports whether the system package manager owns this installation.
 func (r Record) IsManaged() bool { return r.Scope == "package" || r.ManagedBy != "" }
+
+// IsBrewPath reports whether exe lives in a Homebrew Cellar (the resolved path of a brew-installed gtf).
+func IsBrewPath(exe string) bool {
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	return strings.Contains(filepath.ToSlash(exe), "/Cellar/")
+}
 
 // IsSystemPath reports whether exe lives where a distribution's packages put programs. A binary
 // there is treated as package-managed even without an install record, so /update never overwrites it.
