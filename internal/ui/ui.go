@@ -46,7 +46,8 @@ type UI struct {
 	// non-visual mode bookkeeping
 	nvPrinted int
 	nvScr     *Screen
-	hideAll   int // physical lines hidden by dokey clear
+	hideAll   int      // physical lines hidden by dokey clear
+	nvQueue   []nvItem // lines entered in non-visual mode, printed in order with the output
 	// Cursor position after the last render (for tests).
 	CursorX, CursorY int
 }
@@ -163,7 +164,14 @@ func (u *UI) Submit() string {
 
 // NoteSubmitted records that line was entered: it stays visible, scrolled up
 // in the input window, as tf shows it, and the pager is re-armed.
-func (u *UI) NoteSubmitted(line string) {
+func (u *UI) NoteSubmitted(line string) { u.NoteSubmittedAt(line, u.Scr.vis) }
+
+// NoteSubmittedAt is NoteSubmitted for a line entered when the screen had
+// shown `at` physical lines (output the line itself produced comes after it).
+func (u *UI) NoteSubmittedAt(line string, at int) {
+	if !u.Visual {
+		u.nvQueue = append(u.nvQueue, nvItem{at: at, text: line})
+	}
 	u.old = append(u.old, line)
 	if len(u.old) > 64 {
 		u.old = u.old[len(u.old)-64:]
@@ -172,6 +180,11 @@ func (u *UI) NoteSubmitted(line string) {
 }
 
 // ---- composition ----
+
+type nvItem struct {
+	at   int // physical lines of output that precede it
+	text string
+}
 
 type grid struct {
 	w, h  int
@@ -380,7 +393,14 @@ func (u *UI) renderNonVisual() {
 		u.needFull = false
 	}
 	b.WriteString("\r\x1b[K")
+	flushQ := func(upto int) {
+		for len(u.nvQueue) > 0 && u.nvQueue[0].at <= upto {
+			b.WriteString(u.nvQueue[0].text + "\r\n")
+			u.nvQueue = u.nvQueue[1:]
+		}
+	}
 	for ; u.nvPrinted < s.vis; u.nvPrinted++ {
+		flushQ(u.nvPrinted)
 		cur := layout.Attr{}
 		for _, c := range s.SB.Phys(u.nvPrinted) {
 			if c.R == 0 {
@@ -397,6 +417,7 @@ func (u *UI) renderNonVisual() {
 		}
 		b.WriteString("\r\n")
 	}
+	flushQ(s.vis)
 	rows, cx, _ := u.inputRows()
 	if len(rows) > 0 {
 		for _, c := range rows[len(rows)-1] {

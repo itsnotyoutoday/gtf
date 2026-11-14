@@ -35,12 +35,13 @@ func (c *Client) onKeys(s string) {
 			seg = seg[len(seg)-1:]
 		}
 		before := c.in.Input().Text()
+		at := c.ui.Scr.Vis()
 		c.in.KeyPressed(seg)
 		if (last == '\r' || last == '\n') && c.in.Input().Text() == "" {
 			if c.ui.Hidden {
 				before = ""
 			}
-			c.ui.NoteSubmitted(before)
+			c.ui.NoteSubmittedAt(before, at)
 		}
 	}
 	if c.in.PendingKeys() != "" {
