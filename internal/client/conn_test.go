@@ -75,7 +75,7 @@ func newConnTest(t *testing.T) (*Client, *vt.Screen, *scriptDialer) {
 	t.Helper()
 	scr := vt.New(80, 24)
 	d := newScriptDialer(t)
-	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Dialer: d, Interactive: true})
+	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -92,7 +92,7 @@ func (c *Client) cmdUpdate(in *gtfparser.Interp, args string) gtfparser.Value {
 
 // startUpdateCheck says at startup when a newer gtf than the running one is installed. No network.
 func (c *Client) startUpdateCheck() {
-	if !c.cfg.Interactive || os.Getenv("GTF_NO_UPDATE_CHECK") != "" {
+	if !c.cfg.Interactive || c.cfg.NoUpdateCheck || os.Getenv("GTF_NO_UPDATE_CHECK") != "" {
 		return
 	}
 	s, _ := update.Load(update.ConfigPath(dataDir(c.cfg.HomeDir)))

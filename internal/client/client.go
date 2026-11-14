@@ -30,20 +30,22 @@ import (
 
 // Config describes how to run the client.
 type Config struct {
-	Term     ui.Terminal
-	Keys     io.Reader // raw key bytes (nil: no keyboard)
-	Resized  <-chan struct{}
-	Suspend  func() // SIGTSTP handler (nil: /suspend warns)
-	LibDir   string // directory with the tf library (empty: the embedded copy)
-	HomeDir  string // default os.UserHomeDir
-	NoRC     bool   // -f: do not load the personal config
-	NoLogin  bool   // -l
-	NoAuto   bool   // -n: no autoconnect
-	Quiet    bool   // -q
-	Commands []string
-	World    string // world (or host port) to connect at startup
-	Dialer   Dialer // nil: real network
-	Now      func() time.Time
+	Term    ui.Terminal
+	Keys    io.Reader // raw key bytes (nil: no keyboard)
+	Resized <-chan struct{}
+	Suspend func() // SIGTSTP handler (nil: /suspend warns)
+	LibDir  string // directory with the tf library (empty: the embedded copy)
+	HomeDir string // default os.UserHomeDir
+	// NoUpdateCheck turns off the startup look for a newer gtf (tests, embedding).
+	NoUpdateCheck bool
+	NoRC          bool // -f: do not load the personal config
+	NoLogin       bool // -l
+	NoAuto        bool // -n: no autoconnect
+	Quiet         bool // -q
+	Commands      []string
+	World         string // world (or host port) to connect at startup
+	Dialer        Dialer // nil: real network
+	Now           func() time.Time
 	// Interactive says whether a human is at the terminal (enables visual).
 	Interactive bool
 }

@@ -31,7 +31,7 @@ func newTestClient(t *testing.T) (*Client, *vt.Screen, *fakeDialer) {
 	t.Helper()
 	scr := vt.New(100, 30)
 	d := &fakeDialer{t: t, srv: make(chan *nettest.Server, 4)}
-	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Dialer: d, Interactive: true})
+	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestConnectGmcpPanelAndInput(t *testing.T) {
 
 func TestStartupLookAndTfKeys(t *testing.T) {
 	scr := vt.New(80, 24)
-	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Interactive: true})
+	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Interactive: true, NoUpdateCheck: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestStartupLookAndTfKeys(t *testing.T) {
 
 func TestPagerAndRecall(t *testing.T) {
 	scr := vt.New(80, 24)
-	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Interactive: true})
+	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Interactive: true, NoUpdateCheck: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestPagerAndRecall(t *testing.T) {
 
 func TestIdentityBannerVersionAndCopyright(t *testing.T) {
 	scr := vt.New(130, 150)
-	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Interactive: true})
+	c, err := New(Config{Term: scr, HomeDir: t.TempDir(), NoRC: true, Interactive: true, NoUpdateCheck: true})
 	if err != nil {
 		t.Fatal(err)
 	}

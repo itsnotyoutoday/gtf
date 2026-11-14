@@ -102,7 +102,7 @@ func (c *Client) cmdUpdate(in *gtfparser.Interp, args string) gtfparser.Value {
 // startUpdateCheck says at startup when a newer version is known, and once a day asks GitHub.
 // It never blocks the client and stays silent when offline.
 func (c *Client) startUpdateCheck() {
-	if !c.cfg.Interactive || os.Getenv("GTF_NO_UPDATE_CHECK") != "" {
+	if !c.cfg.Interactive || c.cfg.NoUpdateCheck || os.Getenv("GTF_NO_UPDATE_CHECK") != "" {
 		return
 	}
 	home := c.cfg.HomeDir
