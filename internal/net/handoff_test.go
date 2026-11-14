@@ -127,7 +127,7 @@ func TestHandoffTCPMidLineMidCompression(t *testing.T) {
 	// by the old process, the second must give the next name
 	srv.Read(len(nettest.IAC(telnet.WILL, telnet.OptTType)))
 	srv.Read(len(nettest.SB(telnet.OptTType, append([]byte{0}, "TINYFUGUE"...)...)))
-	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "GTF"...)...))
+	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "XTERM"...)...)) // the terminal type is second (MTTS order)
 	// and writes go out through the new connection
 	n.SendLine("look")
 	srv.Expect([]byte("look\r\n"))

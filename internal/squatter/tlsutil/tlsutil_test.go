@@ -84,6 +84,9 @@ func TestPinning(t *testing.T) {
 		t.Fatalf("matching pin: %v", err)
 	}
 	other := "00" + fp[2:]
+	if other == fp { // the real fingerprint happens to start with 00 (1 in 256): pick a different first byte
+		other = "ff" + fp[2:]
+	}
 	if err := handshake(t, cert, PinnedConfig(other, nil)); !errors.Is(err, ErrFingerprintMismatch) {
 		// the TLS stack may wrap the error as text only
 		if err == nil {

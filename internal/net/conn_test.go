@@ -78,14 +78,14 @@ func TestNAWSAndTType(t *testing.T) {
 	srv.Send(ask)
 	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "TINYFUGUE"...)...))
 	srv.Send(ask)
-	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "GTF"...)...))
+	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "XTERM-256COLOR"...)...)) // MTTS order: terminal type second
 	srv.Send(ask)
-	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "XTERM-256COLOR"...)...))
-	srv.Send(ask)
-	// ANSI|VT100|UTF8|256 = 15
+	// ANSI|VT100|UTF8|256 = 15, third
 	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "MTTS 15"...)...))
 	srv.Send(ask)
-	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "MTTS 15"...)...))
+	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "GTF"...)...)) // our own name, last
+	srv.Send(ask)
+	srv.Expect(nettest.SB(telnet.OptTType, append([]byte{0}, "GTF"...)...)) // the last answer repeats: that is all
 }
 
 func TestNAWSResize(t *testing.T) {

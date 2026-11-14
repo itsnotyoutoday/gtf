@@ -3,7 +3,10 @@
 
 // Package ttype implements TERMINAL-TYPE (RFC 1091) with MTTS (Mud Terminal
 // Type Standard): the client answers successive SEND requests with its name
-// (TINYFUGUE as real tf does, then GTF), the terminal type, then "MTTS <bits>".
+// as real TinyFugue does ("TINYFUGUE"), then the terminal type, then "MTTS <bits>", then "GTF". gtf
+// deliberately presents itself as TinyFugue first: it is a compatible implementation, games key their
+// client handling (prompts, colours) on that name, and no game knows any other. The trailing "GTF" is
+// for servers that read the whole cycle and want to enable gtf-specific features.
 package ttype
 
 import (
@@ -70,8 +73,10 @@ func Replies(e telnet.EnvInfo) []string {
 	if term == "" {
 		term = "ANSI"
 	}
-	// TINYFUGUE first: servers key on it; then our own name.
-	return []string{"TINYFUGUE", "GTF", term, "MTTS " + strconv.Itoa(Bits(e))}
+	// MTTS order: client name, terminal type, capability bits (Evennia and others read the cycle strictly in
+	// that order). Then our own name for a server that keeps asking until an answer repeats, so it can
+	// switch on gtf-specific features; servers that stop after three answers never see it.
+	return []string{"TINYFUGUE", term, "MTTS " + strconv.Itoa(Bits(e)), "GTF"}
 }
 
 func (h *H) OnSubneg(s *telnet.Session, data []byte) bool {

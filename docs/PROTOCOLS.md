@@ -31,7 +31,7 @@ A protocol is one package implementing `telnet.Handler` and registering itself i
 
 | package | option | behaviour |
 |---------|--------|-----------|
-| `ttype`   | 24  | TERMINAL-TYPE cycle: `TINYFUGUE` (as real tf), `GTF`, the terminal name (e.g. `XTERM-256COLOR`), `MTTS <bits>` (ANSI, VT100, UTF-8, 256 colours, truecolor, SSL as available); the last answer repeats. |
+| `ttype`   | 24  | TERMINAL-TYPE cycle: `TINYFUGUE` (gtf presents itself as TinyFugue first: it is a compatible client and games key on that name), the terminal name (e.g. `XTERM-256COLOR`), `MTTS <bits>`, then `GTF` for servers that read the whole cycle (e.g. `XTERM-256COLOR`), `MTTS <bits>` (ANSI, VT100, UTF-8, 256 colours, truecolor, SSL as available); the last answer repeats. |
 | `naws`    | 31  | window size on enable and on every `Conn.Resize` (SIGWINCH). |
 | `charset` | 42  | answers `REQUEST` accepting `UTF-8` (else `ISO-8859-1`) and switches the session charset. |
 | `eor`     | 25  | negotiates; `IAC EOR` and `IAC GA` become `Prompt` events. |
