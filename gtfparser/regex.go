@@ -2,6 +2,7 @@ package gtfparser
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/itsnotyoutoday/gtf/pcre"
 )
@@ -13,11 +14,17 @@ import (
 // UTF-8 with Unicode properties).
 type rx struct{ re *pcre.Regexp }
 
-var rxCache = map[string]*rx{}
+var (
+	rxMu    sync.Mutex
+	rxCache = map[string]*rx{}
+)
 
 func compileRegexp(pat string) (*rx, error) {
-	if r, ok := rxCache[pat]; ok {
-		return r, nil
+	rxMu.Lock()
+	r0, ok := rxCache[pat]
+	rxMu.Unlock()
+	if ok {
+		return r0, nil
 	}
 	re, err := pcre.CompileTF(pat)
 	if err != nil {
@@ -26,11 +33,13 @@ func compileRegexp(pat string) (*rx, error) {
 		}
 		return nil, err
 	}
+	r := &rx{re}
+	rxMu.Lock()
 	if len(rxCache) > 2048 {
 		rxCache = map[string]*rx{}
 	}
-	r := &rx{re}
 	rxCache[pat] = r
+	rxMu.Unlock()
 	return r, nil
 }
 

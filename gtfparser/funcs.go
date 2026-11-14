@@ -11,7 +11,7 @@ import (
 
 type fn func(in *Interp, a []Value) (Value, error)
 
-var builtinFuncs map[string]fn
+var builtinFuncs = map[string]fn{}
 
 func argN(a []Value, n int, name string) error {
 	if len(a) < n {
@@ -21,7 +21,7 @@ func argN(a []Value, n int, name string) error {
 }
 
 func init() {
-	builtinFuncs = map[string]fn{
+	for k, v := range map[string]fn{
 		"strlen":  func(in *Interp, a []Value) (Value, error) { return Int(int64(len(str(a, 0)))), argN(a, 1, "strlen") },
 		"tolower": func(in *Interp, a []Value) (Value, error) { return Str(strings.ToLower(str(a, 0))), nil },
 		"toupper": func(in *Interp, a []Value) (Value, error) { return Str(strings.ToUpper(str(a, 0))), nil },
@@ -136,19 +136,14 @@ func init() {
 		"cputime": func(in *Interp, a []Value) (Value, error) {
 			return Real(float64(time.Now().UnixNano()%1e12) / 1e9), nil
 		},
-		"acos":         func(in *Interp, a []Value) (Value, error) { return Real(math.Acos(fnum(a, 0))), nil },
-		"asin":         func(in *Interp, a []Value) (Value, error) { return Real(math.Asin(fnum(a, 0))), nil },
-		"atan":         func(in *Interp, a []Value) (Value, error) { return Real(math.Atan(fnum(a, 0))), nil },
-		"columns":      func(in *Interp, a []Value) (Value, error) { return Int(80), nil },
-		"lines":        func(in *Interp, a []Value) (Value, error) { return Int(24), nil },
-		"getpid":       func(in *Interp, a []Value) (Value, error) { return Int(int64(os.Getpid())), nil },
-		"isatty":       func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
-		"fg_world":     func(in *Interp, a []Value) (Value, error) { return Str(""), nil },
-		"is_connected": func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
-		"is_open":      func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
-		"idle":         func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
-		"echo":         func(in *Interp, a []Value) (Value, error) { in.echo(str(a, 0)); return Int(1), nil }, // echo(text [, attrs [, inline [, dest]]])
-		"send":         func(in *Interp, a []Value) (Value, error) { return Bool(in.Host.Send(str(a, 1), str(a, 0))), nil },
+		"acos":   func(in *Interp, a []Value) (Value, error) { return Real(math.Acos(fnum(a, 0))), nil },
+		"asin":   func(in *Interp, a []Value) (Value, error) { return Real(math.Asin(fnum(a, 0))), nil },
+		"atan":   func(in *Interp, a []Value) (Value, error) { return Real(math.Atan(fnum(a, 0))), nil },
+		"getpid": func(in *Interp, a []Value) (Value, error) { return Int(int64(os.Getpid())), nil },
+		"echo":   func(in *Interp, a []Value) (Value, error) { in.echo(str(a, 0)); return Int(1), nil }, // echo(text [, attrs [, inline [, dest]]])
+		"send":   func(in *Interp, a []Value) (Value, error) { return Bool(in.Host.Send(str(a, 1), str(a, 0))), nil },
+	} {
+		builtinFuncs[k] = v
 	}
 }
 

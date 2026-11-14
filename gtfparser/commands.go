@@ -10,10 +10,10 @@ import (
 
 type cmdFunc func(in *Interp, args string) Value
 
-var builtinCmds map[string]cmdFunc
+var builtinCmds = map[string]cmdFunc{}
 
 func init() {
-	builtinCmds = map[string]cmdFunc{
+	for k, v := range map[string]cmdFunc{
 		"echo":    cmdEcho,
 		"set":     cmdSet,
 		"setenv":  cmdSet,
@@ -32,9 +32,11 @@ func init() {
 		"loaded":  cmdLoaded,
 		"quit":    cmdQuit,
 		"exit":    cmdExit,
-		"export":  func(in *Interp, a string) Value { return Int(1) },
+		"export":  cmdExport,
 		"for":     cmdFor,
 		"shift":   cmdShift,
+	} {
+		builtinCmds[k] = v
 	}
 }
 
@@ -270,6 +272,9 @@ func cmdLoad(in *Interp, args string) Value {
 		}
 	}
 	name, _ := firstWord(args)
+	if !in.allow(OpFileRead, "/load", name) {
+		return Int(0)
+	}
 	p, ok := in.findFile(name)
 	if !ok {
 		if !quiet {
@@ -350,4 +355,28 @@ func (in *Interp) LoadFile(path string) error {
 		flush()
 	}
 	return sc.Err()
+}
+
+// /export name... marks variables for export to child processes (/sh, /quote !).
+func cmdExport(in *Interp, args string) Value {
+	ok := false
+	for _, n := range strings.Fields(args) {
+		if _, has := in.lookup(n); has {
+			in.exported[n] = true
+			ok = true
+		}
+	}
+	return Bool(ok)
+}
+
+// childEnv is the environment given to shell commands: the process
+// environment plus variables the script exported.
+func (in *Interp) childEnv() []string {
+	env := environ(in.noEnv)
+	for n := range in.exported {
+		if v, ok := in.lookup(n); ok {
+			env = append(env, n+"="+v.String())
+		}
+	}
+	return env
 }

@@ -7,17 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
-
-// Host connects the interpreter to a front end (a terminal, squatterd, ...).
-type Host interface {
-	// Echo shows text to the user (TF's tfout / screen).
-	Echo(text string)
-	// Send sends a line to the named world (empty = current); false if
-	// there is no such connection.
-	Send(world, text string) bool
-}
 
 type ctl int
 
@@ -56,6 +48,7 @@ type Interp struct {
 	depth       int
 	loaded      map[string]bool
 	noExp       bool
+	noEnv       bool
 	Quit        bool
 	streams     map[string]*stream
 	nextFd      int
@@ -63,6 +56,17 @@ type Interp struct {
 	pendingArgs []string
 	procs       []*Proc
 	nextPID     int
+	cmds        map[string]cmdFunc // this interpreter's builtin commands (see registry.go)
+	funcs       map[string]fn      // ... and functions
+	disabled    map[string]bool
+	restriction int
+	limits      Limits
+	interrupted atomic.Bool
+	instr       int64
+	nest        int
+	exported    map[string]bool
+	// Policy, if set, can veto privileged operations on top of /restrict.
+	Policy Policy
 	// Now replaces the clock (tests); nil means time.Now.
 	Now func() time.Time
 	// LibDirs are searched by /load and /require for relative names.
@@ -71,15 +75,39 @@ type Interp struct {
 	Warn func(string)
 }
 
-func New(h Host) *Interp {
+// Option configures New.
+type Option func(*Interp)
+
+// WithLimits sets hard ceilings on script resource use.
+func WithLimits(l Limits) Option { return func(in *Interp) { in.limits = l } }
+
+// WithPolicy installs a Policy that can veto privileged operations.
+func WithPolicy(p Policy) Option { return func(in *Interp) { in.Policy = p } }
+
+// WithRestriction starts the interpreter at a /restrict level.
+func WithRestriction(level int) Option { return func(in *Interp) { in.restriction = level } }
+
+// WithLibDirs sets the directories /load and /require search.
+func WithLibDirs(dirs ...string) Option { return func(in *Interp) { in.LibDirs = dirs } }
+
+// WithoutEnvironment keeps the process environment out of script variables.
+func WithoutEnvironment() Option { return func(in *Interp) { in.noEnv = true } }
+
+func New(h Host, opts ...Option) *Interp {
 	in := &Interp{
-		Host:    h,
-		globals: map[string]Value{},
-		macros:  map[string]*Macro{},
-		loaded:  map[string]bool{},
-		lastRet: Int(1),
+		limits:   DefaultLimits(),
+		exported: map[string]bool{},
+		Host:     h,
+		globals:  map[string]Value{},
+		macros:   map[string]*Macro{},
+		loaded:   map[string]bool{},
+		lastRet:  Int(1),
 	}
 	in.fr = &frame{vars: map[string]Value{}, name: ""}
+	for _, o := range opts {
+		o(in)
+	}
+	in.initRegistry()
 	defer func() {
 		// the keys tf itself binds before any library is loaded
 		for _, b := range [][2]string{{"^W", "/DOKEY BWORD"}, {"^R", "/DOKEY REFRESH"}, {"^V", "/DOKEY LNEXT"}} {
@@ -87,7 +115,7 @@ func New(h Host) *Interp {
 		}
 	}()
 	in.Warn = func(s string) { h.Echo("% " + s) }
-	for _, e := range os.Environ() { // the environment is imported as variables
+	for _, e := range environ(in.noEnv) { // the environment is imported as variables
 		if i := strings.IndexByte(e, '='); i > 0 {
 			in.globals[e[:i]] = Str(e[i+1:])
 		}
@@ -95,7 +123,7 @@ func New(h Host) *Interp {
 	for name, sp := range specialVars {
 		in.globals[name] = sp.initial()
 	}
-	SigFigs = 15
+	setSigFigs(15)
 	in.globals["TFVERSION"] = Str("5.0 beta 8")
 	in.globals["version"] = Str("TinyFugue (gtf) version 5.0 beta 8")
 	return in
@@ -530,6 +558,7 @@ func splitList(text string) []string {
 // nothing is substituted and %; does not split the line, except after a
 // leading /if or /while (whose bodies are lists).
 func (in *Interp) Exec(text string) Value {
+	defer in.enter()()
 	t := strings.TrimLeft(text, " \t")
 	old := in.noExp
 	in.noExp = true
@@ -547,6 +576,7 @@ func (in *Interp) Exec(text string) Value {
 // ExecFull runs text as a macro body with full substitution, like /eval
 // (and like a typed line when %sub is "full").
 func (in *Interp) ExecFull(text string) Value {
+	defer in.enter()()
 	old := in.noExp
 	in.noExp = false
 	defer func() { in.noExp = old }()
@@ -569,7 +599,7 @@ func firstWord(s string) (w, rest string) {
 func (in *Interp) execStmts(stmts []string) Value {
 	res := Int(1)
 	for i := 0; i < len(stmts); i++ {
-		if in.ctl != ctlNone {
+		if in.ctl != ctlNone || !in.tick() {
 			break
 		}
 		st := strings.TrimLeft(strings.TrimPrefix(stmts[i], "\x00"), " \t\r\n")
@@ -830,7 +860,7 @@ func (in *Interp) execOne(st string) Value {
 	var res Value
 	if m, ok := in.macros[nm]; ok && !forceBuiltin {
 		res = in.callMacro(m, args, false)
-	} else if _, ok := builtinCmds[strings.ToLower(nm)]; ok {
+	} else if _, ok := in.cmds[strings.ToLower(nm)]; ok {
 		res = in.runBuiltin(strings.ToLower(nm), args)
 	} else {
 		in.warn("%s: no such command", "/"+nm)
@@ -847,7 +877,11 @@ func negate(v Value, neg bool) Value {
 }
 
 func (in *Interp) runBuiltin(name, args string) Value {
-	f, ok := builtinCmds[name]
+	if in.disabled["/"+name] {
+		in.warn("/%s: disabled", name)
+		return Int(0)
+	}
+	f, ok := in.cmds[name]
 	if !ok {
 		in.warn("/%s: no such command", name)
 		return Int(0)
@@ -865,7 +899,7 @@ func (in *Interp) callMacroArgs(m *Macro, args []string) Value {
 
 // callMacro runs a macro body in a new scope with the given arguments.
 func (in *Interp) callMacro(m *Macro, args string, asFunc bool) Value {
-	if in.depth > 200 {
+	if in.depth >= in.maxRecur() {
 		in.warn("%s: too many nested calls", m.Name)
 		return Int(0)
 	}
@@ -898,7 +932,10 @@ func (in *Interp) callMacro(m *Macro, args string, asFunc bool) Value {
 }
 
 func (in *Interp) callFunc(name string, args []Value) (Value, error) {
-	if f, ok := builtinFuncs[name]; ok {
+	if f, ok := in.funcs[name]; ok {
+		if in.disabled[name+"()"] {
+			return Int(0), fmt.Errorf("%s(): disabled", name)
+		}
 		return f(in, args)
 	}
 	if m, ok := in.macros[name]; ok {
@@ -919,4 +956,26 @@ func (in *Interp) echo(text string) {
 		}
 	}
 	in.Host.Echo(text)
+}
+
+func environ(skip bool) []string {
+	if skip {
+		return nil
+	}
+	return os.Environ()
+}
+
+// enter marks a top-level entry into the interpreter: the statement budget is
+// per top-level execution, and an abort (/exit, interrupt, limits) ends there.
+func (in *Interp) enter() func() {
+	if in.nest == 0 {
+		in.instr = 0
+	}
+	in.nest++
+	return func() {
+		in.nest--
+		if in.nest == 0 && in.ctl == ctlExit {
+			in.ctl = ctlNone
+		}
+	}
 }

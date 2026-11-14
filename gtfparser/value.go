@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 type kind uint8
@@ -53,8 +54,12 @@ func (v Value) microOf() *big.Int {
 	return new(big.Int).Mul(big.NewInt(v.i), million)
 }
 
-// SigFigs is the number of significant figures used when formatting floats.
-var SigFigs = 15
+var sigFigs atomic.Int32 // %sigfigs; process-wide (it is a display setting)
+
+func init() { sigFigs.Store(15) }
+
+func setSigFigs(n int) { sigFigs.Store(int32(n)) }
+func getSigFigs() int  { return int(sigFigs.Load()) }
 
 func (v Value) String() string {
 	switch v.k {
@@ -109,7 +114,7 @@ func formatReal0(f float64) string {
 	if f == 0 {
 		return "0"
 	}
-	return strconv.FormatFloat(f, 'g', SigFigs, 64)
+	return strconv.FormatFloat(f, 'g', getSigFigs(), 64)
 }
 
 // Num converts to a number (int, decimal or float); strings are parsed by prefix.

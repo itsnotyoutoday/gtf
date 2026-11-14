@@ -151,6 +151,9 @@ func cmdQuote(in *Interp, args string) Value {
 	var lines []string
 	switch src {
 	case '\'':
+		if !in.allow(OpFileRead, "/quote", body) {
+			return Int(0)
+		}
 		if f, ok := in.findFile(body); ok {
 			if fh, err := os.Open(f); err == nil {
 				sc := bufio.NewScanner(fh)
@@ -164,7 +167,12 @@ func cmdQuote(in *Interp, args string) Value {
 			return Int(0)
 		}
 	case '!':
-		out, _ := exec.Command("sh", "-c", body).CombinedOutput()
+		if !in.allow(OpShell, "/quote", body) {
+			return Int(0)
+		}
+		sh := exec.Command("sh", "-c", body)
+		sh.Env = in.childEnv()
+		out, _ := sh.CombinedOutput()
 		lines = strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 		if len(out) == 0 {
 			lines = nil

@@ -70,7 +70,7 @@ func (in *Interp) setGlobal(name string, v Value) bool {
 		}
 		v = cv
 		if name == "sigfigs" {
-			SigFigs = int(cv.Int())
+			setSigFigs(int(cv.Int()))
 		}
 	}
 	in.globals[name] = v

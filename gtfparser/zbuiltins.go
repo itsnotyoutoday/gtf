@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -30,6 +31,16 @@ func fnTfopen(in *Interp, a []Value) (Value, error) {
 	path, mode := str(a, 0), str(a, 1)
 	if mode == "" {
 		mode = "r"
+	}
+	op := OpFileRead
+	if mode[0] != 'r' {
+		op = OpFileWrite
+	}
+	if mode[0] == 'p' {
+		op = OpShell
+	}
+	if !in.allow(op, "tfopen()", path) {
+		return Int(-1), nil
 	}
 	var f *os.File
 	var err error
@@ -133,8 +144,6 @@ func fnTfreadable(in *Interp, a []Value) (Value, error) {
 }
 
 // ---------------------------------------------------------------- stubs & small commands
-
-func noop(in *Interp, args string) Value { return Int(1) }
 
 // transform /gag, /hilite, /trig, /hook into /def.
 func defShortcut(prefix string) cmdFunc {
@@ -334,14 +343,11 @@ func cmdVersion(in *Interp, args string) Value {
 }
 
 func init() {
-	for _, n := range []string{"beep", "localecho", "listsockets", "listworlds", "liststreams", "status_add", "status_clear",
-		"status_edit", "status_rm", "dokey", "histsize", "recordline", "recall", "log", "limit", "unlimit",
-		"relimit", "save", "saveworld", "unworld", "renameworld", "suspend", "restrict", "watchdog", "watchname", "input",
-		"core", "fg", "connect", "dc", "sh", "edit", "reboot", "undefn", "help", "lcd"} {
-		builtinCmds[n] = noop
-	}
 	builtinCmds["bind"] = cmdBind
 	builtinCmds["unbind"] = cmdUnbind
+	builtinCmds["restrict"] = cmdRestrict
+	builtinCmds["sh"] = cmdSh
+	builtinCmds["lcd"] = cmdLcd
 	builtinCmds["list"] = cmdList
 	builtinCmds["listvar"] = cmdListvar
 	builtinCmds["purge"] = cmdPurge
@@ -355,26 +361,21 @@ func init() {
 
 	f := builtinFuncs
 	f["tfopen"], f["tfclose"], f["tfwrite"], f["tfread"], f["tfreadable"] = fnTfopen, fnTfclose, fnTfwrite, fnTfread, fnTfreadable
+	f["keycode"] = func(in *Interp, a []Value) (Value, error) {
+		if k, ok := in.Host.(KeyHost); ok {
+			return Str(k.KeyCode(str(a, 0))), nil
+		}
+		return Str(""), nil
+	}
+	f["columns"] = func(in *Interp, a []Value) (Value, error) { c, _ := in.termSize(); return Int(int64(c)), nil }
+	f["lines"] = func(in *Interp, a []Value) (Value, error) { _, l := in.termSize(); return Int(int64(l)), nil }
 	f["tfflush"] = func(in *Interp, a []Value) (Value, error) { return Int(1), nil }
-	f["keycode"] = func(in *Interp, a []Value) (Value, error) { return Str(""), nil }
-	f["features"] = func(in *Interp, a []Value) (Value, error) { return Int(0), nil }
-	f["world_info"] = func(in *Interp, a []Value) (Value, error) { return Str(""), nil }
-	f["nactive"] = func(in *Interp, a []Value) (Value, error) { return Int(0), nil }
-	f["nlog"] = f["nactive"]
-	f["nmail"] = f["nactive"]
-	f["nread"] = f["nactive"]
 	f["whatis"] = func(in *Interp, a []Value) (Value, error) {
 		if len(a) == 0 {
 			return Str(""), nil
 		}
 		return Str(typeName(a[0])), nil
 	}
-	f["status_fields"] = func(in *Interp, a []Value) (Value, error) { return Str(""), nil }
-	f["status_width"] = func(in *Interp, a []Value) (Value, error) { return Int(0), nil }
-	f["winlines"] = func(in *Interp, a []Value) (Value, error) { return Int(24), nil }
-	f["moresize"] = func(in *Interp, a []Value) (Value, error) { return Int(0), nil }
-	f["morepaused"] = f["moresize"]
-	f["morescroll"] = f["moresize"]
 	f["log10"] = func(in *Interp, a []Value) (Value, error) { return Real(log10(fnum(a, 0))), nil }
 	f["ln"] = f["log"]
 	f["tan"] = func(in *Interp, a []Value) (Value, error) { return Real(tan(fnum(a, 0))), nil }
@@ -389,7 +390,6 @@ func init() {
 		return Str(p), nil
 	}
 	f["pad"] = fnPad
-	f["strip_attr"] = func(in *Interp, a []Value) (Value, error) { return Str(str(a, 0)), nil }
 	f["ftime"] = func(in *Interp, a []Value) (Value, error) {
 		t := time.Now()
 		if len(a) > 1 {
@@ -397,14 +397,6 @@ func init() {
 		}
 		return Str(strftime(str(a, 0), t)), nil
 	}
-	f["mktime"] = func(in *Interp, a []Value) (Value, error) { return Int(time.Now().Unix()), nil }
-	f["sidle"] = f["idle"]
-	ident := func(in *Interp, a []Value) (Value, error) { return Str(str(a, 0)), nil }
-	for _, n := range []string{"decode_attr", "encode_attr", "decode_ansi", "encode_ansi", "strcmpattr"} {
-		f[n] = ident
-	}
-	f["addworld"] = func(in *Interp, a []Value) (Value, error) { return Int(1), nil }
-	f["substitute"] = func(in *Interp, a []Value) (Value, error) { return Int(1), nil }
 }
 
 // pad(s, n, s, n, ...): each string padded to the width that follows it
@@ -490,4 +482,47 @@ func cmdUnbind(in *Interp, args string) Value {
 		}
 	}
 	return Int(0)
+}
+
+// /sh [command]: run a shell command, showing its output.
+func cmdSh(in *Interp, args string) Value {
+	cmd := strings.TrimSpace(args)
+	if !in.allow(OpShell, "/sh", cmd) {
+		return Int(0)
+	}
+	if cmd == "" {
+		return in.unsupported("/sh (interactive shell)")
+	}
+	c := exec.Command("sh", "-c", cmd)
+	c.Env = in.childEnv()
+	out, err := c.CombinedOutput()
+	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if l != "" || len(out) > 0 {
+			in.echo(l)
+		}
+	}
+	return Bool(err == nil)
+}
+
+// /lcd [dir]: change (or show) the working directory.
+func cmdLcd(in *Interp, args string) Value {
+	dir := strings.TrimSpace(args)
+	if !in.allow(OpDirChange, "/lcd", dir) {
+		return Int(0)
+	}
+	if dir == "" {
+		wd, _ := os.Getwd()
+		in.echo("% Current directory is " + wd)
+		return Int(1)
+	}
+	if strings.HasPrefix(dir, "~") {
+		if h, err := os.UserHomeDir(); err == nil {
+			dir = h + dir[1:]
+		}
+	}
+	if err := os.Chdir(dir); err != nil {
+		in.warn("/lcd: %v", err)
+		return Int(0)
+	}
+	return Int(1)
 }

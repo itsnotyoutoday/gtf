@@ -2,6 +2,7 @@ package gtfparser
 
 import (
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -217,10 +218,14 @@ func (g *gpat) matchEnd(ti int, s string, si int, k func(int) bool) bool {
 	return k(si)
 }
 
-var globCache = map[string]*gpat{}
+var (
+	globMu    sync.Mutex
+	globCache = map[string]*gpat{}
+)
 
 // globMatch matches s against a TF glob pattern.
 func globMatch(pat, s string) bool {
+	globMu.Lock()
 	g, ok := globCache[pat]
 	if !ok {
 		g = parseGlob(pat)
@@ -229,5 +234,6 @@ func globMatch(pat, s string) bool {
 		}
 		globCache[pat] = g
 	}
+	globMu.Unlock()
 	return g.match(0, s, 0)
 }
