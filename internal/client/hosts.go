@@ -13,22 +13,25 @@ import (
 // interfaces; the engine's own commands (/connect, /fg, /limit, /recall,
 // /status_add, /dokey, ...) then drive this client's connections and display.
 var (
-	_ gtfparser.Host        = (*Client)(nil)
-	_ gtfparser.EchoHost    = (*Client)(nil)
-	_ gtfparser.WorldHost   = (*Client)(nil)
-	_ gtfparser.ConnectHost = (*Client)(nil)
-	_ gtfparser.FgHost      = (*Client)(nil)
-	_ gtfparser.SocketHost  = (*Client)(nil)
-	_ gtfparser.IdleHost    = (*Client)(nil)
-	_ gtfparser.TermHost    = (*Client)(nil)
-	_ gtfparser.KeyHost     = (*Client)(nil)
-	_ gtfparser.Notifier    = (*Client)(nil)
-	_ gtfparser.HelpHost    = (*Client)(nil)
-	_ gtfparser.MoreHost    = (*Client)(nil)
-	_ gtfparser.WindowHost  = (*Client)(nil)
-	_ gtfparser.LineHost    = (*Client)(nil)
-	_ gtfparser.PromptHost  = (*Client)(nil)
-	_ gtfparser.LimitHost   = (*Client)(nil)
+	_ gtfparser.Host            = (*Client)(nil)
+	_ gtfparser.EchoHost        = (*Client)(nil)
+	_ gtfparser.WorldHost       = (*Client)(nil)
+	_ gtfparser.ConnectHost     = (*Client)(nil)
+	_ gtfparser.FgHost          = (*Client)(nil)
+	_ gtfparser.SocketHost      = (*Client)(nil)
+	_ gtfparser.IdleHost        = (*Client)(nil)
+	_ gtfparser.TermHost        = (*Client)(nil)
+	_ gtfparser.KeyHost         = (*Client)(nil)
+	_ gtfparser.Notifier        = (*Client)(nil)
+	_ gtfparser.HelpHost        = (*Client)(nil)
+	_ gtfparser.MoreHost        = (*Client)(nil)
+	_ gtfparser.WindowHost      = (*Client)(nil)
+	_ gtfparser.LineHost        = (*Client)(nil)
+	_ gtfparser.PromptHost      = (*Client)(nil)
+	_ gtfparser.LimitHost       = (*Client)(nil)
+	_ gtfparser.AttrEchoHost    = (*Client)(nil)
+	_ gtfparser.HookDisplayHost = (*Client)(nil)
+	_ gtfparser.WorldInfoHost   = (*Client)(nil)
 )
 
 // Echo implements gtfparser.Host: text for the user.
@@ -43,8 +46,13 @@ func (c *Client) EchoTo(o gtfparser.EchoOpts, text string) {
 		}
 	}
 	if o.Markup {
+		var base gtfparser.Attr
+		if o.Attrs != "" {
+			base, _ = c.in.ParseAttrs(o.Attrs)
+		}
 		for _, ln := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-			c.ui.AddLine(scr, c.markupCells(ln, o.Attrs))
+			as, _ := c.attrCtx().DecodeAttr(gtfparser.AttrString{Text: ln}, base, 0)
+			c.ui.AddLine(scr, c.attrCells(as))
 		}
 		c.scheduleRender()
 		return
@@ -52,34 +60,53 @@ func (c *Client) EchoTo(o gtfparser.EchoOpts, text string) {
 	c.echoTo(scr, o.Attrs, text)
 }
 
-// markupCells renders text containing @{attrs} markup.
-func (c *Client) markupCells(text, base string) []layout.Cell {
-	var out []layout.Cell
-	cur := layout.Attr{}
-	b := c.parseTfAttrs(base)
-	cur = b.onto(cur)
-	for len(text) > 0 {
-		i := strings.Index(text, "@{")
-		if i < 0 {
-			out = append(out, ui.PlainCells(text, cur)...)
-			break
-		}
-		j := strings.IndexByte(text[i:], '}')
-		if j < 0 {
-			out = append(out, ui.PlainCells(text, cur)...)
-			break
-		}
-		out = append(out, ui.PlainCells(text[:i], cur)...)
-		spec := text[i+2 : i+j]
-		a := c.parseTfAttrs(spec)
-		if a.none {
-			cur = b.onto(layout.Attr{})
-		}
-		cur = a.onto(cur)
-		text = text[i+j+1:]
-	}
-	return out
+// EchoAttr implements gtfparser.AttrEchoHost: attributed text from the engine.
+func (c *Client) EchoAttr(s gtfparser.AttrString) {
+	c.ui.AddLine(c.screenFor(), c.attrCells(s))
+	c.in.RecordLocalLine(s.Text)
+	c.scheduleRender()
 }
+
+// HookMessage implements gtfparser.HookDisplayHost: tf's default messages for
+// hook events (connected, closed, activity, ...), placed by class.
+func (c *Client) HookMessage(m gtfparser.HookMessage) {
+	scr := c.screenFor()
+	switch m.Class {
+	case gtfparser.HookWorld:
+		if s := c.sessions[m.World]; s != nil {
+			scr = s.scr
+		}
+	case gtfparser.HookAlert:
+		// TODO: a status-line alert; until then it goes to the foreground screen
+		scr = c.fgScreen()
+	}
+	c.ui.AddLine(scr, c.attrCells(m.Text))
+	if scr == c.fgScreen() {
+		c.in.RecordLocalLine(m.Text.Text)
+	}
+	c.scheduleRender()
+}
+
+// WorldInfoHost (for /def -w and -T and hook world context).
+
+// CurrentWorld is the world whose text or event is being processed.
+func (c *Client) CurrentWorld() string {
+	if c.xworld != "" {
+		return c.xworld
+	}
+	return c.ForegroundWorld()
+}
+
+// WorldType returns a world's type.
+func (c *Client) WorldType(world string) string {
+	if w, ok := c.in.World(world); ok {
+		return w.Type
+	}
+	return ""
+}
+
+// WorldExists reports whether a world is defined.
+func (c *Client) WorldExists(world string) bool { _, ok := c.in.World(world); return ok }
 
 // Send implements gtfparser.Host: send a line to a world.
 func (c *Client) Send(world, text string) bool {
@@ -287,49 +314,57 @@ func (c *Client) Redraw(world string) int {
 func (c *Client) processLine(s *Session, line string) {
 	cells := s.ansi.Parse(line)
 	plain := ui.StripCells(cells)
-	var res gtfparser.LineResult
-	c.withWorld(s, func() { res = c.in.Process(plain, true) })
 	if s.ansi.Bells > 0 {
 		s.ansi.Bells = 0
-		if c.in.TermSettings().Beep {
-			c.ui.Beep() // TODO(merge): engine bell result
-		}
+		c.bell()
 	}
-	for _, m := range res.Matches { // TODO(merge): the engine will set Gag for -ag
-		if m.Macro.Attrs != "" && c.parseTfAttrs(strings.Split(m.Macro.Attrs, "P")[0]).gag {
-			res.Gag = true
-		}
+	var res *gtfparser.LineResult
+	c.withWorld(s, func() { res = c.in.ProcessText(gtfparser.LineInput{Text: plain, World: s.World.Name}) })
+	if res.Bell {
+		c.bell()
 	}
 	if res.Gag {
 		return
 	}
-	c.showWorldLine(s, cells, plain, res.Matches)
+	c.showWorldLine(s, c.overlay(cells, plain, res), res.Line.Text, res)
 }
 
-func (c *Client) showWorldLine(s *Session, cells []layout.Cell, plain string, ms []gtfparser.Match) {
-	cells = c.applyMatches(cells, plain, ms)
-	noHist, noLog, noActive := c.lineFlags(ms)
-	attrs := ""
-	if noHist {
-		attrs += "G"
+func (c *Client) bell() {
+	if c.in.TermSettings().Beep {
+		c.ui.Beep()
 	}
-	if noLog {
-		attrs += "L"
+}
+
+func (c *Client) showWorldLine(s *Session, cells []layout.Cell, plain string, res *gtfparser.LineResult) {
+	attrs := ""
+	noActive := false
+	if res != nil {
+		if res.NoHistory {
+			attrs += "G"
+		}
+		if res.NoLog {
+			attrs += "L"
+		}
+		noActive = res.NoActivity
+	}
+	fgNow := s == c.fg
+	if !fgNow && s.scr.Unseen == 0 && !noActive {
+		c.withWorld(s, func() { c.in.FireHookArgs("PREACTIVITY", s.World.Name) })
 	}
 	c.ui.AddLine(s.scr, cells)
 	c.in.RecordWorldLineAttr(s.World.Name, plain, attrs)
-	if s != c.fg {
+	if !fgNow {
 		if noActive {
-			s.scr.Unseen--
-			if s.scr.Unseen < 0 {
-				s.scr.Unseen = 0
-			}
+			s.scr.Unseen = max(s.scr.Unseen-1, 0)
 		}
 		if s.scr.Unseen > 0 && !s.activeNotified {
 			s.activeNotified = true
-			c.withWorld(s, func() { c.in.FireHook("ACTIVITY", s.World.Name) })
+			c.withWorld(s, func() { c.in.FireHookArgs("ACTIVITY", s.World.Name) })
 		}
-		c.withWorld(s, func() { c.in.FireHook("BGTEXT", s.World.Name+" "+plain) })
+		c.withWorld(s, func() { c.in.FireHookArgs("BGTEXT", s.World.Name) })
+		if res != nil && res.Count > 0 {
+			c.withWorld(s, func() { c.in.FireHookArgs("BGTRIG", s.World.Name, plain) })
+		}
 	}
 }
 

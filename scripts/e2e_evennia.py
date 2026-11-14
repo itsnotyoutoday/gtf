@@ -90,7 +90,7 @@ def main():
     try:
         s.drain(3.0)
         scr = s.screen(vtdump)
-        check("Connection to ev established" in scr, "connected", scr)
+        check("Connected to ev" in scr, "connected", scr)
         check("You become god" in scr, "auto-login worked", scr)
         check("Vitals" in scr and "HP" in scr and "█" in scr, "sidebar draws HP bar from GMCP Char.Vitals", scr)
         s.send("look\r", 1.0)

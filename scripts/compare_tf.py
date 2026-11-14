@@ -27,6 +27,15 @@ SCENARIOS = {
     "long-input": [FLUSH, "q" * 100],
     "more-off-wrapped-list": [FLUSH, "/set more=on\r", "/for i 1 40 /echo m%i\r", "/echo end\r"],
     "status-clock-off": [FLUSH, "/clock off\r"],
+    "help-intro": [FLUSH, "/help intro\r"],
+    "help-cmd": [FLUSH, "/help /echo\r"],
+    "listworlds": [FLUSH, "/addworld b hostb 2\r", "/addworld a hosta 1\r", "/listworlds\r"],
+    "recall": [FLUSH, "/echo aaa\r", "/echo bbb\r", "/recall -3\r"],
+    "limit": [FLUSH, "/echo xa\r", "/echo yb\r", "/echo xc\r", "/limit -m glob x*\r"],
+    "status-add": [FLUSH, "/status_add -A @world foo:6\r"],
+    "set-visual-off": [FLUSH, "/visual off\r", "/echo plain\r", "typed"],
+    "more-page": [FLUSH, "/set more=on\r", "/for i 1 30 /echo n%i\r", "\t"],
+    "list-def": [FLUSH, "/def foo = /echo hi\r", "/list foo\r"],
     "unicode": [FLUSH, "/echo caf\u00e9 \u00fcber \u20ac\r", "na\u00efve"],
 }
 

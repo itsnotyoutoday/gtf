@@ -73,7 +73,10 @@ func TestConnectGmcpPanelAndInput(t *testing.T) {
 	}
 	// data is readable from scripts
 	var got string
-	c.Do(func(in *gtfparser.Interp) { got = in.Run("/echo hp=$[gmcp_get(\"Char.Vitals.hp\")] j=$[gmcp_json(\"Char.Vitals\")]").String(); in.Run("/test echo(strcat(\"hp=\", gmcp_get(\"Char.Vitals.hp\"), \" \", gmcp_json(\"Char.Vitals\")))") })
+	c.Do(func(in *gtfparser.Interp) {
+		got = in.Run("/echo hp=$[gmcp_get(\"Char.Vitals.hp\")] j=$[gmcp_json(\"Char.Vitals\")]").String()
+		in.Run("/test echo(strcat(\"hp=\", gmcp_get(\"Char.Vitals.hp\"), \" \", gmcp_json(\"Char.Vitals\")))")
+	})
 	_ = got
 	waitScreen(t, c, scr, `hp=40 {"hp":40,"maxhp":80}`)
 	// typing goes through the engine's key dispatch to the world

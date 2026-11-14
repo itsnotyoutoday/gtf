@@ -52,6 +52,7 @@ type Session struct {
 	prompt string // current prompt text (plain)
 	opts   gtfparser.ConnectOptions
 
+	localClose     bool // closed by /dc (no DISCONNECT message)
 	pendTimer      *time.Timer
 	connectedAt    time.Time
 	lastRecv       time.Time
@@ -81,9 +82,9 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 	s := c.newSession(w, o)
 	c.sessions[w.Name] = s
 	c.order = append(c.order, s)
-	if !o.Quiet {
-		c.echoTo(s.scr, "", "% Trying to connect to "+w.Name+" ("+w.Host+" "+w.Port+")")
-	}
+	c.withWorld(s, func() {
+		c.in.FireHookEvent(gtfparser.HookEvent{Name: "PENDING", Args: []string{w.Name, w.Host + " " + w.Port}, NoMessage: o.Quiet, World: w.Name})
+	})
 	if !o.Background {
 		c.foreground(s)
 	}
@@ -93,7 +94,7 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 		conn, err := c.cfg.Dialer.Dial(ctx, w)
 		c.run.Post(func(*gtfparser.Interp) {
 			if err != nil {
-				c.echoTo(s.scr, "", "% Connection to "+w.Name+" failed: "+err.Error())
+				c.withWorld(s, func() { c.in.FireHookArgs("CONFAIL", w.Name, err.Error()) })
 				c.removeSession(s)
 				c.afterTask()
 				return
@@ -103,9 +104,12 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 			s.connectedAt = c.cfg.Now()
 			conn.Resize(c.ui.W, c.ui.H)
 			c.setEnv(conn)
-			c.echoTo(s.scr, "", "% Connection to "+w.Name+" established.")
-			c.withWorld(s, func() { c.in.FireHook("CONNECT", w.Name) })
-			c.autoLogin(s)
+			c.withWorld(s, func() {
+				c.in.FireHookEvent(gtfparser.HookEvent{Name: "CONNECT", Args: []string{w.Name}, NoMessage: o.Quiet, World: w.Name})
+				if !c.cfg.NoLogin && !o.NoLogin && w.Character != "" && w.Password != "" && loginOn(c.in.Var("login")) {
+					c.in.FireHookArgs("LOGIN", w.Name, w.Character, w.Password)
+				}
+			})
 			c.afterTask()
 			go c.pump(s, conn)
 		})
@@ -115,9 +119,10 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 
 // withWorld runs f with the interpreter acting for s's world.
 func (c *Client) withWorld(s *Session, f func()) {
-	old := c.in.CurrentWorld()
+	old, oldx := c.in.CurrentWorld(), c.xworld
 	c.in.SetWorld(s.World.Name)
-	defer c.in.SetWorld(old)
+	c.xworld = s.World.Name
+	defer func() { c.in.SetWorld(old); c.xworld = oldx }()
 	f()
 }
 
@@ -159,13 +164,15 @@ func (c *Client) onNet(s *Session, ev gnet.Event) {
 	case gnet.Closed:
 		s.state = gtfparser.SockDead
 		s.flushPartial()
-		c.echoTo(s.scr, "", "% Connection to "+s.World.Name+" closed.")
-		c.withWorld(s, func() { c.in.FireHook("DISCONNECT", s.World.Name) })
+		if !s.localClose {
+			c.withWorld(s, func() { c.in.FireHookArgs("DISCONNECT", s.World.Name) })
+		}
 		c.removeSession(s)
 	}
 }
 
 func (s *Session) close() {
+	s.localClose = true
 	if s.conn != nil {
 		s.conn.Close()
 	}
@@ -233,8 +240,9 @@ func (s *Session) promptEnd() {
 	var p ui.AnsiParser
 	plain := ui.StripCells(p.Parse(line))
 	s.c.withWorld(s, func() {
-		s.c.in.FireHook("PROMPT", plain)
-		s.setPrompt(plain)
+		if r := s.c.in.FireHookArgs("PROMPT", plain); r.Count == 0 {
+			s.setPrompt(plain)
+		}
 	})
 }
 
@@ -279,35 +287,13 @@ func (c *Client) foreground(s *Session) {
 	if s == nil {
 		c.ui.SetScreen(c.base)
 		c.in.SetWorld("")
+		c.in.FireHookEvent(gtfparser.HookEvent{Name: "WORLD", Message: "---- No world ----", HasMsg: true})
 		return
 	}
 	s.scr.Unseen = 0
 	s.activeNotified = false
 	c.ui.SetScreen(s.scr)
 	c.in.SetWorld(s.World.Name)
-	c.in.FireHook("WORLD", s.World.Name)
+	c.in.FireHookEvent(gtfparser.HookEvent{Name: "WORLD", Args: []string{s.World.Name}, World: s.World.Name, Message: "---- World " + s.World.Name + " ----", HasMsg: true})
 	c.panels.worldChanged(c)
-}
-
-func (c *Client) autoLogin(s *Session) {
-	w := s.World
-	if c.cfg.NoLogin || s.opts.NoLogin || w.Character == "" || c.in.Var("login") == "off" || c.in.Var("login") == "0" {
-		return
-	}
-	// TODO(merge): fire the LOGIN hook once the engine's triggers rewrite
-	// honours -T world types; until then do the "tiny" login the stdlib's
-	// default hook would.
-	if w.Type == "telnet" || strings.HasPrefix(w.Type, "telnet.") {
-		s.sendLine(w.Character)
-		s.sendLine(w.Password)
-		return
-	}
-	s.sendLine(fmt.Sprintf("connect %s %s", quoteIfSpace(w.Character), quoteIfSpace(w.Password)))
-}
-
-func quoteIfSpace(s string) string {
-	if strings.ContainsAny(s, " \t") {
-		return "\"" + s + "\""
-	}
-	return s
 }

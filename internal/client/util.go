@@ -45,3 +45,5 @@ func qw(s string) string {
 	}
 	return s
 }
+
+func loginOn(v string) bool { return v != "off" && v != "0" }

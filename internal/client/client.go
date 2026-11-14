@@ -56,6 +56,7 @@ type Client struct {
 	sessions map[string]*Session
 	order    []*Session // creation order
 	fg       *Session
+	xworld   string // world whose text/event is being processed
 
 	panels *panelState
 	help   *helpData
@@ -94,6 +95,7 @@ func New(cfg Config) (*Client, error) {
 	in.Warn = func(s string) { c.echoLine("% " + s) }
 	in.Input().OnChange = c.scheduleRender
 	c.ui.Ed = in.Input()
+	in.EnableHookEvents("GMCP", "GMCP_LOGIN", "MSDP")
 	c.install()
 	if err := c.loadLibrary(); err != nil {
 		c.echoLine("% " + err.Error())
@@ -414,16 +416,20 @@ func (c *Client) statusCells(w int) [][]layout.Cell {
 	rows := c.in.StatusRows(w)
 	out := make([][]layout.Cell, len(rows))
 	for i, r := range rows {
-		base := c.parseTfAttrs(r.Attrs).onto(layout.Attr{})
+		var base layout.Attr
+		if a, err := c.in.ParseAttrs(r.Attrs); err == nil {
+			base = toLayout(a, base)
+		}
 		cells := ui.PlainCells(r.Text, base)
 		// field attributes apply to the value runes only
 		col := 0
 		for _, sp := range r.Spans {
 			if sp.Attrs != "" && sp.ValueLen > 0 {
-				a := c.parseTfAttrs(sp.Attrs)
-				for k := 0; k < sp.ValueLen && sp.Col+sp.ValueStart+k < len(cells); k++ {
-					idx := sp.Col + sp.ValueStart + k
-					cells[idx].A = a.onto(cells[idx].A)
+				if a, err := c.in.ParseAttrs(sp.Attrs); err == nil {
+					for k := 0; k < sp.ValueLen && sp.Col+sp.ValueStart+k < len(cells); k++ {
+						idx := sp.Col + sp.ValueStart + k
+						cells[idx].A = toLayout(a, cells[idx].A)
+					}
 				}
 			}
 			col = sp.Col + sp.Width
@@ -436,7 +442,7 @@ func (c *Client) statusCells(w int) [][]layout.Cell {
 
 // screenFor is where output for the interpreter's current context goes.
 func (c *Client) screenFor() *ui.Screen {
-	if cw := c.in.CurrentWorld(); cw != "" {
+	if cw := c.CurrentWorld(); cw != "" {
 		if s := c.sessions[cw]; s != nil {
 			return s.scr
 		}
