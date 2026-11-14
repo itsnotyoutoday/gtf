@@ -129,3 +129,14 @@ func (s *Screen) Refilter() int {
 	s.Paused = false
 	return s.SB.Len()
 }
+
+// InsertDivider puts a divider line (tf's textdiv_str) before the last `unseen`
+// logical lines, so the lines that arrived while the screen was in the
+// background are set apart; the divider itself is shown at once.
+func (s *Screen) InsertDivider(unseen int, cells []layout.Cell) {
+	idx := s.SB.Logical() - min(unseen, s.SB.Logical())
+	at, k := s.SB.InsertAt(idx, cells)
+	if s.vis >= at {
+		s.vis += k
+	}
+}

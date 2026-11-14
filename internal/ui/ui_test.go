@@ -157,3 +157,32 @@ func TestNonVisual(t *testing.T) {
 		t.Fatalf("\n%s", scr.Dump())
 	}
 }
+
+func TestWrapKeepsOptionStyleHyphenTogether(t *testing.T) {
+	// tf (ICU) breaks before "-m<string>" rather than between "-" and "m"
+	line := PlainCells("% RECALL: options: -lig -w<string> -a<string> -f<string> -t<string> -m<string> -vq", layout.Attr{})
+	got := Wrap(line, 79, WrapConfig{Wrap: true, Space: 4})
+	if len(got) != 2 || !strings.HasPrefix(StripCells(got[1]), "    -m<string>") {
+		for _, g := range got {
+			t.Logf("%q", StripCells(g))
+		}
+		t.Fatal("wrong break")
+	}
+}
+
+func TestInsertDividerBeforeUnseenLines(t *testing.T) {
+	s := NewScreen("w", 100)
+	s.SB.Rewrap(20, WrapConfig{Wrap: true})
+	for _, l := range []string{"seen one", "seen two", "new one", "new two"} {
+		s.Add(PlainCells(l, layout.Attr{}), 24)
+	}
+	s.InsertDivider(2, PlainCells("=====", layout.Attr{}))
+	var got []string
+	for i := 0; i < s.Vis(); i++ {
+		got = append(got, StripCells(s.SB.Phys(i)))
+	}
+	want := "seen one|seen two|=====|new one|new two"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("%q", strings.Join(got, "|"))
+	}
+}

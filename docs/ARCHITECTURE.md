@@ -83,6 +83,34 @@ cell-for-cell what tf draws (`scripts/compare_tf.py`).
 | `/help` (asks `HelpHost`)                            | reading `tf-help`                                        |
 | (nothing)                                            | telnet, MCCP, GMCP/MSDP/MSSP, panels, layouts           |
 
+## Connections (tf's socket life cycle)
+
+`internal/client/session.go`, `dial.go`, `alert.go`; compared with real tf by the `conn-*`
+scenarios of `scripts/compare_tf.py`.
+
+* A `/connect` made from the foreground context brings the new world to the foreground *first*
+  (tf `opensock`), onto the world's own screen, so "Trying to connect..." and a failure are
+  shown there. `-f`/`-b` and commands run by a background world's trigger decide otherwise.
+* The progress messages are the engine's hook messages (`PENDING`, `ICONFAIL`, `CONFAIL`,
+  `CONNECT`, `DISCONNECT`); the client only fires the events with tf's arguments
+  (`Dialer.Dial` reports the lookup, each address tried and each failure through `DialTrace`).
+  A lookup failure uses tf's own wording (`Unable to connect to W: host port: Unknown host`).
+  Like the reference tf (built without IPv6) the IPv4 addresses of a name are tried in turn;
+  IPv6 only when there is no IPv4 address.
+* A socket whose connection ends (failure, `/dc`, the server closing) becomes a *zombie*: it
+  keeps its place in `/listsockets` (`!`), the status line shows `!name`, and its screen stays.
+  It is forgotten (`reap`) after it has been in the foreground and the foreground changed.
+  A world's screen outlives its socket (reconnecting shows the old text); a temporary
+  `(unnamedN)` world and its screen go with the socket.
+* Messages about a world are written into that world's screen like server text; when the world
+  is in the background they are also raised as a status-line *alert* (`alert.go`: over the field
+  after `@world`, `%alert_attr`, `%alert_time`, cleared when the world comes to the foreground).
+* `%virtscreen` on (the default): the `---- World X ----` / `---- No world ----` line is
+  *not* printed (tf prints it only without virtual screens); a divider (`%textdiv_str`) is
+  inserted before the lines that arrived while the screen was in the background.
+  `%virtscreen off` (one shared screen) is not implemented; only the switch lines are printed.
+* `/connect -q` with auto-login hides the first lines of the server's output (tf `numquiet`).
+
 ## gtf-only additions (registered through the public API)
 
 * commands `/panel`, `/layout` (see LAYOUTS.md);
@@ -99,8 +127,6 @@ Each item is marked `TODO(merge)` / `TODO(core)` in the code.
 2. `hosts.go processLine`: `-ag` gag is honoured by reading `Match.Macro.Attrs` because the
    engine's `LineResult.Gag` was not set for `/def -ag` in the version this was written
    against; drop it when the engine sets it.
-3. `hosts.go HookMessage`: `HookAlert` messages are printed on the foreground screen; a
-   status-line alert area is not implemented.
 4. `hosts.go processLine`: BEL in server text rings the bell through `%beep`; use the
    engine's `LineResult.Bell` only (both are honoured today).
 5. `client.go`: `localecho` events are accepted without telnet ECHO negotiation (server
