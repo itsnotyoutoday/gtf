@@ -37,6 +37,9 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; v="${v%-rel}"; else v="0.0.0-${GITHUB_SHA::7}"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "$v" != "$(tr -d '[:space:]' < VERSION)" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the VERSION file ($(cat VERSION)); bump VERSION, commit, and tag again"; exit 1
+          fi
       - name: Build every platform
         env:
           VERSION: ${{ steps.v.outputs.version }}

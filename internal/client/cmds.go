@@ -49,6 +49,9 @@ func (c *Client) install() {
 func (c *Client) cmdVersion(in *gtfparser.Interp, args string) gtfparser.Value {
 	in.Host.Echo("% " + VersionVar() + ".")
 	in.Host.Echo("% Copyright (C) " + Year + " " + Holder + ".")
+	if ev := EngineVersion(); ev != "" {
+		in.Host.Echo("% Scripting engine: gtfparser " + ev + ".") // after the two lines the library's /ver parses
+	}
 	return gtfparser.Int(1)
 }
 

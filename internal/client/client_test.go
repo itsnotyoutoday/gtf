@@ -5,6 +5,8 @@ package client
 
 import (
 	"context"
+	"github.com/itsnotyoutoday/gtf"
+	"github.com/itsnotyoutoday/gtf/internal/update"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +67,7 @@ func TestConnectGmcpPanelAndInput(t *testing.T) {
 	srv.Expect([]byte("connect god pw\r\n"))
 	srv.Send(nettest.IAC(telnet.WILL, telnet.OptGMCP))
 	srv.Expect(nettest.IAC(telnet.DO, telnet.OptGMCP))
-	srv.Read(len(nettest.SB(telnet.OptGMCP, []byte(`Core.Hello {"client":"GTF","version":"0.0.1"}`)...)))
+	srv.Read(len(nettest.SB(telnet.OptGMCP, []byte(`Core.Hello {"client":"GTF","version":"`+Version+`"}`)...)))
 	srv.Read(len(nettest.SB(telnet.OptGMCP, []byte(`Core.Supports.Set ["Char 1","Room 1","Comm 1","Core 1","Group 1","Client.Media 1"]`)...)))
 	srv.Send([]byte("Welcome to the test game\r\nsecret plans\r\n"))
 	srv.Send(nettest.SB(telnet.OptGMCP, []byte(`Char.Vitals {"hp":40,"maxhp":80}`)...))
@@ -162,7 +164,7 @@ func TestIdentityBannerVersionAndCopyright(t *testing.T) {
 	c.Flush()
 	txt := scr.Text()
 	for _, w := range []string{
-		"GoTinyFugue version 0.0.1 (gtf), a TinyFugue-compatible client",
+		"GoTinyFugue version " + Version + " (gtf), a TinyFugue-compatible client",
 		"Copyright (C) 2026 Rick Bird. Inspired by and compatible with TinyFugue 5.0 beta 8, Copyright (C) 1993-2007 Ken Keys.",
 		"Type `/quit' to quit gtf.",
 	} {
@@ -171,7 +173,7 @@ func TestIdentityBannerVersionAndCopyright(t *testing.T) {
 		}
 	}
 	c.Do(func(in *gtfparser.Interp) {
-		if v := in.Var("version"); v != "GoTinyFugue version 0.0.1 (gtf), compatible with TinyFugue 5.0 beta 8" {
+		if v := in.Var("version"); v != VersionVar() {
 			t.Errorf("version = %q", v)
 		}
 		in.Exec("/version")
@@ -180,7 +182,7 @@ func TestIdentityBannerVersionAndCopyright(t *testing.T) {
 	})
 	c.Flush()
 	txt = scr.Text()
-	for _, w := range []string{"% GoTinyFugue version 0.0.1 (gtf), compatible with", "\n5.0 beta 8\n"} {
+	for _, w := range []string{"% GoTinyFugue version " + Version + " (gtf), compatible with", "\n5.0 beta 8\n"} {
 		if !strings.Contains(txt, w) {
 			t.Errorf("missing %q:\n%s", w, scr.Dump())
 		}
@@ -263,5 +265,18 @@ func TestVersionCommandHasNoKenKeys(t *testing.T) {
 	// the output of /version itself (after the banner): no mention of Ken Keys
 	if strings.Contains(text[i:], "Ken Keys") {
 		t.Fatalf("/version output names Ken Keys:\n%s", text[i:])
+	}
+}
+
+// The version is the VERSION file's content, compiled in: a plain build says the right number.
+func TestVersionComesFromVersionFile(t *testing.T) {
+	if versionOverride == "" && Version != gtf.Version() {
+		t.Fatalf("Version = %q, VERSION file = %q", Version, gtf.Version())
+	}
+	if _, err := update.ParseVersion(Version); err != nil {
+		t.Fatalf("the VERSION file must hold a semantic version: %v", err)
+	}
+	if !strings.Contains(VersionLine(), Version) {
+		t.Fatalf("VersionLine %q lacks %q", VersionLine(), Version)
 	}
 }

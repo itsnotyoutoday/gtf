@@ -13,6 +13,14 @@ cd "$(dirname "$0")/.."
 ver="${1#v}"; ver="${ver%-rel}"
 goarch="$2"; arm="${3:-}"
 [ -n "$ver" ] && [ -n "$goarch" ] || { echo "version and GOARCH must not be empty" >&2; exit 2; }
+# the version is the VERSION file (embedded at compile time); a release must be built from a tree whose
+# VERSION matches the tag. GTF_VERSION_OVERRIDE=1 builds the tree as another version (packaging tests only).
+vflag=""
+if [ "$ver" != "$(tr -d '[:space:]' < VERSION)" ]; then
+  [ -n "${GTF_VERSION_OVERRIDE:-}" ] || { echo "version $ver does not match the VERSION file ($(tr -d '[:space:]' < VERSION)); bump VERSION first" >&2; exit 2; }
+  vflag="-X github.com/itsnotyoutoday/gtf/internal/client.versionOverride=$ver"
+fi
+
 nfarch="$goarch"; [ "$goarch" = arm ] && nfarch="arm${arm:-7}"
 
 stage="dist/.pkg-root"
@@ -21,7 +29,7 @@ mkdir -p "$stage/bin" "$stage/lib/gtf" "$stage/doc" dist
 
 # -tags pkgbuild: the distribution build contains no GitHub fetch/install code (the package manager owns the files)
 CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" GOARM="$arm" go build -trimpath -tags pkgbuild \
-  -ldflags "-s -w -X github.com/itsnotyoutoday/gtf/internal/client.Version=$ver" \
+  -ldflags "-s -w $vflag" \
   -o "$stage/bin/gtf" ./cmd/gtf
 chmod 755 "$stage/bin/gtf"
 

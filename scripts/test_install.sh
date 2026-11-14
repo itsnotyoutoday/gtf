@@ -13,6 +13,7 @@ trap 'kill "$SRV" 2>/dev/null || true; rm -r "$T"' EXIT INT TERM
 ok() { printf 'ok   %s\n' "$*"; }
 fail() { printf 'FAIL %s\n' "$*" >&2; exit 1; }
 
+export GTF_VERSION_OVERRIDE=1   # build this one tree as two different versions
 os=$(go env GOOS); arch=$(go env GOARCH); label="$os-$arch"
 mkdir -p dist
 for v in 0.0.2-alpha1 0.0.3-alpha1; do ./scripts/dist.sh "$v" "$os" "$arch" >/dev/null; done

@@ -1,6 +1,7 @@
 # GoTinyFugue (gtf)
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//; s/-rel$$//' || echo 0.0.0-dev)
-LDFLAGS := -s -w -X github.com/itsnotyoutoday/gtf/internal/client.Version=$(VERSION)
+# the version is the VERSION file, embedded at compile time
+VERSION ?= $(shell cat VERSION)
+LDFLAGS := -s -w
 
 .PHONY: all build run test vet fmt dist dist-all packages clean
 

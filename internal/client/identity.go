@@ -5,6 +5,8 @@ package client
 
 import (
 	"runtime/debug"
+
+	"github.com/itsnotyoutoday/gtf"
 )
 
 // Identity: the single source of truth for the program's name, version and
@@ -23,10 +25,19 @@ const (
 	EngineURL = "https://github.com/itsnotyoutoday/gtfparser"
 )
 
-// Version is the release string. Release builds set it with
-// -ldflags "-X github.com/itsnotyoutoday/gtf/internal/client.Version=0.0.2"; a build without
-// that is the development version below.
-var Version = "0.0.1"
+// Version is the release string. It comes from the VERSION file at the repository root, embedded at
+// compile time (package gtf), so every build, `go build` and `go run` included, says the right number.
+// versionOverride exists only for the packaging tests, which build one tree as several versions.
+var Version = pickVersion(versionOverride, gtf.Version())
+
+var versionOverride string // set with -ldflags "-X ...client.versionOverride=..." (tests only)
+
+func pickVersion(override, file string) string {
+	if override != "" {
+		return override
+	}
+	return file
+}
 
 // VersionLine is "GoTinyFugue version 0.0.1 (gtf)".
 func VersionLine() string {

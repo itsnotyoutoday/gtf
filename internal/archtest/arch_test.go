@@ -28,6 +28,7 @@ type rule struct {
 }
 
 var rules = []rule{
+	{prefix: ".", allow: nil}, // version.go: the VERSION file, nothing else
 	{prefix: "cmd/gtf", allow: []string{"internal/client", "gtflib"}},
 	{prefix: "cmd/vtdump", allow: []string{"internal/ui/vt"}},
 	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "internal/update", "gtflib"}, engine: true},
