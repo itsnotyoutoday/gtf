@@ -295,6 +295,11 @@ func (c *Client) processLine(s *Session, line string) {
 			c.ui.Beep() // TODO(merge): engine bell result
 		}
 	}
+	for _, m := range res.Matches { // TODO(merge): the engine will set Gag for -ag
+		if m.Macro.Attrs != "" && c.parseTfAttrs(strings.Split(m.Macro.Attrs, "P")[0]).gag {
+			res.Gag = true
+		}
+	}
 	if res.Gag {
 		return
 	}

@@ -204,7 +204,7 @@ func (g *grid) putLine(x, y, maxw int, cells []layout.Cell) {
 // inputRows lays out the input window: returns the rows (cells) and the
 // cursor position inside the window.
 func (u *UI) inputRows() ([][]layout.Cell, int, int) {
-	w := u.W
+	w := max(u.W-1, 1) // tf wraps the input line one column short of the edge
 	ph := []rune(u.Prompt)
 	var text []rune
 	text = append(text, ph...)
@@ -229,7 +229,9 @@ func (u *UI) inputRows() ([][]layout.Cell, int, int) {
 	var rows [][]layout.Cell
 	for _, o := range u.old {
 		oo := []rune(o)
-		rows = append(rows, PlainCells(string(oo[:min(len(oo), w)]), layout.Attr{}))
+		for i := 0; i == 0 || i < len(oo); i += w {
+			rows = append(rows, PlainCells(string(oo[i:min(i+w, len(oo))]), layout.Attr{}))
+		}
 	}
 	off := len(rows)
 	rows = append(rows, cur_rows...)

@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"unicode"
-
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 )
 
@@ -25,41 +23,125 @@ func cellWidth(c layout.Cell) int {
 }
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' }
-func isPunct(r rune) bool { return r < 128 && unicode.IsPunct(r) || r < 128 && unicode.IsSymbol(r) }
+
+// line-break classes (a small subset of UAX #14, enough for tf's wrapping)
+const (
+	lbAL = iota // letters, symbols: no break between them
+	lbNU
+	lbSP
+	lbOP // ( [ { : no break after
+	lbCP // ) ] : no break before, none before letters
+	lbCL // } , etc: no break before
+	lbIS // . , : ; no break before; none before letters/digits
+	lbSY // / : no break before; break after unless a digit follows
+	lbEX // ! ? : no break before
+	lbHY // - : no break before; break after unless a digit follows
+	lbQU // quotes: no break either side
+	lbID // ideographs: break allowed anywhere
+)
+
+func lbClass(r rune) int {
+	switch {
+	case r == ' ' || r == '\t':
+		return lbSP
+	case r >= '0' && r <= '9':
+		return lbNU
+	case r == '(' || r == '[' || r == '{':
+		return lbOP
+	case r == ')' || r == ']':
+		return lbCP
+	case r == '}':
+		return lbCL
+	case r == '.' || r == ',' || r == ':' || r == ';':
+		return lbIS
+	case r == '/':
+		return lbSY
+	case r == '!' || r == '?':
+		return lbEX
+	case r == '-':
+		return lbHY
+	case r == '"' || r == '\'' || r == '`':
+		return lbQU
+	case RuneWidth(r) == 2 && r >= 0x2e80:
+		return lbID
+	}
+	return lbAL
+}
+
+// canBreakBefore reports whether a line may break between s[i-1] and s[i].
+func canBreakBefore(s []layout.Cell, i int) bool {
+	if i <= 0 || i >= len(s) {
+		return i == len(s)
+	}
+	if s[i].R == 0 || cellWidth(s[i]) == 0 {
+		return false // inside a wide character or after a base: keep marks attached
+	}
+	p, c := lbClass(s[i-1].R), lbClass(s[i].R)
+	if s[i-1].R == 0 { // placeholder: look at the base character
+		for k := i - 1; k >= 0; k-- {
+			if s[k].R != 0 {
+				p = lbClass(s[k].R)
+				break
+			}
+		}
+	}
+	switch {
+	case c == lbSP || c == lbCP || c == lbCL || c == lbIS || c == lbSY || c == lbEX || c == lbHY:
+		return false // LB13/LB21: never before these, even after spaces
+	case p == lbSP:
+		return true
+	case p == lbOP || c == lbQU || p == lbQU:
+		return false
+	case p == lbCP && (c == lbAL || c == lbNU):
+		return false
+	case p == lbIS && (c == lbAL || c == lbNU):
+		return false
+	case (p == lbSY || p == lbHY) && c == lbNU:
+		return false
+	case (p == lbAL || p == lbNU) && (c == lbAL || c == lbNU || c == lbOP):
+		return false
+	}
+	return true
+}
 
 // wraplen returns how many cells of s fit on one physical line of width
-// wrap (after indent), following tf's wraplen().
+// wrap (after indent), following tf's wraplen() in its Unicode build: the
+// line breaks at the last line-break opportunity strictly before the first
+// cell that does not fit, or one cell early when there is none.
 func wraplen(s []layout.Cell, wrap, indent int, cfg WrapConfig) int {
 	max := wrap - indent
 	if max < 1 {
 		max = 1
 	}
-	visible, total := 0, 0
-	for total < len(s) && visible < max {
-		visible += cellWidth(s[total])
-		total++
+	visible, i := 0, 0
+	for i < len(s) && visible < max {
+		visible += cellWidth(s[i])
+		i++
 	}
-	// do not split before a zero-width mark
-	for total < len(s) && cellWidth(s[total]) == 0 {
-		total++
-	}
-	if total >= len(s) {
+	if i >= len(s) {
 		return len(s)
 	}
-	n := total
-	if cfg.Wrap {
-		for n > 0 && !isSpace(s[n-1].R) {
-			n--
-		}
-		if cfg.Punct > 0 && n < total-cfg.Punct {
-			n = total
-			for n > 0 && !isSpace(s[n-1].R) && !isPunct(s[n-1].R) {
-				n--
-			}
+	for i < len(s) && cellWidth(s[i]) == 0 {
+		i++ // marks stay with their base
+	}
+	if i >= len(s) {
+		return len(s)
+	}
+	if !cfg.Wrap {
+		return i
+	}
+	for b := i - 1; b > 0; b-- {
+		if canBreakBefore(s, b) {
+			return b
 		}
 	}
-	if n == 0 {
-		return total
+	// no break opportunity: break before the previous character
+	n := i - 1
+	for n > 0 && (cellWidth(s[n]) == 0 || s[n].R == 0) {
+		n--
+	}
+	if n <= 0 {
+		return i
 	}
 	return n
 }

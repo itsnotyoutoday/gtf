@@ -113,7 +113,10 @@ func (c *Client) UI() *ui.UI { return c.ui }
 func (c *Client) Do(f func(*gtfparser.Interp)) { c.run.Do(f) }
 
 // Post queues f on the client's goroutine.
-func (c *Client) Post(f func(*gtfparser.Interp)) { c.run.Post(f) }
+func (c *Client) Post(f func(*gtfparser.Interp)) {
+	defer func() { recover() }() // posting to a closed runner is a no-op
+	c.run.Post(f)
+}
 
 // Done is closed when the client has quit.
 func (c *Client) Done() <-chan struct{} { return c.done }
@@ -143,6 +146,11 @@ func (c *Client) loadLibrary() error {
 		return err
 	}
 	c.libDir = dir
+	if c.cfg.LibDir == "" { // the library's local.tf is the user's own, normally absent: provide it empty
+		if lt := filepath.Join(dir, "local.tf"); fileMissing(lt) {
+			os.WriteFile(lt, nil, 0o644)
+		}
+	}
 	c.in.LibDirs = append([]string{dir}, c.in.LibDirs...)
 	c.in.SetVar("TFLIBDIR", dir)
 	c.in.SetVar("TFHELP", filepath.Join(dir, "tf-help"))
@@ -304,6 +312,12 @@ func (c *Client) scheduleRender() {
 	c.renderPending = true
 	c.renderMu.Unlock()
 	time.AfterFunc(6*time.Millisecond, func() {
+		defer func() { recover() }() // the runner may have been closed meanwhile
+		select {
+		case <-c.done:
+			return
+		default:
+		}
 		c.run.Post(func(*gtfparser.Interp) { c.Render() })
 	})
 }
@@ -461,3 +475,5 @@ func envOr(k, def string) string {
 	}
 	return def
 }
+
+func fileMissing(p string) bool { _, err := os.Stat(p); return err != nil }
