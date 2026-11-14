@@ -113,7 +113,7 @@ def main():
         return 0
     vtdump = os.path.join(tempfile.gettempdir(), "gtf-vtdump")
     gtf = os.path.join(tempfile.gettempdir(), "gtf-bin")
-    env = dict(os.environ, GOWORK="off")
+    env = dict(os.environ)  # honours a local go.work (see README)
     subprocess.check_call(["go", "build", "-o", vtdump, "./cmd/vtdump"], cwd=ROOT, env=env)
     subprocess.check_call(["go", "build", "-o", gtf, "./cmd/gtf"], cwd=ROOT, env=env)
     home = tempfile.mkdtemp()

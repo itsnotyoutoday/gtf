@@ -80,7 +80,7 @@ def main():
     if not game_up():
         print("Evennia test game not listening on %s:%d: skipping" % (HOST, PORT))
         return 0
-    env = dict(os.environ, GOWORK="off")
+    env = dict(os.environ)  # honours a local go.work (see README)
     tmp = tempfile.gettempdir()
     vtdump, gtf = os.path.join(tmp, "gtf-vtdump"), os.path.join(tmp, "gtf-bin")
     subprocess.check_call(["go", "build", "-o", vtdump, "./cmd/vtdump"], cwd=ROOT, env=env)
