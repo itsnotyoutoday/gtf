@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 )
 
@@ -285,8 +286,11 @@ func (p *exprParser) parseUnary() (eval, error) {
 				return v, err
 			}
 			n := v.Num()
-			if n.k == kInt {
+			switch n.k {
+			case kInt:
 				return Int(-n.i), nil
+			case kDec:
+				return decMicro(new(big.Int).Neg(n.dec)), nil
 			}
 			return Real(-n.f), nil
 		}, nil
@@ -438,6 +442,15 @@ func (p *exprParser) call(name string) (eval, error) {
 		for {
 			var a eval
 			var err error
+			if name == "whatis" && len(args) == 0 { // a bare variable reports "id:<type>"
+				save := p.pos
+				if id, ok := p.ident(); ok && p.peek(")") {
+					p.take(")")
+					return func() (Value, error) { return Str(p.in.whatisVar(id)), nil }, nil
+				} else {
+					p.pos = save
+				}
+			}
 			if name == "tfread" { // the last argument is a variable passed by name
 				save := p.pos
 				if id, ok := p.ident(); ok && p.peek(")") {
@@ -525,7 +538,9 @@ func binary(op string, a, b Value) (Value, error) {
 	}
 	x, y := a.Num(), b.Num()
 	var c int
-	if x.k == kInt && y.k == kInt {
+	if (x.k == kInt || x.k == kDec) && (y.k == kInt || y.k == kDec) && !(x.k == kInt && y.k == kInt) {
+		c = x.microOf().Cmp(y.microOf())
+	} else if x.k == kInt && y.k == kInt {
 		switch {
 		case x.i < y.i:
 			c = -1
@@ -594,6 +609,12 @@ func arith(op string, a, b Value) (Value, error) {
 			return Real(xf * yf), nil
 		}
 		return Int(r), nil
+	}
+	if (x.k == kInt || x.k == kDec) && (y.k == kInt || y.k == kDec) && (op == "+" || op == "-") {
+		if op == "+" {
+			return decMicro(new(big.Int).Add(x.microOf(), y.microOf())), nil
+		}
+		return decMicro(new(big.Int).Sub(x.microOf(), y.microOf())), nil
 	}
 	xf, yf := a.Float(), b.Float()
 	switch op {

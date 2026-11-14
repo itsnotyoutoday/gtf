@@ -363,7 +363,12 @@ func init() {
 	f["nlog"] = f["nactive"]
 	f["nmail"] = f["nactive"]
 	f["nread"] = f["nactive"]
-	f["whatis"] = func(in *Interp, a []Value) (Value, error) { return Str(""), nil }
+	f["whatis"] = func(in *Interp, a []Value) (Value, error) {
+		if len(a) == 0 {
+			return Str(""), nil
+		}
+		return Str(typeName(a[0])), nil
+	}
 	f["status_fields"] = func(in *Interp, a []Value) (Value, error) { return Str(""), nil }
 	f["status_width"] = func(in *Interp, a []Value) (Value, error) { return Int(0), nil }
 	f["winlines"] = func(in *Interp, a []Value) (Value, error) { return Int(24), nil }

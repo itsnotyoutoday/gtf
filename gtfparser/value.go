@@ -1,11 +1,12 @@
 // Package gtfparser is an interpreter for the TinyFugue scripting language,
 // written from TinyFugue's published documentation and its observable
 // behaviour. It is meant to be embedded (squatterd, squatclient) and to back
-// a standalone terminal client (cmd/gotf).
+// a standalone terminal client (cmd/gtf).
 package gtfparser
 
 import (
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -16,17 +17,18 @@ const (
 	kInt kind = iota
 	kReal
 	kStr
+	kDec // fixed-point decimal: microseconds in dec (TF's "decimal"/time type)
 )
 
-// Value is a TF value: integer, real, or string. Reals also stand for
-// dtimes and atimes, as in TF.
+// Value is a TF value: integer, float, decimal (fixed point, 6 places; what
+// TF uses for times and for literals like 1.5), or string.
 type Value struct {
-	k  kind
-	i  int64
-	f  float64
-	s  string
-	dt bool // a dtime literal: prints with a fractional part
-	en int  // enumerated variable value: 1 + index into its list (numeric value is the index)
+	k   kind
+	i   int64
+	f   float64
+	s   string
+	dec *big.Int // kDec: value * 1e6
+	en  int      // enumerated variable value: 1 + index into its list (numeric value is the index)
 }
 
 func Int(n int64) Value    { return Value{k: kInt, i: n} }
@@ -39,7 +41,19 @@ func Bool(b bool) Value {
 	return Int(0)
 }
 
-// SigFigs is the number of significant figures used when formatting reals.
+var million = big.NewInt(1000000)
+
+func decMicro(m *big.Int) Value { return Value{k: kDec, dec: m} }
+
+// microOf is the fixed-point value of an int or decimal.
+func (v Value) microOf() *big.Int {
+	if v.k == kDec {
+		return v.dec
+	}
+	return new(big.Int).Mul(big.NewInt(v.i), million)
+}
+
+// SigFigs is the number of significant figures used when formatting floats.
 var SigFigs = 15
 
 func (v Value) String() string {
@@ -47,27 +61,47 @@ func (v Value) String() string {
 	case kInt:
 		return strconv.FormatInt(v.i, 10)
 	case kReal:
-		if v.dt {
-			if r := formatReal0(v.f); !strings.ContainsAny(r, ".en") {
-				return r + ".0"
-			}
-			return formatReal0(v.f)
-		}
 		return formatReal(v.f)
+	case kDec:
+		return formatDec(v.dec)
 	}
 	return v.s
 }
 
+// formatDec prints seconds.microseconds with trailing zeros trimmed, keeping
+// at least one fractional digit ("7.0", "1.5").
+func formatDec(m *big.Int) string {
+	neg := m.Sign() < 0
+	a := new(big.Int).Abs(m)
+	q, r := new(big.Int).QuoRem(a, million, new(big.Int))
+	frac := strings.TrimRight(leftPad(r.String(), 6), "0")
+	if frac == "" {
+		frac = "0"
+	}
+	s := q.String() + "." + frac
+	if neg {
+		s = "-" + s
+	}
+	return s
+}
+
+func leftPad(s string, n int) string {
+	for len(s) < n {
+		s = "0" + s
+	}
+	return s
+}
+
+// formatReal prints a float as C's "%.*g" with %sigfigs does, plus the '.'
+// TF appends when the result looks like an integer.
 func formatReal(f float64) string {
 	s := formatReal0(f)
-	if !strings.ContainsAny(s, ".eEn") { // integral reals keep a decimal point, as TF prints them
+	if !strings.ContainsAny(s, ".eEn") {
 		s += "."
 	}
 	return s
 }
 
-// formatReal0 mimics how TF prints reals: plain decimal notation where it
-// reads well, %g-style exponent form otherwise (checked against real tf).
 func formatReal0(f float64) string {
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		return strconv.FormatFloat(f, 'g', -1, 64)
@@ -75,31 +109,10 @@ func formatReal0(f float64) string {
 	if f == 0 {
 		return "0"
 	}
-	e := int(math.Floor(math.Log10(math.Abs(f))))
-	dec := strconv.FormatFloat(f, 'f', -1, 64)
-	sig := len(strings.TrimLeft(strings.Replace(strings.TrimPrefix(dec, "-"), ".", "", 1), "0"))
-	switch {
-	case f == math.Trunc(f):
-		if e < SigFigs {
-			return dec
-		}
-	case e >= 17:
-	case e < -4:
-		if e >= -6 && sig <= SigFigs {
-			return dec
-		}
-	default:
-		if sig > SigFigs { // e.g. 0.1+0.2: round to the significant figures
-			if r := strconv.FormatFloat(f, 'g', SigFigs, 64); !strings.Contains(r, "e") {
-				return r
-			}
-		}
-		return dec
-	}
 	return strconv.FormatFloat(f, 'g', SigFigs, 64)
 }
 
-// Num converts to a number (int or real); strings are parsed by prefix.
+// Num converts to a number (int, decimal or float); strings are parsed by prefix.
 func (v Value) Num() Value {
 	if v.en > 0 {
 		return Int(int64(v.en - 1))
@@ -112,106 +125,147 @@ func (v Value) Num() Value {
 
 func (v Value) Float() float64 {
 	n := v.Num()
-	if n.k == kInt {
+	switch n.k {
+	case kInt:
 		return float64(n.i)
+	case kDec:
+		f, _ := new(big.Float).Quo(new(big.Float).SetInt(n.dec), big.NewFloat(1e6)).Float64()
+		return f
 	}
 	return n.f
 }
 
 func (v Value) Int() int64 {
 	n := v.Num()
-	if n.k == kInt {
+	switch n.k {
+	case kInt:
 		return n.i
+	case kDec:
+		return new(big.Int).Quo(n.dec, million).Int64()
 	}
 	return int64(n.f)
 }
 
 func (v Value) Truth() bool {
 	n := v.Num()
-	if n.k == kInt {
+	switch n.k {
+	case kInt:
 		return n.i != 0
+	case kDec:
+		return n.dec.Sign() != 0
 	}
 	return n.f != 0
 }
 
-// parseNumPrefix reads a leading integer, real or dtime (h:m[:s]) from s.
-// Anything else is 0.
+// decFromText builds a decimal from digits: sign, integer part, fraction
+// (at most 6 digits).
+func decFromText(neg bool, ip, fp string) Value {
+	if ip == "" {
+		ip = "0"
+	}
+	micro, _ := new(big.Int).SetString(ip+leftPadRight(fp, 6), 10)
+	if neg {
+		micro.Neg(micro)
+	}
+	return decMicro(micro)
+}
+
+func leftPadRight(s string, n int) string {
+	for len(s) < n {
+		s += "0"
+	}
+	return s
+}
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+// parseNumPrefix reads a leading integer, decimal, float or dtime (h:m[:s])
+// from s. Anything else is 0.
 func parseNumPrefix(s string) Value {
 	s = strings.TrimLeft(s, " \t")
 	i := 0
+	neg := false
 	if i < len(s) && (s[i] == '+' || s[i] == '-') {
+		neg = s[i] == '-'
 		i++
 	}
 	ds := i
-	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+	for i < len(s) && isDigit(s[i]) {
 		i++
 	}
 	intEnd := i
-	if intEnd == ds && !(i < len(s) && s[i] == '.' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9') {
+	if intEnd == ds && !(i < len(s) && s[i] == '.' && i+1 < len(s) && isDigit(s[i+1])) {
 		return Int(0)
 	}
 	// dtime: digits ':' digits [':' digits[.frac]]
-	if i < len(s) && s[i] == ':' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
-		neg := strings.HasPrefix(s, "-")
-		total := 0.0
-		parts := 0
+	if i < len(s) && s[i] == ':' && i+1 < len(s) && isDigit(s[i+1]) {
+		var parts []string
 		j := ds
-		for parts < 3 {
+		fracStr := ""
+		for len(parts) < 3 {
 			k := j
-			for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+			for k < len(s) && isDigit(s[k]) {
 				k++
 			}
-			if parts == 2 && k < len(s) && s[k] == '.' {
-				k++
-				for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+			parts = append(parts, s[j:k])
+			j = k
+			if len(parts) == 3 && j < len(s) && s[j] == '.' {
+				k = j + 1
+				for k < len(s) && isDigit(s[k]) {
 					k++
 				}
+				fracStr = s[j+1 : k]
+				j = k
 			}
-			f, _ := strconv.ParseFloat(s[j:k], 64)
-			total = total*60 + f
-			parts++
-			j = k
-			if j < len(s) && s[j] == ':' && j+1 < len(s) && s[j+1] >= '0' && s[j+1] <= '9' && parts < 3 {
+			if len(parts) < 3 && j+1 < len(s) && s[j] == ':' && isDigit(s[j+1]) {
 				j++
 				continue
 			}
 			break
 		}
-		if parts == 2 { // h:m, accumulated as minutes
-			total *= 60
+		secs := new(big.Int)
+		for _, p := range parts {
+			n, _ := new(big.Int).SetString(p, 10)
+			secs.Mul(secs, big.NewInt(60)).Add(secs, n)
 		}
-		if neg {
-			total = -total
+		if len(parts) == 2 { // h:m: the pair was accumulated as minutes
+			secs.Mul(secs, big.NewInt(60))
 		}
-		v := Real(total)
-		v.dt = true
+		if len(fracStr) > 6 {
+			fracStr = fracStr[:6]
+		}
+		v := decFromText(neg, secs.String(), fracStr)
 		return v
 	}
-	isReal := false
-	if i < len(s) && s[i] == '.' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
-		isReal = true
-		i++
-		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-			i++
+	ip := s[ds:intEnd]
+	frac := ""
+	hasDot := false
+	if i < len(s) && s[i] == '.' {
+		hasDot = true
+		k := i + 1
+		for k < len(s) && isDigit(s[k]) {
+			k++
 		}
-	} else if i < len(s) && s[i] == '.' {
-		isReal = true
-		i++
+		frac = s[i+1 : k]
+		i = k
 	}
 	if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
 		j := i + 1
 		if j < len(s) && (s[j] == '+' || s[j] == '-') {
 			j++
 		}
-		if j < len(s) && s[j] >= '0' && s[j] <= '9' {
-			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		if j < len(s) && isDigit(s[j]) {
+			for j < len(s) && isDigit(s[j]) {
 				j++
 			}
-			isReal = true
-			i = j
+			f, _ := strconv.ParseFloat(s[:j], 64)
+			return Real(f)
 		}
 	}
-	if isReal {
+	if hasDot {
+		if len(frac) <= 6 {
+			return decFromText(neg, ip, frac)
+		}
 		f, _ := strconv.ParseFloat(s[:i], 64)
 		return Real(f)
 	}

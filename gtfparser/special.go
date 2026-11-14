@@ -9,9 +9,7 @@ func (sp varSpec) initial() Value {
 	case "int", "pos":
 		return Str(sp.def).Num()
 	case "time":
-		v := Str(sp.def).Num()
-		v.dt = true
-		return v
+		return Str(sp.def).Num()
 	case "enum":
 		v, _ := sp.coerce(Str(sp.def))
 		return v
@@ -31,9 +29,7 @@ func (sp varSpec) coerce(v Value) (Value, bool) {
 		}
 		return Int(n), true
 	case "time":
-		n := v.Num()
-		n.dt = true
-		return n, true
+		return v.Num(), true
 	case "enum":
 		s := v.String()
 		for i, e := range sp.enum {
@@ -79,4 +75,36 @@ func (in *Interp) setGlobal(name string, v Value) bool {
 	}
 	in.globals[name] = v
 	return true
+}
+
+func typeName(v Value) string {
+	if v.en > 0 {
+		return "enum"
+	}
+	switch v.k {
+	case kInt:
+		return "int"
+	case kDec:
+		return "decimal"
+	case kReal:
+		return "float"
+	}
+	return "string"
+}
+
+// whatisVar is whatis() applied to a bare variable name.
+func (in *Interp) whatisVar(name string) string {
+	v, ok := in.lookup(name)
+	if !ok {
+		return "id:"
+	}
+	if sp, ok := specialVars[name]; ok {
+		switch sp.kind {
+		case "pos":
+			return "id:pos"
+		case "time":
+			return "id:dtime"
+		}
+	}
+	return "id:" + typeName(v)
 }
