@@ -20,13 +20,25 @@ func (b *backend) HandleExt(p wire.Peer, t, reqID string, raw []byte) (bool, err
 	if b.s.Config().Kind != KindTF {
 		return false, nil
 	}
+	g := b.s.gtfOf(p)
+	if g != nil {
+		if handled, err := b.handleGTF(p, g, t, raw); handled {
+			return true, err
+		}
+		if g.has(FeatWorlds) {
+			switch t {
+			case wire.TWorldPut, wire.TWorldDelete, wire.TWorldRename:
+				return true, b.handleWorldEdit(p, g, t, reqID, raw)
+			}
+		}
+	}
 	switch t {
 	case wire.TControlGet:
 		return true, b.controlGet(p, reqID, raw)
 	case wire.TControlSet:
 		return true, b.controlSet(p, reqID, raw)
 	case wire.TWorldList:
-		return true, b.worldList(p, reqID)
+		return true, b.worldList(p, g, reqID)
 	case wire.TGmcpSend:
 		return true, b.gmcpSend(p, reqID, raw)
 	case wire.TMsdpSend:
@@ -45,8 +57,11 @@ func (b *backend) HandleExt(p wire.Peer, t, reqID string, raw []byte) (bool, err
 			}
 		}()
 		return true, nil
-	case wire.TWorldPut, wire.TWorldDelete, wire.TWorldRename, wire.TScriptPut, wire.TScriptList, wire.TScriptDelete:
-		return true, wire.Errf(proto.ErrBadRequest, t+" is not supported by gtf (use tf.exec with /addworld, /undefn, /load)")
+	case wire.TWorldPut, wire.TWorldDelete, wire.TWorldRename:
+		return true, wire.Errf(ErrUnsupported, t+" is not available on this connection: editing worlds needs the gtf extension (feature \"worlds\", docs/SWP-GTF.md); "+
+			"an admin can run /addworld, /unworld or /renameworld with tf.exec")
+	case wire.TScriptPut, wire.TScriptList, wire.TScriptDelete:
+		return true, wire.Errf(ErrUnsupported, t+" is not supported by gtf (an admin can run /load with tf.exec)")
 	}
 	return false, nil
 }
@@ -56,6 +71,27 @@ func (b *backend) HandleExt(p wire.Peer, t, reqID string, raw []byte) (bool, err
 func (ss *session) controlMsg(reqID string) wire.ControlStateMsg {
 	return wire.ControlStateMsg{V: proto.Version, T: wire.TControlState, ReqID: reqID, Session: ss.id,
 		Input: wire.ModeBoth, Automation: wire.ModeTF}
+}
+
+// controlFor builds the control.state answer for a peer: the compatible message for a plain peer;
+// for a gtf peer the same plus "shared", the real state of the shared-control model.
+func (ss *session) controlFor(g *gtfPeer, reqID string) any {
+	m := ss.controlMsg(reqID)
+	if g == nil {
+		return m
+	}
+	s := ss.s
+	n := ss.attachedCount()
+	return struct {
+		wire.ControlStateMsg
+		Shared map[string]any `json:"shared"`
+	}{m, map[string]any{"model": "shared", "naws": s.Config().NAWS, "cols": s.ReportedCols(ss.id), "attached": n}}
+}
+
+func (ss *session) attachedCount() int {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	return len(ss.attached)
 }
 
 func (b *backend) controlGet(p wire.Peer, reqID string, raw []byte) error {
@@ -68,11 +104,12 @@ func (b *backend) controlGet(p wire.Peer, reqID string, raw []byte) error {
 		if ss == nil {
 			return wire.Errf(proto.ErrNoSuchSession, "no such session")
 		}
-		p.Send(ss.controlMsg(reqID))
+		p.Send(ss.controlFor(b.s.gtfOf(p), reqID))
 		return nil
 	}
+	g := b.s.gtfOf(p)
 	for _, ss := range b.s.sessionList() {
-		p.Send(ss.controlMsg(reqID))
+		p.Send(ss.controlFor(g, reqID))
 	}
 	return nil
 }
@@ -98,13 +135,14 @@ func (b *backend) controlSet(p wire.Peer, reqID string, raw []byte) error {
 		targets = targets[:0]
 		targets = append(targets, ss)
 	}
+	g := b.s.gtfOf(p)
 	for _, ss := range targets {
-		p.Send(ss.controlMsg(reqID))
+		p.Send(ss.controlFor(g, reqID))
 	}
 	return nil
 }
 
-func (b *backend) worldList(p wire.Peer, reqID string) error {
+func (b *backend) worldList(p wire.Peer, g *gtfPeer, reqID string) error {
 	var ws []proto.TFWorld
 	if err := b.hostDo(func() { ws = b.s.host.Worlds() }); err != nil {
 		return err
@@ -114,6 +152,9 @@ func (b *backend) worldList(p wire.Peer, reqID string) error {
 	}
 	for i := range ws {
 		ws[i].MFile = "" // a macro file is code gtf loads: never shown
+		if !g.has(FeatWorlds) {
+			ws[i].Rev = 0 // revisions exist only for peers that negotiated the extension
+		}
 	}
 	p.Send(wire.WorldListMsg{V: proto.Version, T: wire.TWorldList, ReqID: reqID, Worlds: ws})
 	return nil

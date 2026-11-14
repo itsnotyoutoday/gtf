@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/itsnotyoutoday/gtf/gtflib"
@@ -93,6 +94,7 @@ type Client struct {
 	captureWarn                          bool
 	tapGame, gameLine, noTap, remoteSend bool
 	lastSquatID                          string
+	worldAuthor                          string // device name while a peer's world edit runs ("" = local)
 
 	keyTimer      *time.Timer
 	renderMu      sync.Mutex
@@ -101,7 +103,7 @@ type Client struct {
 	done          chan struct{}
 	doneOnce      sync.Once
 	libDir        string
-	closed        bool
+	closed        atomic.Bool
 
 	// restart state (restart*.go)
 	restarting   bool
@@ -175,8 +177,7 @@ func (c *Client) Done() <-chan struct{} { return c.done }
 // Close stops everything.
 func (c *Client) Close() {
 	c.doneOnce.Do(func() { close(c.done) })
-	if !c.closed {
-		c.closed = true
+	if c.closed.CompareAndSwap(false, true) {
 		func() { // the squatter writes status variables: stop it on the engine goroutine
 			defer func() { recover() }()
 			c.run.Do(func(*gtfparser.Interp) { c.sq.stop() })
@@ -390,8 +391,12 @@ func (c *Client) onResize() {
 		nw = max(c.ui.W-1, 1)
 	}
 	c.in.Exec(fmt.Sprintf("/set wrapsize=%d", nw))
-	for _, s := range c.order {
-		s.resize(c.ui.W, c.ui.H)
+	if !(c.sq != nil && c.sq.active() && c.sq.sq.LocalResized(c.ui.W, c.ui.H)) {
+		// squatter_naws=local (or no squatter): the game is told the size of this terminal at once; with
+		// the other policies the squatter decides, debounced (squatter.go, naws.go)
+		for _, s := range c.order {
+			s.resize(c.ui.W, c.ui.H)
+		}
 	}
 	c.in.FireHook("RESIZE", fmt.Sprintf("%d %d", c.ui.W, c.ui.H))
 }

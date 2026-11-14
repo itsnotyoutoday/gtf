@@ -153,6 +153,15 @@ The `squatter_*` variables are compared after every task and on the 250 ms poll 
 applies at once. A remote `tf.exec` captures output by diverting `addLine` (`c.capture`). Disabled, none of
 this does any work beyond that comparison.
 
+The gtf extension to the protocol (docs/SWP-GTF.md) lives in `internal/squatter/ext_gtf.go` (negotiation,
+presence, typing, rate limits, author tags), `naws.go` (the shared terminal width policy) and `worlds_x.go`
+(world edits with revisions; `ApplyWorldEdit` is pure over a `WorldDB`). The client half is
+`internal/client/squatter_gtf.go`: the engine's world database as a `WorldDB`, persistence of the world file
+with backups, `nawsCols`, and the local terminal's view and typing reported to the squatter. World changes
+reach the squatter through the engine's `world` / `renameworld` Notifier events (a core change, CORE-CHANGES
+v0.0.11), so typed `/addworld` and a peer's edit take the same path. Everything the squatter itself prints
+goes through `privateLine`, never into a scrollback.
+
 ## Merge checklist (things in the client that exist only because of an engine gap)
 
 Each item is marked `TODO(merge)` / `TODO(core)` in the code.

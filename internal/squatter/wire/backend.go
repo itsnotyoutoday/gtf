@@ -7,6 +7,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/itsnotyoutoday/gtf/internal/squatter/proto"
 )
@@ -23,6 +24,20 @@ type Peer interface {
 	Send(msg any) bool
 	SendRaw(frame []byte) bool
 	Close(reason string)
+}
+
+// Extender is implemented by peers that can report the extensions the client announced in hello.
+// Ext returns the raw announcement object of one extension, nil when it was not announced.
+type Extender interface {
+	Ext(name string) json.RawMessage
+	Offer() []string
+}
+
+// ExtWelcomer is optionally implemented by a Backend: WelcomeExt is called (after PeerJoined) to
+// build the welcome's "ext" answer for p (nil or empty: no "ext" member) and "negotiated" list (the
+// accepted names of the client's hello.offer).
+type ExtWelcomer interface {
+	WelcomeExt(p Peer) (map[string]any, []string)
 }
 
 // Backend is what the Server drives (implemented by internal/daemon). Methods

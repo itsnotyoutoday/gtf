@@ -428,6 +428,9 @@ func (c *Client) showWorldLine(s *Session, cells []layout.Cell, plain string, re
 // state changes the display or terminal must act on.
 func (c *Client) Notify(e gtfparser.Event) {
 	switch e.Kind {
+	case "world", "renameworld":
+		c.squatWorldEvent(e)
+		return
 	case "beep":
 		n := 1
 		if len(e.Args) > 0 {

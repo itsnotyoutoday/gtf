@@ -40,6 +40,9 @@ func (c *Client) onKeys(s string) {
 		before := c.in.Input().Text()
 		at := c.ui.Scr.Vis()
 		c.in.KeyPressed(seg)
+		if last == '\r' || last == '\n' {
+			c.squatLocalInput()
+		}
 		if (last == '\r' || last == '\n') && c.in.Input().Text() == "" {
 			if c.ui.Hidden {
 				before = ""
@@ -47,6 +50,7 @@ func (c *Client) onKeys(s string) {
 			c.ui.NoteSubmittedAt(before, at)
 		}
 	}
+	c.squatLocalTyping()
 	if c.in.PendingKeys() != "" {
 		c.keyTimer = time.AfterFunc(250*time.Millisecond, func() {
 			c.run.Post(func(*gtfparser.Interp) { c.in.FlushKeys(); c.afterTask() })

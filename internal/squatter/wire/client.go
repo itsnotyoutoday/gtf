@@ -51,6 +51,9 @@ type ClientOptions struct {
 	// ExpectKind, if set ("squatterd" or "tf-squatterd"), makes Dial refuse a server
 	// of another kind BEFORE the public key is sent (see KindMismatchError). It also
 	// picks the default endpoint path (/swp or /tfsp).
+	// Ext announces protocol extensions in hello, e.g. {"gtf": {"v":1,"features":[...]}} (docs/SWP-GTF.md).
+	Ext              map[string]any
+	Offer            []string // the simple form: hello.offer
 	ExpectKind       string
 	EventBuffer      int // default 256; the reader blocks (TCP backpressure) when full
 	HandshakeTimeout time.Duration
@@ -150,6 +153,8 @@ type Client struct {
 	user     string
 	sessions []proto.SessionInfo
 	features []string
+	wext     map[string]json.RawMessage
+	negot    []string
 	serverFP atomic.Value // string
 
 	reqSeq atomic.Uint64
@@ -259,6 +264,13 @@ func Dial(ctx context.Context, rawURL string, opts ClientOptions) (*Client, erro
 	default:
 		hello.PublicKey, hello.User = auth.PublicKeyB64(opts.Key), opts.User
 	}
+	if len(opts.Ext) > 0 {
+		hello.Ext = map[string]json.RawMessage{}
+		for k, v := range opts.Ext {
+			hello.Ext[k], _ = json.Marshal(v)
+		}
+	}
+	hello.Offer = opts.Offer
 	b, _ := json.Marshal(hello)
 	if err := ws.Write(dctx, websocket.MessageText, b); err != nil {
 		return nil, fmt.Errorf("wire: sending hello: %w", err)
@@ -284,6 +296,12 @@ func Dial(ctx context.Context, rawURL string, opts ClientOptions) (*Client, erro
 		c.deviceID, c.server, c.sessions, c.features = w.DeviceID, w.Server, w.Sessions, w.Features
 		c.instance, c.role, c.user = w.Instance, w.Role, w.User
 		c.reload = w.Reload
+		var we struct {
+			Ext map[string]json.RawMessage `json:"ext"`
+		}
+		_ = json.Unmarshal(raw, &we)
+		c.wext = we.Ext
+		c.negot = w.Negotiated
 		if w.Kind != "" {
 			c.kind = w.Kind
 		}
@@ -592,7 +610,7 @@ func (c *Client) request(ctx context.Context, msg func(id string) any) (any, err
 			return nil, ErrClosed
 		}
 		if e, isErr := v.(ErrorMsg); isErr {
-			return nil, &ProtoError{Code: e.Code, Message: e.Message}
+			return nil, &ProtoError{Code: e.Code, Message: e.Message, Data: e.Data}
 		}
 		return v, nil
 	case <-ctx.Done():

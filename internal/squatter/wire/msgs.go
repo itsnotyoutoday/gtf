@@ -63,6 +63,13 @@ type Hello struct {
 	User   string `json:"user,omitempty"`
 	SSHKey string `json:"sshKey,omitempty"`
 	SSHSig string `json:"sshSig,omitempty"`
+	// Ext announces protocol extensions, name -> extension-specific object (gtf addition, see
+	// docs/SWP-GTF.md). A server that does not know an extension ignores it.
+	Ext map[string]json.RawMessage `json:"ext,omitempty"`
+	// Offer is the simple form of the same announcement: a list of extension names (SquatClient's
+	// "Hello.Offer"); "gtf" offers the gtf extension version 1, optionally narrowed by feature names
+	// ("author" or "gtf.author"). The server answers in Welcome.Negotiated.
+	Offer []string `json:"offer,omitempty"`
 }
 
 // Challenge is the first message the daemon sends.
@@ -99,6 +106,12 @@ type Welcome struct {
 	// UpdateAvailable is the newest released version when it is newer than the running daemon
 	// (set only by squatterd with auto_update on; absent otherwise). Informational.
 	UpdateAvailable string `json:"updateAvailable,omitempty"`
+	// Ext answers the extensions the client announced in hello (gtf addition, docs/SWP-GTF.md). Only
+	// present when the client announced at least one extension the server speaks.
+	Ext map[string]any `json:"ext,omitempty"`
+	// Negotiated answers Hello.Offer: the offered names the server accepts (same spelling), nothing
+	// when the client offered nothing or nothing is accepted.
+	Negotiated []string `json:"negotiated,omitempty"`
 }
 
 // FeatureNoEcho: the daemon honours SendReq.NoEcho (the line is delivered to the
@@ -115,6 +128,8 @@ type ErrorMsg struct {
 	ReqID   string `json:"reqId,omitempty"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Data is optional machine-readable detail (gtf addition: the current world on a "conflict").
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 // ConnectReq is session.connect.
@@ -228,6 +243,7 @@ func NewError(reqID, code, msg string) ErrorMsg {
 type ProtoError struct {
 	Code    string
 	Message string
+	Data    json.RawMessage // optional detail, sent as the error's "data"
 }
 
 func (e *ProtoError) Error() string { return e.Code + ": " + e.Message }

@@ -63,7 +63,7 @@ func (c *Client) startRestored() {
 // adopted sockets are released without ending anything.
 func (c *Client) discardRestored() {
 	c.doneOnce.Do(func() { close(c.done) })
-	c.closed = true
+	c.closed.Store(true)
 	for _, s := range c.order {
 		if s.conn != nil {
 			s.conn.Discard()
@@ -76,7 +76,7 @@ func (c *Client) discardRestored() {
 // terminal: what exec does to the old process. A test hook for the exec uses it.
 func (c *Client) Abandon() {
 	c.doneOnce.Do(func() { close(c.done) })
-	c.closed = true
+	c.closed.Store(true)
 	for _, s := range c.order {
 		if s.cancel != nil {
 			s.cancel()

@@ -144,6 +144,8 @@ type client struct {
 	out  chan []byte
 
 	devID, devName, role, user string
+	ext                        map[string]json.RawMessage
+	offer                      []string
 
 	mu       sync.Mutex
 	caps     proto.Caps
@@ -159,6 +161,12 @@ func (c *client) DeviceName() string { return c.devName }
 // paired before roles existed are "admin".
 func (c *client) Role() string     { return c.role }
 func (c *client) Caps() proto.Caps { c.mu.Lock(); defer c.mu.Unlock(); return c.caps }
+
+// Ext returns what the client announced for the named extension in its hello (nil if nothing).
+func (c *client) Ext(name string) json.RawMessage { return c.ext[name] }
+
+// Offer returns the names the client offered in hello.offer.
+func (c *client) Offer() []string { return c.offer }
 
 func (c *client) Send(msg any) bool {
 	b, err := json.Marshal(msg)
@@ -332,6 +340,12 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	if hello.Caps != nil {
 		c.caps = *hello.Caps
 	}
+	if len(hello.Ext) > 0 && len(hello.Ext) <= 16 {
+		c.ext = hello.Ext
+	}
+	if len(hello.Offer) > 0 && len(hello.Offer) <= 64 {
+		c.offer = hello.Offer
+	}
 	s.mu.Lock()
 	if s.closed || len(s.clients) >= s.cfg.MaxClients {
 		s.mu.Unlock()
@@ -356,7 +370,12 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.UpdateAvailable != nil {
 		upd = s.cfg.UpdateAvailable()
 	}
-	if err := s.writeDirect(ctx, ws, Welcome{V: proto.Version, T: TWelcome, Server: s.cfg.ServerName, DeviceID: dev.DeviceID, Role: c.role, User: userName, Sessions: infos, Features: s.features(), Kind: s.cfg.Kind, Instance: s.cfg.Instance, UpdateAvailable: upd, Reload: s.reloadInfo()}); err != nil {
+	var wext map[string]any
+	var wneg []string
+	if ew, ok := s.cfg.Backend.(ExtWelcomer); ok {
+		wext, wneg = ew.WelcomeExt(c)
+	}
+	if err := s.writeDirect(ctx, ws, Welcome{V: proto.Version, T: TWelcome, Server: s.cfg.ServerName, DeviceID: dev.DeviceID, Role: c.role, User: userName, Sessions: infos, Features: s.features(), Kind: s.cfg.Kind, Instance: s.cfg.Instance, UpdateAvailable: upd, Reload: s.reloadInfo(), Ext: wext, Negotiated: wneg}); err != nil {
 		c.Close("welcome write failed")
 		return
 	}
@@ -450,7 +469,9 @@ func (s *Server) replyErr(c *client, reqID, code, msg string) {
 func (s *Server) fail(c *client, reqID string, err error) {
 	var we *ProtoError
 	if errors.As(err, &we) {
-		s.replyErr(c, reqID, we.Code, we.Message)
+		e := NewError(reqID, we.Code, we.Message)
+		e.Data = we.Data
+		c.Send(e)
 		return
 	}
 	s.log.Error("wire: backend error", "err", err)

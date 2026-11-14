@@ -170,6 +170,9 @@ type Line struct {
 	// Disp is the text TinyFugue will display after its triggers ran (hilites,
 	// substitutions); set only when it differs from Spans (tf-squatterd only).
 	Disp []Span `json:"disp,omitempty"`
+	// Author says who sent an echoed line: the device name, or "local" for gtf's own terminal or a
+	// script. Only sent to peers that negotiated the gtf extension (feature "author"); gtf addition.
+	Author string `json:"author,omitempty"`
 }
 
 // MsdpMsg is one MSDP message from the game: a set of variables. Values are
@@ -338,4 +341,6 @@ type TFWorld struct {
 	Charset string `json:"charset,omitempty"`
 	MFile   string `json:"mfile,omitempty"` // only shown to admins
 	Temp    bool   `json:"temp,omitempty"`
+	// Rev is the record's revision (gtf extension, feature "worlds"); 0 and omitted for other peers.
+	Rev uint64 `json:"rev,omitempty"`
 }

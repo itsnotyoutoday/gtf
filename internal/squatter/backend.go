@@ -86,11 +86,20 @@ func (b *backend) PeerJoined(p wire.Peer) []proto.SessionInfo {
 func (b *backend) PeerLeft(p wire.Peer) {
 	s := b.s
 	s.pmu.Lock()
+	var g *gtfPeer
+	var was []string
+	if pi := s.peers[p.ID()]; pi != nil {
+		g = pi.gtf
+		for id := range g.attachedSet() {
+			was = append(was, id)
+		}
+	}
 	delete(s.peers, p.ID())
 	s.pmu.Unlock()
 	for _, ss := range s.sessionList() {
 		ss.detach(p)
 	}
+	s.peerGone(g, was)
 	name, role := p.DeviceName(), roleName(p)
 	s.host.Post(func() { s.host.Hook("SQUAT_DISCONNECT", name, role) })
 	s.publishLater()
@@ -202,13 +211,18 @@ func (b *backend) Attach(p wire.Peer, req wire.AttachReq) error {
 	if ss == nil {
 		return wire.Errf(proto.ErrNoSuchSession, "no such session")
 	}
-	return ss.attach(p, req)
+	if err := ss.attach(p, req); err != nil {
+		return err
+	}
+	b.s.setAttached(p, req.Session, true)
+	return nil
 }
 
 func (b *backend) Detach(p wire.Peer, session string) error {
 	if ss := b.s.session(session); ss != nil {
 		ss.detach(p)
 	}
+	b.s.setAttached(p, session, false)
 	return nil
 }
 
@@ -225,6 +239,15 @@ func (b *backend) send(p wire.Peer, session, text string, secret bool) error {
 	}
 	if ss.endedState() {
 		return wire.Errf(proto.ErrSessionEnded, "the connection has ended")
+	}
+	g := b.s.gtfOf(p)
+	if g != nil {
+		b.s.pmu.Lock()
+		ok := g.allow("send")
+		b.s.pmu.Unlock()
+		if !ok {
+			return wire.Errf(proto.ErrRateLimited, "too many messages: slow down")
+		}
 	}
 	cfg := b.s.Config()
 	cmd := !secret && cfg.Commands && rank(p) >= rankAdmin && len(text) > 0 && text[0] == '/'
@@ -246,6 +269,7 @@ func (b *backend) send(p wire.Peer, session, text string, secret bool) error {
 	if err != nil {
 		return wire.Errf(proto.ErrBadRequest, err.Error())
 	}
+	b.s.noteInput(p, g, session)
 	return nil
 }
 
@@ -265,8 +289,15 @@ func (b *backend) Ack(p wire.Peer, session string, seq uint64) error {
 	return nil
 }
 
-// Resize is ignored: the game keeps being told the size of gtf's own terminal, where the local user is.
-func (b *backend) Resize(p wire.Peer, session string, cols, rows int) error { return nil }
+// Resize is ignored for a plain peer: the game keeps being told the size of gtf's own terminal, where
+// the local user is. A peer that negotiated the gtf extension (naws) feeds the NAWS policy
+// (squatter_naws, naws.go).
+func (b *backend) Resize(p wire.Peer, session string, cols, rows int) error {
+	if g := b.s.gtfOf(p); g.has(FeatNAWS) {
+		return b.resizeFrom(p, g, session, cols)
+	}
+	return nil
+}
 
 // CapsChanged: capabilities toward the game are fixed by gtf's own terminal.
 func (b *backend) CapsChanged(p wire.Peer) {}

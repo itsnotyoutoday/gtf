@@ -22,10 +22,12 @@ import (
 )
 
 type squatState struct {
-	c      *Client
-	sq     *squatter.Squatter
-	sig    string
-	warned map[string]bool
+	c        *Client
+	sq       *squatter.Squatter
+	sig      string
+	warned   map[string]bool
+	lastView string // the foreground session last reported to the squatter
+	worldSum string // content last written to the world file by a peer's edit (see saveWorlds)
 }
 
 func newSquatState(c *Client) *squatState {
@@ -41,9 +43,10 @@ func (st *squatState) active() bool { return st.sq.Active() }
 // squatCheck applies the squatter_* variables when any of them changed (and once at startup). It
 // is cheap: a dozen map lookups.
 func (c *Client) squatCheck() {
-	if c.sq == nil || c.closed {
+	if c.sq == nil || c.closed.Load() {
 		return
 	}
+	c.squatLocalView()
 	var b strings.Builder
 	for _, n := range squatter.ConfigVars {
 		b.WriteString(c.in.Var(n))
@@ -58,7 +61,7 @@ func (c *Client) squatCheck() {
 	for _, w := range warns {
 		if !c.sq.warned[w] {
 			c.sq.warned[w] = true
-			c.echoLine("% squatter: " + w)
+			c.privateLine("% squatter: " + w)
 		}
 	}
 	c.sq.sq.Apply(cfg, c.squatSeed)
@@ -271,6 +274,13 @@ func (h *squatHost) Connect(t squatter.ConnectTarget) (string, error) {
 		if !safeWord(t.Host) {
 			return "", fmt.Errorf("bad host name")
 		}
+		if name := c.adhocWorldName(t); name != "" {
+			// honour the name the peer sent: a temporary world of that name (dropped when the
+			// connection ends, like "/connect host port" makes)
+			c.in.DefineWorld(gtfparser.WorldInfo{Name: name, Host: t.Host, Port: strconv.Itoa(t.Port), SSL: t.TLS, Temp: true})
+			line += name
+			break
+		}
 		if t.TLS {
 			line = "/connect -b -x "
 		}
@@ -290,6 +300,33 @@ func (h *squatHost) Connect(t squatter.ConnectTarget) (string, error) {
 		return "", fmt.Errorf("%s", strings.TrimPrefix(out[len(out)-1], "% "))
 	}
 	return c.lastSquatID, nil
+}
+
+// adhocWorldName turns the name a peer gave an ad hoc connection into a world name that is free
+// ("" = none usable: fall back to the engine's "(unnamedN)").
+func (c *Client) adhocWorldName(t squatter.ConnectTarget) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(t.Name) {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.:[]", r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	base := b.String()
+	if len(base) > 48 {
+		base = base[:48]
+	}
+	if base == "" || strings.Trim(base, "_") == "" || strings.EqualFold(base, "default") || base[0] == '/' {
+		return ""
+	}
+	name := base
+	for i := 2; ; i++ {
+		if _, taken := c.in.World(name); !taken {
+			return name
+		}
+		name = fmt.Sprintf("%s-%d", base, i)
+	}
 }
 
 // safeWord allows only what can be a world name or host name inside a command line.
@@ -356,10 +393,21 @@ func (h *squatHost) Exec(line string) (bool, []string) {
 func (h *squatHost) Worlds() []proto.TFWorld {
 	var out []proto.TFWorld
 	for _, w := range h.c.in.Worlds() {
-		out = append(out, proto.TFWorld{Name: w.Name, Host: w.Host, Port: w.Port, Type: w.Type, Char: w.Character,
-			PassSet: w.Password != "", TLS: w.SSL, Echo: w.Echo, Charset: w.Charset, Temp: w.Temp})
+		out = append(out, tfWorld(w))
 	}
 	return out
+}
+
+// tfWorld is the wire form of a world: never the password (PassSet only) nor the macro file.
+func tfWorld(w gtfparser.WorldInfo) proto.TFWorld {
+	return proto.TFWorld{Name: w.Name, Host: w.Host, Port: w.Port, Type: w.Type, Char: w.Character,
+		PassSet: w.Password != "", TLS: w.SSL, Echo: w.Echo, Charset: w.Charset, Temp: w.Temp, Rev: w.Rev}
+}
+
+func (h *squatHost) ApplyNAWS(id string, cols int) {
+	if s := h.c.squatSession(id); s != nil && s.conn != nil && s.open() {
+		s.resize(cols, h.c.ui.H)
+	}
 }
 
 func (h *squatHost) Hook(event string, args ...string) { h.c.in.FireHookArgs(event, args...) }
@@ -370,35 +418,43 @@ func (h *squatHost) SetVars(vars map[string]string) {
 	}
 }
 
-func (h *squatHost) Notice(text string) { h.c.echoLine(text) }
+// Notice shows a line to the local user only: what the squatter says (state, paths, device names,
+// audit lines) is never added to a session's scrollback, which every paired device can replay.
+func (h *squatHost) Notice(text string) { h.c.privateLine(text) }
 
 // ---------------------------------------------------------------- commands
 
-const squatUsage = `usage: /squatter [status | on | off | list | kick <name> | unpair <name> | fingerprint | port <n> | bind <addr> | name <name> | pair [role]]
+const squatUsage = `usage: /squatter [status | on | off | list | who | kick <name> | unpair <name> | fingerprint | port <n> | bind <addr> | name <name> | pair [role]]
   /squatter       show the state, listen address and fingerprint
   on, off         set %squatter (the daemon starts and stops at once)
   list            connected clients, paired devices and the sessions held
-  kick <name>     disconnect a client (it may reconnect)
-  unpair <name>   forget a paired device (name or id prefix) and disconnect it
+  who             who is attached, which world each views, who is typing
+  kick <name>     disconnect a client by device name (the whole rest of the line) or id prefix
+  unpair <name>   forget a paired device (name or id prefix of 4+ characters) and disconnect it
   fingerprint     the TLS fingerprint a client pins when it pairs
   port, bind, name  set %squatter_port, %squatter_bind, %squatter_name (applies at once)
   pair [role]     same as /pair
 Settings are ordinary variables: %squatter %squatter_port %squatter_bind %squatter_name %squatter_dir
 %squatter_kind %squatter_tls %squatter_cert %squatter_key %squatter_scrollback %squatter_max_clients
-%squatter_max_sessions %squatter_pair_ttl %squatter_pair_role %squatter_commands (see docs/SQUATTER.md).`
+%squatter_max_sessions %squatter_pair_ttl %squatter_pair_role %squatter_commands %squatter_gtf %squatter_naws
+%squatter_world_save (see docs/SQUATTER.md).`
 
+// out prints the squatter's own output privately (see privateLine): it names the fingerprint, the
+// state directory and the paired devices, so it must not enter any scrollback.
 func (c *Client) out(lines ...string) {
 	for _, l := range lines {
-		c.echoLine(l)
+		c.privateLine(l)
 	}
 }
 
 func (c *Client) cmdSquatter(in *gtfparser.Interp, args string) gtfparser.Value {
 	f := strings.Fields(args)
 	sub := ""
+	rest := "" // the rest of the line after the subcommand (device names contain spaces)
 	if len(f) > 0 {
 		sub = strings.ToLower(f[0])
 		f = f[1:]
+		rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(args), strings.Fields(args)[0]))
 	}
 	sq := c.sq.sq
 	set := func(name, val string) gtfparser.Value {
@@ -443,31 +499,38 @@ func (c *Client) cmdSquatter(in *gtfparser.Interp, args string) gtfparser.Value 
 		c.out("TLS fingerprint: " + fp)
 		return gtfparser.Int(1)
 	case "kick":
-		if len(f) != 1 {
-			c.out("% usage: /squatter kick <name>")
+		if rest == "" {
+			c.out("% usage: /squatter kick <device name or id prefix>")
 			return gtfparser.Int(0)
 		}
-		n := sq.Kick(f[0])
+		n, err := sq.Kick(rest)
+		if err != nil {
+			c.out("% /squatter: " + err.Error())
+			return gtfparser.Int(0)
+		}
 		c.out(fmt.Sprintf("%% squatter: %d client(s) disconnected", n))
 		return gtfparser.Int(int64(n))
 	case "unpair":
-		if len(f) != 1 {
-			c.out("% usage: /squatter unpair <name>")
+		if rest == "" {
+			c.out("% usage: /squatter unpair <device name or id prefix>")
 			return gtfparser.Int(0)
 		}
-		names, err := sq.Unpair(f[0])
+		names, err := sq.Unpair(rest)
 		if err != nil {
 			c.out("% /squatter: " + err.Error())
 			return gtfparser.Int(0)
 		}
 		if len(names) == 0 {
-			c.out("% /squatter: no paired device " + f[0])
+			c.out("% /squatter: no paired device " + rest)
 			return gtfparser.Int(0)
 		}
 		c.out("% squatter: unpaired " + strings.Join(names, ", "))
 		return gtfparser.Int(int64(len(names)))
 	case "list":
 		c.squatList()
+		return gtfparser.Int(1)
+	case "who":
+		c.squatWho()
 		return gtfparser.Int(1)
 	case "pair":
 		return c.cmdPair(in, strings.Join(f, " "))
@@ -503,6 +566,35 @@ func (c *Client) squatList() {
 		}
 	}
 	c.out(fmt.Sprintf("Sessions held: %d", sq.NumSessions()))
+}
+
+// squatWho shows who is attached (peers and this terminal), what each views and who is typing.
+func (c *Client) squatWho() {
+	pres := c.sq.sq.Presence()
+	c.out(fmt.Sprintf("Attached (%d):", len(pres)))
+	name := func(id string) string {
+		if id == "" {
+			return "-"
+		}
+		if s := c.squatSession(id); s != nil {
+			return s.World.Name
+		}
+		return id
+	}
+	for _, p := range pres {
+		typing := ""
+		if p.Typing != "" {
+			typing = "  typing in " + name(p.Typing)
+		}
+		ext := ""
+		if p.Ext && !p.Local {
+			ext = " [gtf]"
+		}
+		c.out(fmt.Sprintf("  %-20s %-9s views %-16s%s%s", p.Name, p.Role, name(p.View), ext, typing))
+	}
+	if cols := c.sq.sq.Config().NAWS; cols != "" {
+		c.out("  width reported to games: policy " + cols)
+	}
 }
 
 // cmdPair creates a one-time pairing code and prints it the way `squatterd pair` does. The code is a
