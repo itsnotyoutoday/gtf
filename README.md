@@ -24,21 +24,15 @@ Tests: `GOWORK=off go test ./...`. Against real tf: `python3 scripts/compare_tf.
 ## Building
 
 The scripting engine is a separate module, [gtfparser](https://github.com/itsnotyoutoday/gtfparser),
-pulled in as a normal dependency (`go.mod` pins its version). It is not part of this repository.
-
-    go build ./cmd/gtf          # builds against the version pinned in go.mod
-
-To work on the client and the engine together (one compile, edits to the engine seen at once), keep a
-checkout of the engine next to this one and add a git-ignored `go.work`:
+pulled in as a normal dependency. It is not part of this repository. Until the engine release this
+client needs is published, `go.mod` carries a temporary `replace` that points at a sibling checkout:
 
     git clone https://github.com/itsnotyoutoday/gtfparser ../gtfparser
-    cat > go.work <<'EOF'
-    go 1.24
-    use ( . ../gtfparser )
-    replace github.com/itsnotyoutoday/gtfparser v0.0.5 => ../gtfparser
-    EOF
+    go build ./cmd/gtf
 
-(`go.work` is in `.gitignore`; use the version number that `go.mod` requires.) Any change the client needs
-in the scripting engine is made in the engine repository, not here.
+(Delete the `replace` line in `go.mod` once the engine tag is on GitHub; `go build` then downloads it.)
+To work on both repositories at once, a git-ignored `go.work` (`use ( . ../gtfparser )`) gives one compile
+with engine edits seen immediately. Any change the client needs in the scripting engine is made in the
+engine repository, not here.
 
 Licensed GPL-3.0-or-later; TinyFugue is GPL-2.0-or-later.
