@@ -561,34 +561,39 @@ func binary(op string, a, b Value) (Value, error) {
 func arith(op string, a, b Value) (Value, error) {
 	x, y := a.Num(), b.Num()
 	if x.k == kInt && y.k == kInt {
+		// TF keeps integer results only while they fit a 32-bit int;
+		// anything larger becomes a real.
+		var r int64
 		switch op {
 		case "+":
-			r := x.i + y.i
-			if (x.i > 0 && y.i > 0 && r < 0) || (x.i < 0 && y.i < 0 && r >= 0) {
-				return Real(float64(x.i) + float64(y.i)), nil
-			}
-			return Int(r), nil
+			r = x.i + y.i
 		case "-":
-			r := x.i - y.i
-			if (x.i >= 0 && y.i < 0 && r < 0) || (x.i < 0 && y.i > 0 && r >= 0) {
-				return Real(float64(x.i) - float64(y.i)), nil
-			}
-			return Int(r), nil
+			r = x.i - y.i
 		case "*":
 			if x.i == 0 || y.i == 0 {
 				return Int(0), nil
 			}
-			r := x.i * y.i
-			if r/y.i != x.i || (x.i == math.MinInt64 && y.i == -1) {
+			r = x.i * y.i
+			if r/y.i != x.i {
 				return Real(float64(x.i) * float64(y.i)), nil
 			}
-			return Int(r), nil
 		case "/":
 			if y.i == 0 {
 				return Int(0), errors.New("division by zero")
 			}
 			return Int(x.i / y.i), nil
 		}
+		if r > math.MaxInt32 || r < math.MinInt32 {
+			xf, yf := float64(x.i), float64(y.i)
+			switch op {
+			case "+":
+				return Real(xf + yf), nil
+			case "-":
+				return Real(xf - yf), nil
+			}
+			return Real(xf * yf), nil
+		}
+		return Int(r), nil
 	}
 	xf, yf := a.Float(), b.Float()
 	switch op {

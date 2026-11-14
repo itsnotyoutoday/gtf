@@ -40,23 +40,24 @@ type frame struct {
 
 // Interp is one TinyFugue scripting environment.
 type Interp struct {
-	Host    Host
-	globals map[string]Value
-	macros  map[string]*Macro
-	list    []*Macro
-	nextID  int
-	fr      *frame
-	lastRet Value
-	retv    Value
-	ctl     ctl
-	brk     int
-	depth   int
-	loaded  map[string]bool
-	noExp   bool
-	Quit    bool
-	streams map[string]*stream
-	nextFd  int
-	tfin    []string
+	Host        Host
+	globals     map[string]Value
+	macros      map[string]*Macro
+	list        []*Macro
+	nextID      int
+	fr          *frame
+	lastRet     Value
+	retv        Value
+	ctl         ctl
+	brk         int
+	depth       int
+	loaded      map[string]bool
+	noExp       bool
+	Quit        bool
+	streams     map[string]*stream
+	nextFd      int
+	tfin        []string
+	pendingArgs []string
 	// LibDirs are searched by /load and /require for relative names.
 	LibDirs []string
 	// Warn receives interpreter diagnostics (TF prints these as "% ...").
@@ -97,6 +98,9 @@ func (in *Interp) lookup(name string) (Value, bool) {
 		}
 	}
 	v, ok := in.globals[name]
+	if !ok {
+		return Str(""), false
+	}
 	return v, ok
 }
 
@@ -830,6 +834,14 @@ func (in *Interp) runBuiltin(name, args string) Value {
 	return f(in, args)
 }
 
+// callMacroArgs calls a macro with function syntax: each argument is one
+// positional parameter, whatever spaces it contains.
+func (in *Interp) callMacroArgs(m *Macro, args []string) Value {
+	in.pendingArgs = args
+	defer func() { in.pendingArgs = nil }()
+	return in.callMacro(m, strings.Join(args, " "), true)
+}
+
 // callMacro runs a macro body in a new scope with the given arguments.
 func (in *Interp) callMacro(m *Macro, args string, asFunc bool) Value {
 	if in.depth > 200 {
@@ -839,6 +851,16 @@ func (in *Interp) callMacro(m *Macro, args string, asFunc bool) Value {
 	in.depth++
 	f := in.pushFrame(m.Name, args)
 	f.asFunc = asFunc
+	if in.pendingArgs != nil {
+		f.words, f.offs = nil, nil
+		pos := 0
+		for _, a := range in.pendingArgs {
+			f.words = append(f.words, a)
+			f.offs = append(f.offs, pos)
+			pos += len(a) + 1
+		}
+		in.pendingArgs = nil
+	}
 	oldExp := in.noExp
 	in.noExp = false
 	res := in.execText(m.Body)
@@ -861,7 +883,7 @@ func (in *Interp) callFunc(name string, args []Value) (Value, error) {
 		for i, a := range args {
 			strs[i] = a.String()
 		}
-		return in.callMacro(m, strings.Join(strs, " "), true), nil
+		return in.callMacroArgs(m, strs), nil
 	}
 	return Int(0), fmt.Errorf("%s: no such function", name)
 }

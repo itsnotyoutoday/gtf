@@ -21,10 +21,11 @@ const (
 // Value is a TF value: integer, real, or string. Reals also stand for
 // dtimes and atimes, as in TF.
 type Value struct {
-	k kind
-	i int64
-	f float64
-	s string
+	k  kind
+	i  int64
+	f  float64
+	s  string
+	dt bool // a dtime literal: prints with a fractional part
 }
 
 func Int(n int64) Value    { return Value{k: kInt, i: n} }
@@ -45,27 +46,49 @@ func (v Value) String() string {
 	case kInt:
 		return strconv.FormatInt(v.i, 10)
 	case kReal:
+		if v.dt {
+			if r := formatReal0(v.f); !strings.ContainsAny(r, ".en") {
+				return r + ".0"
+			}
+			return formatReal0(v.f)
+		}
 		return formatReal(v.f)
 	}
 	return v.s
 }
 
 func formatReal(f float64) string {
+	s := formatReal0(f)
+	if !strings.ContainsAny(s, ".eEn") { // integral reals keep a decimal point, as TF prints them
+		s += "."
+	}
+	return s
+}
+
+// formatReal0 mimics how TF prints reals: plain decimal notation where it
+// reads well, %g-style exponent form otherwise (checked against real tf).
+func formatReal0(f float64) string {
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		return strconv.FormatFloat(f, 'g', -1, 64)
 	}
-	if f != 0 {
-		e := int(math.Floor(math.Log10(math.Abs(f))))
-		if e > -5 && e < SigFigs {
-			s := strconv.FormatFloat(f, 'f', -1, 64)
-			if n := len(strings.TrimLeft(strings.Replace(strings.TrimPrefix(s, "-"), ".", "", 1), "0")); n > SigFigs {
-				s = strconv.FormatFloat(f, 'g', SigFigs, 64)
-				if strings.ContainsAny(s, "e") {
-					s = strconv.FormatFloat(f, 'f', -1, 64)
-				}
-			}
-			return s
+	if f == 0 {
+		return "0"
+	}
+	e := int(math.Floor(math.Log10(math.Abs(f))))
+	dec := strconv.FormatFloat(f, 'f', -1, 64)
+	sig := len(strings.TrimLeft(strings.Replace(strings.TrimPrefix(dec, "-"), ".", "", 1), "0"))
+	switch {
+	case f == math.Trunc(f):
+		if e < SigFigs {
+			return dec
 		}
+	case e >= 17:
+	case e < -4:
+		if e >= -6 && sig <= SigFigs {
+			return dec
+		}
+	default:
+		return dec
 	}
 	return strconv.FormatFloat(f, 'g', SigFigs, 64)
 }
@@ -151,7 +174,9 @@ func parseNumPrefix(s string) Value {
 		if neg {
 			total = -total
 		}
-		return Real(total)
+		v := Real(total)
+		v.dt = true
+		return v
 	}
 	isReal := false
 	if i < len(s) && s[i] == '.' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {

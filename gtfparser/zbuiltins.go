@@ -325,6 +325,9 @@ func fnPad(in *Interp, a []Value) (Value, error) {
 			b.WriteString(s)
 		}
 	}
+	if len(a)%2 == 1 {
+		b.WriteString(a[len(a)-1].String())
+	}
 	return Str(b.String()), nil
 }
 

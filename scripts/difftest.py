@@ -13,7 +13,7 @@ def run_tf(tf, lib, script, timeout=20):
     out, src = os.path.join(d, 'out'), os.path.join(d, 'case.tf')
     with open(src, 'w') as f:
         f.write('/test _o := tfopen("%s", "w")\n' % out)
-        f.write('/def -i echo = /test tfwrite(_o, {*})\n')
+        f.write('/def -i echo = /test tfwrite(_o, {*})\n/def -i E = /test tfwrite(_o, {1})\n')
         f.write(script)
         f.write('\n/test tfclose(_o)\n/quit\n')
     SCREEN.clear()
@@ -31,7 +31,7 @@ def run_tf(tf, lib, script, timeout=20):
 
 def run_gtf(gtf, lib, script):
     d = tempfile.mkdtemp(); src = os.path.join(d, 'case.tf')
-    open(src, 'w').write(script + '\n')
+    open(src, 'w').write('/set _o=o\n/def -i E = /test tfwrite(_o, {1})\n' + script + '\n')
     r = subprocess.run([gtf, '-f', src, '-L', lib], capture_output=True, text=True, timeout=20)
     return r.stdout
 

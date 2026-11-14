@@ -86,7 +86,7 @@ func init() {
 			if len(a) < 3 {
 				return Str(""), errors.New("replace(): too few arguments")
 			}
-			return Str(strings.ReplaceAll(str(a, 0), str(a, 1), str(a, 2))), nil
+			return Str(strings.ReplaceAll(str(a, 2), str(a, 0), str(a, 1))), nil
 		},
 		"abs":   func(in *Interp, a []Value) (Value, error) { return mathN(a, math.Abs, true), nil },
 		"sqrt":  func(in *Interp, a []Value) (Value, error) { return Real(math.Sqrt(fnum(a, 0))), nil },
@@ -103,8 +103,6 @@ func init() {
 			}
 			return Int(int64(num(a, 0)) % d), nil
 		},
-		"min": func(in *Interp, a []Value) (Value, error) { return minmax(a, false) },
-		"max": func(in *Interp, a []Value) (Value, error) { return minmax(a, true) },
 		"rand": func(in *Interp, a []Value) (Value, error) {
 			switch len(a) {
 			case 0:
@@ -131,7 +129,7 @@ func init() {
 		"char": func(in *Interp, a []Value) (Value, error) { return Str(string(rune(int64(num(a, 0))))), nil },
 		"time": func(in *Interp, a []Value) (Value, error) { return Int(time.Now().Unix()), nil },
 		"eval": func(in *Interp, a []Value) (Value, error) {
-			return Str(in.captureCmd(str(a, 0))), nil
+			return in.ExecFull(str(a, 0)), nil
 		},
 		"regmatch": fnRegmatch,
 		"getopts":  fnGetopts,
@@ -150,15 +148,8 @@ func init() {
 		"is_connected": func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
 		"is_open":      func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
 		"idle":         func(in *Interp, a []Value) (Value, error) { return Int(0), nil },
-		"isvar":        func(in *Interp, a []Value) (Value, error) { _, ok := in.lookup(str(a, 0)); return Bool(ok), nil },
-		"ismacro": func(in *Interp, a []Value) (Value, error) {
-			if _, ok := in.macros[str(a, 0)]; ok {
-				return Int(1), nil
-			}
-			return Int(0), nil
-		},
-		"echo": func(in *Interp, a []Value) (Value, error) { in.echo(str(a, 0)); return Int(1), nil }, // echo(text [, attrs [, inline [, dest]]])
-		"send": func(in *Interp, a []Value) (Value, error) { return Bool(in.Host.Send(str(a, 1), str(a, 0))), nil },
+		"echo":         func(in *Interp, a []Value) (Value, error) { in.echo(str(a, 0)); return Int(1), nil }, // echo(text [, attrs [, inline [, dest]]])
+		"send":         func(in *Interp, a []Value) (Value, error) { return Bool(in.Host.Send(str(a, 1), str(a, 0))), nil },
 	}
 }
 
