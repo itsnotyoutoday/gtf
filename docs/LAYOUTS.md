@@ -63,6 +63,43 @@ Text with `{...}` tags. `\{ \} \\ \n \t` are escapes (a layout line is one TF li
 Widget arguments are references (`gmcp:...`, `var:...`, bare names mean `var:`), numbers, or
 quoted strings; quote references that contain spaces (`"expr:hp * 2"`).
 
+### Truecolor widgets
+
+| form | meaning |
+|---|---|
+| `{radar contacts=REF sweep=REF width=25 height=13 trail=100 rings=3 bg=#rrggbb}` | a Braille (2x4 dots per cell) radar dish with a fading sweep trail, range rings and contacts that glow brightest right after the sweep passes. `contacts` is a variable holding `id:bearing:range:type;...` (bearing in degrees, 0 = up; range 0..100; type `H` hostile `F` friend `N` neutral `U` unknown) |
+| `{scope REF width=30 height=3 color=#rrggbb fill=on}` | a multi-row line graph of a numeric binding's recent history (Braille) |
+| `{ansi REF}` | renders a variable holding text with SGR escapes (ESC `[38;2;r;g;bm` truecolor, `\e[48;5;Nm` 256-colour, bold, reverse ...); the two characters `\e` can stand in for ESC |
+| `{canvas NAME}` | shows a `/canvas` drawing surface |
+| `{bar CUR MAX gradient=#from,#to}` | colours the bar along a ramp |
+
+## /canvas
+
+Truecolor drawing surfaces. Each terminal cell holds two vertically stacked pixels (the upper and lower
+half blocks), so a W x H cell canvas is W x 2H pixels and pixels are square. Unset pixels show the terminal
+background. Show a canvas in a panel with `{canvas NAME}`; any `/canvas` command repaints it.
+
+```
+/canvas new NAME W H [bg]            /canvas clear NAME [color]        /canvas del NAME     /canvas list
+/canvas px NAME x y color            /canvas line NAME x1 y1 x2 y2 color [t=THICKNESS]
+/canvas rect NAME x y w h color      outline          /canvas fill NAME x y w h color
+/canvas rrect NAME x y w h r color [corners=tl,tr,bl,br]       rounded rectangle (LCARS pills and elbows)
+/canvas circle NAME cx cy r color [t=N]    /canvas disc NAME cx cy r color    /canvas ellipse NAME cx cy rx ry color
+/canvas arc NAME cx cy r1 r2 a1 a2 color   ring sector, degrees, 0 = up, clockwise
+/canvas poly NAME color x1 y1 x2 y2 x3 y3 ...    filled polygon
+/canvas glow NAME cx cy r color            soft additive light
+/canvas grad NAME x y w h color1 color2 [v]      colour ramp, left to right (or top to bottom with v)
+/canvas stars NAME x y w h count seed [t=PHASE]  a starfield (same seed = same sky; t makes some twinkle)
+/canvas text NAME cellx celly color [bold=1] text...   text on whole cells
+```
+
+Any drawing command also takes `a=ALPHA` (0..1). Colors are `#rrggbb`, names, or `256:N`. Edges of discs,
+rings, ellipses, polygons and rounded corners are anti-aliased. `term_width()` and `term_height()` give the
+terminal size, so a script can size its canvases to the screen.
+
+`examples/lcars.tf` uses all of this: a TNG-style console with rounded elbows and pill buttons, a starfield
+viewscreen with ships, the radar dish, and an animated warp core (`/lcars`, `/lcars eng`).
+
 ### Data bindings and redraws
 
 Each render records the bindings it read. When GMCP/MSDP data arrives only panels
@@ -94,8 +131,9 @@ Reacting from scripts: `/def -hGMCP -t'Char.Vitals *' ~lowhp = /if (gmcp_get("Ch
 /layoutdemo stop     quit and restore the plain tf screen
 ```
 
-`examples/lcars.tf` is a larger example: a Star-Trek bridge console (`/lcars` sensors with a live
-radar, contact list and forward viewscreen; `/lcars eng` engineering; `/lock`, `/pwr`, `/lcars alert red`).
+`examples/lcars.tf` is a larger example: a TNG-style LCARS bridge console (`/lcars` sensors with a live
+radar dish, contact list and forward viewscreen; `/lcars eng` engineering with an animated warp core;
+`/lock`, `/pwr`, `/lcars alert red`).
 It shows how panels are driven from script variables that you would feed from GMCP/MSDP in a real game.
 Note: in `{if}` conditions compare strings with quotes (`{if x == "red"}`), and every `{color}` must be
 closed inside the same `{if}` branch that opened it.

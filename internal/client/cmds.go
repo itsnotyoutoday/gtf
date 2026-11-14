@@ -30,6 +30,13 @@ func (c *Client) install() {
 		"gmcp_get": c.fnGmcpGet, "gmcp_json": c.fnGmcpJSON, "gmcp_has": c.fnGmcpHas,
 		"msdp_get": c.fnMsdpGet, "mssp_get": c.fnMsspGet,
 		"gmcp_send": c.fnGmcpSend2, "msdp_send": c.fnMsdpSend2,
+		// the terminal size, so a script can size a canvas to the screen
+		"term_width": func(*gtfparser.Interp, []gtfparser.Value) (gtfparser.Value, error) {
+			return gtfparser.Int(int64(c.ui.W)), nil
+		},
+		"term_height": func(*gtfparser.Interp, []gtfparser.Value) (gtfparser.Value, error) {
+			return gtfparser.Int(int64(c.ui.H)), nil
+		},
 	}
 	for n, f := range funcs {
 		in.RegisterFunction(n, f)

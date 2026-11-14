@@ -23,7 +23,10 @@ import (
 //	/canvas rrect NAME x y w h r color [corners=tl,tr,bl,br]
 //	/canvas circle NAME cx cy r color [t=N]    /canvas disc NAME cx cy r color
 //	/canvas arc NAME cx cy r1 r2 a1 a2 color   (degrees, 0 = up, clockwise)
+//	/canvas ellipse NAME cx cy rx ry color
 //	/canvas glow NAME cx cy r color            soft additive light
+//	/canvas poly NAME color x1 y1 x2 y2 x3 y3 ...     filled polygon
+//	/canvas stars NAME x y w h count seed [t=PHASE]   a starfield
 //	/canvas grad NAME x y w h color1 color2 [v]
 //	/canvas text NAME cellx celly color text...
 //
@@ -177,6 +180,13 @@ func (c *Client) cmdCanvas(in *gtfparser.Interp, args string) gtfparser.Value {
 			return fail("usage: /canvas arc NAME cx cy r1 r2 a1 a2 color")
 		}
 		cv.Arc(n[0], n[1], n[2], n[3], n[4], n[5], col, alpha)
+	case "ellipse":
+		n, ok1 := nums(4)
+		col, ok2 := color(4)
+		if !ok1 || !ok2 {
+			return fail("usage: /canvas ellipse NAME cx cy rx ry color")
+		}
+		cv.Ellipse(n[0], n[1], n[2], n[3], col, alpha)
 	case "glow":
 		n, ok1 := nums(3)
 		col, ok2 := color(3)
@@ -184,6 +194,30 @@ func (c *Client) cmdCanvas(in *gtfparser.Interp, args string) gtfparser.Value {
 			return fail("usage: /canvas glow NAME cx cy r color")
 		}
 		cv.Glow(n[0], n[1], n[2], col, alpha)
+	case "poly":
+		col, ok := color(0)
+		if !ok || len(pos) < 7 {
+			return fail("usage: /canvas poly NAME color x1 y1 x2 y2 x3 y3 ...")
+		}
+		var pts []float64
+		for _, p := range pos[1:] {
+			v, err := strconv.ParseFloat(p, 64)
+			if err != nil {
+				return fail("poly: bad coordinate %q", p)
+			}
+			pts = append(pts, v)
+		}
+		if len(pts)%2 != 0 {
+			return fail("poly: odd number of coordinates")
+		}
+		cv.Poly(pts, col, alpha)
+	case "stars":
+		n, ok := nums(6)
+		if !ok {
+			return fail("usage: /canvas stars NAME x y w h count seed [t=PHASE]")
+		}
+		ph, _ := strconv.ParseFloat(opts["t"], 64)
+		cv.Stars(int(n[0]), int(n[1]), int(n[2]), int(n[3]), int(n[4]), uint32(n[5]), ph)
 	case "grad":
 		n, ok1 := nums(4)
 		c1, ok2 := color(4)

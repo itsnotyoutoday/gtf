@@ -133,6 +133,22 @@ func (c *Canvas) RoundRect(x, y, w, h int, r float64, corners string, col Color,
 // Disc fills a circle with anti-aliased edges.
 func (c *Canvas) Disc(cx, cy, r float64, col Color, a float64) { c.Arc(cx, cy, 0, r, 0, 360, col, a) }
 
+// Ellipse fills an anti-aliased ellipse with radii rx, ry.
+func (c *Canvas) Ellipse(cx, cy, rx, ry float64, col Color, a float64) {
+	if rx <= 0 || ry <= 0 {
+		return
+	}
+	for y := int(math.Floor(cy - ry - 1)); y <= int(math.Ceil(cy+ry+1)); y++ {
+		for x := int(math.Floor(cx - rx - 1)); x <= int(math.Ceil(cx+rx+1)); x++ {
+			dx, dy := (float64(x)+0.5-cx)/rx, (float64(y)+0.5-cy)/ry
+			d := math.Hypot(dx, dy)
+			// distance to the edge in pixels, approximated along the radius
+			edge := (1 - d) * math.Min(rx, ry)
+			c.Blend(x, y, col, a*clamp01(edge+0.5))
+		}
+	}
+}
+
 // Ring draws a circle outline of the given thickness.
 func (c *Canvas) Ring(cx, cy, r, thick float64, col Color, a float64) {
 	c.Arc(cx, cy, r-thick/2, r+thick/2, 0, 360, col, a)
@@ -174,6 +190,89 @@ func (c *Canvas) Glow(cx, cy, r float64, col Color, a float64) {
 				c.Add(x, y, col, a*(1-d)*(1-d))
 			}
 		}
+	}
+}
+
+// Poly fills a polygon (even-odd rule) given as x,y pairs.
+func (c *Canvas) Poly(pts []float64, col Color, a float64) {
+	n := len(pts) / 2
+	if n < 3 {
+		return
+	}
+	minY, maxY := pts[1], pts[1]
+	for i := 0; i < n; i++ {
+		minY, maxY = math.Min(minY, pts[2*i+1]), math.Max(maxY, pts[2*i+1])
+	}
+	for y := int(math.Floor(minY)); y <= int(math.Ceil(maxY)); y++ {
+		// sample three sub-scanlines per pixel row for soft top/bottom edges
+		var cover [4096]float64
+		wmax := 0
+		for sub := 0; sub < 3; sub++ {
+			sy := float64(y) + (float64(sub)+0.5)/3
+			var xs []float64
+			for i := 0; i < n; i++ {
+				x1, y1 := pts[2*i], pts[2*i+1]
+				x2, y2 := pts[2*((i+1)%n)], pts[2*((i+1)%n)+1]
+				if (y1 <= sy && y2 > sy) || (y2 <= sy && y1 > sy) {
+					xs = append(xs, x1+(sy-y1)/(y2-y1)*(x2-x1))
+				}
+			}
+			sortFloats(xs)
+			for k := 0; k+1 < len(xs); k += 2 {
+				for x := int(math.Floor(xs[k])); x <= int(math.Ceil(xs[k+1])); x++ {
+					if x < 0 || x >= len(cover) {
+						continue
+					}
+					l, r := math.Max(xs[k], float64(x)), math.Min(xs[k+1], float64(x)+1)
+					if r > l {
+						cover[x] += (r - l) / 3
+						if x+1 > wmax {
+							wmax = x + 1
+						}
+					}
+				}
+			}
+		}
+		for x := 0; x < wmax; x++ {
+			if cover[x] > 0 {
+				c.Blend(x, y, col, a*clamp01(cover[x]))
+			}
+		}
+	}
+}
+
+func sortFloats(a []float64) {
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j] < a[j-1]; j-- {
+			a[j], a[j-1] = a[j-1], a[j]
+		}
+	}
+}
+
+// Stars scatters n stars over the rectangle x,y,w,h. The same seed always gives the
+// same sky; phase (any number) makes some of them twinkle.
+func (c *Canvas) Stars(x, y, w, h, n int, seed uint32, phase float64) {
+	if w < 1 || h < 1 {
+		return
+	}
+	s := seed*2654435761 + 12345
+	next := func() uint32 { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return s }
+	for i := 0; i < n; i++ {
+		px, py := x+int(next()%uint32(w)), y+int(next()%uint32(h))
+		b := 0.25 + float64(next()%100)/100*0.75
+		tw := float64(next()%1000) / 1000
+		if tw > 0.7 {
+			b *= 0.55 + 0.45*math.Sin(phase*3+tw*40)
+		}
+		tint := next() % 5
+		col := Color{Kind: RGB, R: 255, G: 255, B: 255}
+		switch tint {
+		case 0:
+			col = Color{Kind: RGB, R: 190, G: 210, B: 255}
+		case 1:
+			col = Color{Kind: RGB, R: 255, G: 235, B: 200}
+		}
+		c.Blend(px, py, col, clamp01(b))
 	}
 }
 
