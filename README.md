@@ -6,7 +6,7 @@ scripting engine [gtfparser](https://github.com/itsnotyoutoday/gtfparser).
 - Same screen as tf (output window, status line, input window), same key bindings
   (the real `kbbind.tf` runs unmodified), same commands (the engine implements them).
 - Telnet with GMCP, MSDP, MSSP, MCCP2, NAWS, TTYPE/MTTS, CHARSET, EOR/GA, TLS.
-- Panels and layouts (HP bars, sidebars) driven by GMCP/MSDP/TF variables: `docs/LAYOUTS.md`.
+- Panels and layouts (HP bars, sidebars) driven by GMCP/MSDP/TF variables: `docs/LAYOUTS.md`. Try the tour: `/load examples/layout-demo.tf` then `/layoutdemo`.
 
 ```
 go build ./cmd/gtf && ./gtf -f -c'/addworld mymud host 4000' mymud

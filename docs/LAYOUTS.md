@@ -83,6 +83,17 @@ and are quantized to the terminal's depth.
 
 Reacting from scripts: `/def -hGMCP -t'Char.Vitals *' ~lowhp = /if (gmcp_get("Char.Vitals.hp") < 20) /echo -aBCred LOW HP%; /endif`.
 
+## Demo
+
+`examples/layout-demo.tf` is a guided tour of everything above, no MUD connection needed:
+
+```
+/load examples/layout-demo.tf
+/layoutdemo          run all 18 scenes, one every 3 seconds
+/layoutdemo 7        jump to a single scene
+/layoutdemo stop     quit and restore the plain tf screen
+```
+
 ## Implementation
 
 `internal/layout` (no terminal I/O): `ParseTemplate`, `Ctx.Eval` -> styled cells, `Layout`
