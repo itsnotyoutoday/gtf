@@ -20,6 +20,8 @@ internal/net/        transports (tcp, tls) and Conn, which yields typed events; 
 internal/net/telnet  the telnet state machine (RFC 1143 Q method) + the plugin registry
 internal/net/proto/  one package per protocol extension, each self-registering:
                      ttype (TTYPE/MTTS), naws, charset, eor, sga (SGA+ECHO), mccp2, gmcp, msdp, mssp
+internal/net/tlsmigrate vendored crypto/tls that can export/import a live TLS session (for /restart; see RESTART.md)
+internal/handoff     the versioned state file /restart leaves for the next process (envelope only)
 internal/net/nettest fake-server harness: scripts telnet negotiations byte for byte
 internal/ui/         terminal UI: raw tty, compositor, scrollback, wrapping, more-pager, input
                      window, status line, panels
@@ -39,7 +41,8 @@ in gtf and is loaded on top of it.
 
 ```
 cmd/gtf          -> internal/client, gtflib
-internal/client  -> internal/ui, internal/net(/...), internal/layout, gtflib, the engine module
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/handoff, gtflib, the engine module
+internal/handoff -> nothing internal
 internal/ui      -> internal/layout
 internal/net     -> internal/net/... only
 internal/layout  -> nothing internal
@@ -117,6 +120,17 @@ scenarios of `scripts/compare_tf.py`.
 * functions `gmcp_get gmcp_json gmcp_has msdp_get mssp_get gmcp_send msdp_send`;
   `gmcp()` and `msdp()` keep real tf's meaning (they *send*);
 * hooks `GMCP`, `MSDP`, `GMCP_LOGIN` (enabled with `EnableHookEvents`).
+
+## Restarting without dropping connections
+
+`/restart` (`internal/client/restart*.go`, full description in RESTART.md) execs the same binary in place while
+the game sockets stay open. The old process quiesces (key reader parked, socket readers paused, in-flight
+events drained), writes a 0600 versioned state file (`internal/handoff`: terminal termios, the engine's
+`SaveState`, screens with attributes and the pager, sessions with their telnet machine / MCCP2 inflater /
+line state / TLS session export, panels), rehearses the restore in a probe child that must report ready, and
+only then execs; any failure before the exec rolls everything back. `Client.RestartPlan` and
+`Client.Restart(force)` are the Go API (used by `/restart` and by whatever updates the binary);
+`RegisterRestartSection` lets other components carry their own descriptors and state.
 
 ## Merge checklist (things in the client that exist only because of an engine gap)
 

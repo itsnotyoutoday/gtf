@@ -72,11 +72,35 @@ func Main(args []string) int {
 		}
 	}
 	cfg.World = strings.Join(rest, " ")
+	cfg.Args = os.Args
+	spec, err := RestoreSpecFromEnv(os.Environ())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gtf:", err)
+		return 1
+	}
+	if spec != nil && spec.Probe {
+		return ProbeMain(spec, cfg) // a rehearsal child of /restart: no terminal
+	}
+	var restoration *Restoration
+	if spec != nil {
+		// started by /restart: the connections are in inherited descriptors
+		restoration, err = LoadRestoration(*spec)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "gtf: /restart state unusable, starting fresh (the connections are lost):", err)
+			closeInherited(spec.FDs)
+			restoration = nil
+		}
+	}
 	if !ui.IsTerminal() {
 		fmt.Fprintln(os.Stderr, "gtf: standard input and output must be a terminal")
 		return 1
 	}
-	tty, err := ui.OpenTTY()
+	var tty *ui.TTY
+	if restoration != nil && len(restoration.Termios()) > 0 {
+		tty, err = ui.OpenTTYFrom(restoration.Termios())
+	} else {
+		tty, err = ui.OpenTTY()
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gtf:", err)
 		return 1
@@ -86,7 +110,15 @@ func Main(args []string) int {
 	cfg.Keys = tty.Input()
 	cfg.Resized = tty.Resized
 	cfg.Suspend = tty.Suspend
+	cfg.Restore = restoration
 	c, err := New(cfg)
+	if err != nil && restoration != nil {
+		// the state could not be applied: say so and start fresh rather than leave the user without a client
+		fmt.Fprintln(os.Stderr, "gtf: /restart state unusable, starting fresh (the connections are lost):", err)
+		restoration.CloseFiles()
+		cfg.Restore = nil
+		c, err = New(cfg)
+	}
 	if err != nil {
 		tty.Close()
 		fmt.Fprintln(os.Stderr, "gtf:", err)
@@ -98,4 +130,11 @@ func Main(args []string) int {
 	fmt.Fprint(os.Stdout, "\x1b[0m\x1b[?25h\r\n")
 	c.Close()
 	return 0
+}
+
+// closeInherited closes descriptors a failed /restart left to this process.
+func closeInherited(fds []int) {
+	for _, n := range fds {
+		os.NewFile(uintptr(n), "inherited").Close()
+	}
 }

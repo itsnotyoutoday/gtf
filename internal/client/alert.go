@@ -56,6 +56,7 @@ func (c *Client) raiseAlert(msg string) {
 		secs = 5
 	}
 	d := time.Duration(secs * float64(time.Second))
+	c.alertUntil = c.cfg.Now().Add(d)
 	time.AfterFunc(d, func() {
 		c.Post(func(*gtfparser.Interp) {
 			if c.alertSeq == id && c.alert != nil {
@@ -85,4 +86,13 @@ func (c *Client) applyAlert(rows [][]layout.Cell) {
 			row[a.pos+i] = cell
 		}
 	}
+}
+
+// alertRemaining is how long the current alert has left to show (for /restart).
+func (c *Client) alertRemaining() time.Duration {
+	if c.alert == nil {
+		return 0
+	}
+	left := c.alertUntil.Sub(c.cfg.Now())
+	return max(left, 0)
 }
