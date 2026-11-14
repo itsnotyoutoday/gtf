@@ -43,7 +43,12 @@ def pump(t=0.3):
 
 def need(cond, msg):
     if not cond:
-        print("FAIL:", msg); print(screen.decode(errors="replace")[-1500:]); os.kill(pid, 9); sys.exit(1)
+        print("FAIL:", msg)
+        # render what the terminal showed (needs the vtdump tool: go build -o /tmp/vtdump ./cmd/vtdump)
+        open("/tmp/update_pty_screen.bin", "wb").write(screen)
+        if os.path.exists("/tmp/vtdump"):
+            print(subprocess.run(["/tmp/vtdump", "-w", "80", "-h", "24", "/tmp/update_pty_screen.bin"], capture_output=True, text=True).stdout)
+        os.kill(pid, 9); sys.exit(1)
 
 mark = 0  # everything before this has been matched already
 def wait_for(text, secs):
@@ -84,8 +89,16 @@ while b"look\r\n" not in data:
     data += g.recv(100)
 os.write(fd, b"/version\r")
 pump(1.5)
+
+def rendered():
+    """What the terminal shows (escape sequences resolved), via the vtdump tool when it is built."""
+    open("/tmp/update_pty_screen.bin", "wb").write(screen)
+    if os.path.exists("/tmp/vtdump"):
+        return subprocess.run(["/tmp/vtdump", "-w", "80", "-h", "24", "/tmp/update_pty_screen.bin"], capture_output=True, text=True).stdout
+    return screen.decode(errors="replace")
+
 if new:
-    need(("version %s" % new).encode() in screen[-4000:], "/version does not show %s after the restart" % new)
+    need(("version %s" % new) in rendered(), "/version does not show %s after the restart" % new)
 os.write(fd, b"/quit\r")
 pump(1.0)
 os.waitpid(pid, 0)
