@@ -1,53 +1,40 @@
 package gtfparser
 
 import (
-	"regexp"
-	"strings"
-	"unicode"
+	"fmt"
+
+	"github.com/itsnotyoutoday/gtf/pcre"
 )
 
 // rx is the regexp seam: everything in the interpreter that needs a regular
-// expression goes through compileRegexp/match, so the engine can be swapped
-// (the pcre package replaces this stand-in).
-type rx struct{ re *regexp.Regexp }
+// expression goes through compileRegexp/match. It is backed by the pcre
+// package, a PCRE2-compatible engine configured as TinyFugue configures
+// PCRE2 (dot matches newline, "$" matches only at the very end, smart-case,
+// UTF-8 with Unicode properties).
+type rx struct{ re *pcre.Regexp }
 
-// compileRegexp compiles with TinyFugue's rules: dot matches newline, and
-// matching is caseless unless the pattern has an uppercase letter.
+var rxCache = map[string]*rx{}
+
 func compileRegexp(pat string) (*rx, error) {
-	flags := "(?s"
-	caseless := true
-	for i := 0; i < len(pat); i++ {
-		if pat[i] == '\\' {
-			i++
-			continue
-		}
-		if unicode.IsUpper(rune(pat[i])) {
-			caseless = false
-			break
-		}
+	if r, ok := rxCache[pat]; ok {
+		return r, nil
 	}
-	if caseless {
-		flags += "i"
-	}
-	re, err := regexp.Compile(flags + ")" + pat)
+	re, err := pcre.CompileTF(pat)
 	if err != nil {
+		if pe, ok := err.(*pcre.Error); ok {
+			return nil, fmt.Errorf("regexp error at character %d: %s", pe.Offset, pe.Msg)
+		}
 		return nil, err
 	}
-	return &rx{re}, nil
+	if len(rxCache) > 2048 {
+		rxCache = map[string]*rx{}
+	}
+	r := &rx{re}
+	rxCache[pat] = r
+	return r, nil
 }
 
-// match returns the capture offsets (pairs, -1 = unset) or nil.
+// match returns the capture offsets (byte pairs, -1 = unset) or nil.
 func (r *rx) match(s string, start int) []int {
-	loc := r.re.FindStringSubmatchIndex(s[start:])
-	if loc == nil {
-		return nil
-	}
-	for i := range loc {
-		if loc[i] >= 0 {
-			loc[i] += start
-		}
-	}
-	return loc
+	return r.re.Match(s, start, start > 0)
 }
-
-var _ = strings.TrimSpace

@@ -11,6 +11,13 @@ run through the Go engine (CompileTF) and the records are compared.
 
 --update rewrites pcre/testdata/expected.txt from real tf's answers (the
 file `go test ./pcre` checks the engine against).
+
+The tf binary must be a WIDECHAR build (ICU), because TinyFugue only compiles
+patterns with PCRE2_UTF|PCRE2_UCP then; a non-widechar tf matches bytes and
+will disagree on all Unicode cases.  scripts/pcre_build_tfwide.sh makes one
+from the reference tree that env.sh points at.  tf runs with LANG/LC_ALL set to
+en_US.UTF-8 (its locale-derived PCRE2 character tables matter: for example
+[[:ascii:]] covers U+0000-U+00FF in a UTF-8 locale).
 """
 import argparse, os, pty, re, select, subprocess, sys, tempfile, time
 
@@ -79,7 +86,7 @@ def run_tf(tf, lib, script, timeout=180):
     screen = []
     m, s = pty.openpty()
     p = subprocess.Popen([tf, '-n', '-f' + src, '-L' + lib], stdin=s, stdout=s, stderr=s,
-                         env={'TERM': 'dumb', 'PATH': os.environ['PATH'], 'HOME': d}, close_fds=True)
+                         env={'TERM': 'dumb', 'PATH': os.environ['PATH'], 'HOME': d, 'LANG': 'en_US.UTF-8', 'LC_ALL': 'en_US.UTF-8'}, close_fds=True)
     t = time.time()
     while p.poll() is None and time.time() - t < timeout:
         r, _, _ = select.select([m], [], [], 0.2)
@@ -90,7 +97,7 @@ def run_tf(tf, lib, script, timeout=180):
                 break
     if p.poll() is None:
         p.kill()
-    text = open(out, encoding='utf-8', errors='replace').read() if os.path.exists(out) else ''
+    text = open(out, encoding='utf-8', errors='replace', newline='').read() if os.path.exists(out) else ''
     return text, b''.join(screen).decode(errors='replace')
 
 
@@ -104,7 +111,7 @@ def tf_records(tf, lib, pairs):
         for k in range(10):
             lines.append('/test tfwrite(_o, strcat("@%d=", {P%d}))' % (k, k))
     # line number (in the final file) of each pair's regmatch line
-    lineno = {PRE + 1 + 13 * i: i for i in range(len(pairs))}
+    lineno = {PRE + 1 + 14 * i: i for i in range(len(pairs))}
     text, screen = run_tf(tf, lib, '\n'.join(lines))
     # compile errors -> scraped from the tty
     flat = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Z0-9]|\r', '', screen)
@@ -132,7 +139,7 @@ def tf_records(tf, lib, pairs):
     recs = []
     for i in range(len(pairs)):
         if i in errs:
-            recs.append('ERR'); continue
+            recs.append('ERR\t%d\t%s' % errs[i]); continue
         r = res.get(i)
         if r is None:
             recs.append('MISSING'); continue

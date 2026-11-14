@@ -21,7 +21,7 @@ def run_tf(tf, lib, script, timeout=20):
     import fcntl, struct, termios
     fcntl.ioctl(s, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 4000, 0, 0))  # wide: no line wrapping
     p = subprocess.Popen([tf, '-n', '-f' + src, '-L' + lib], stdin=s, stdout=s, stderr=s,
-                         env={'TERM': 'dumb', 'PATH': os.environ['PATH'], 'HOME': d}, close_fds=True)
+                         env={'TERM': 'dumb', 'PATH': os.environ['PATH'], 'HOME': d, 'LANG': os.environ.get('LANG', ''), 'LC_ALL': os.environ.get('LC_ALL', '')}, close_fds=True)
     t = time.time()
     while p.poll() is None and time.time() - t < timeout:
         r, _, _ = select.select([m], [], [], 0.2)
