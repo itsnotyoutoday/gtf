@@ -21,7 +21,7 @@ type (
 // here, through the engine's public registration points.
 func (c *Client) install() {
 	in := c.in
-	for n, f := range map[string]cmdf{"panel": c.cmdPanel, "layout": c.cmdLayout, "canvas": c.cmdCanvas, "update": c.cmdUpdate} {
+	for n, f := range map[string]cmdf{"panel": c.cmdPanel, "layout": c.cmdLayout, "canvas": c.cmdCanvas, "update": c.cmdUpdate, "version": c.cmdVersion} {
 		in.RegisterCommand(n, f)
 	}
 	funcs := map[string]fnf{
@@ -41,6 +41,15 @@ func (c *Client) install() {
 	for n, f := range funcs {
 		in.RegisterFunction(n, f)
 	}
+}
+
+// /version prints our version and our own copyright line. (The engine's /version mirrors real tf and
+// names TinyFugue's author; credit to him is in the startup banner, /help copyright and the README.)
+// The two lines keep the shape the tf library's /ver parses: "% <version>." then "% Copyright ...".
+func (c *Client) cmdVersion(in *gtfparser.Interp, args string) gtfparser.Value {
+	in.Host.Echo("% " + VersionVar() + ".")
+	in.Host.Echo("% Copyright (C) " + Year + " " + Holder + ".")
+	return gtfparser.Int(1)
 }
 
 func arg(a []gtfparser.Value, i int) string {

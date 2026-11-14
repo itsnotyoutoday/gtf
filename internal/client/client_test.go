@@ -248,3 +248,20 @@ func TestUpdateCheckSkippedForDevBuild(t *testing.T) {
 	c, _, _ := newTestClient(t)
 	c.startUpdateCheck() // must neither panic nor contact anything
 }
+
+// /version names us, not TinyFugue's author, and keeps the shape the library's /ver parses.
+func TestVersionCommandHasNoKenKeys(t *testing.T) {
+	c, scr, _ := newTestClient(t)
+	c.Do(func(in *gtfparser.Interp) { in.Exec("/version") })
+	waitScreen(t, c, scr, "Copyright (C) "+Year+" "+Holder)
+	var text string
+	c.Do(func(*gtfparser.Interp) { text = scr.Text() })
+	i := strings.Index(text, "% "+VersionVar()+".")
+	if i < 0 {
+		t.Fatalf("version line missing:\n%s", text)
+	}
+	// the output of /version itself (after the banner): no mention of Ken Keys
+	if strings.Contains(text[i:], "Ken Keys") {
+		t.Fatalf("/version output names Ken Keys:\n%s", text[i:])
+	}
+}
