@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -520,4 +521,67 @@ func TestSquatterOnRetriesAfterError(t *testing.T) {
 	c2.Do(func(in *gtfparser.Interp) { in.Exec("/squatter on"); c2.afterTask() })
 	eventually(t, "listening after retry", func() bool { return v(c2, "squatter_state") == "listening" })
 	_, _, _ = scr, scr2, c
+}
+
+// Code that comes from a peer runs restricted by default (squatter_restrict=file): no shell, no files, and
+// neither by defining a trigger that fires later. The owner can lift it; the owner at the terminal never
+// is restricted.
+func TestPeerCodeIsRestrictedByDefault(t *testing.T) {
+	c, _, _ := squatClient(t)
+	pc, _ := pairPeer(t, c, "admin", "laptop")
+	defer pc.Close()
+	ctx := context.Background()
+	scratch := t.TempDir() + "/peerfile"
+
+	// a shell command and a file write are refused and do nothing
+	res, err := pc.Exec(ctx, "/sh echo hi > "+scratch)
+	if err != nil || !strings.Contains(strings.Join(res.Out, "\n"), "restricted") {
+		t.Fatalf("a peer ran /sh: %+v %v", res, err)
+	}
+	res, _ = pc.Exec(ctx, "/log "+scratch)
+	if !strings.Contains(strings.Join(res.Out, "\n"), "restricted") {
+		t.Fatalf("a peer could open a log file: %+v", res)
+	}
+	if _, err := os.Stat(scratch); err == nil {
+		t.Fatal("a restricted peer created a file")
+	}
+	// ordinary commands still work
+	if res, _ = pc.Exec(ctx, "/echo fine"); !res.OK || res.Out[0] != "fine" {
+		t.Fatalf("%+v", res)
+	}
+	// a trigger the peer defines keeps its restriction when it fires later, from server text
+	if res, _ = pc.Exec(ctx, "/def -t'go *' peertrig = /sh echo x > "+scratch); !res.OK {
+		t.Fatalf("%+v", res)
+	}
+	c.Do(func(in *gtfparser.Interp) { in.ProcessText(gtfparser.LineInput{Text: "go now"}) }) // server text that matches the peer's trigger
+	time.Sleep(100 * time.Millisecond)
+	if _, err := os.Stat(scratch); err == nil {
+		t.Fatal("a peer's trigger ran a shell command when it fired later")
+	}
+	// the owner's own shell is not restricted
+	c.Do(func(in *gtfparser.Interp) { in.Exec("/sh echo owner > " + scratch) })
+	eventually(t, "the owner's /sh", func() bool { _, err := os.Stat(scratch); return err == nil })
+	_ = os.Remove(scratch)
+
+	// the owner lifts the restriction
+	c.Do(func(in *gtfparser.Interp) { in.Exec("/set squatter_restrict=none") })
+	res, _ = pc.Exec(ctx, "/sh echo lifted > "+scratch)
+	if strings.Contains(strings.Join(res.Out, "\n"), "restricted") {
+		t.Fatalf("the restriction was not lifted: %+v", res)
+	}
+	eventually(t, "the lifted peer's /sh", func() bool { _, err := os.Stat(scratch); return err == nil })
+	// control: with the restriction lifted the SAME trigger does run its shell command, so the refusal
+	// above was the restriction and not a trigger that never fired
+	_ = os.Remove(scratch)
+	c.Do(func(in *gtfparser.Interp) { in.ProcessText(gtfparser.LineInput{Text: "go now"}) })
+	eventually(t, "the lifted peer's trigger", func() bool { _, err := os.Stat(scratch); return err == nil })
+}
+
+func TestRestrictLevelDefaultsToFile(t *testing.T) {
+	for in, want := range map[string]int{"": gtfparser.RestrictFile, "file": gtfparser.RestrictFile, "bogus": gtfparser.RestrictFile,
+		"none": gtfparser.RestrictNone, "shell": gtfparser.RestrictShell, "WORLD": gtfparser.RestrictWorld} {
+		if got := restrictLevel(in); got != want {
+			t.Errorf("restrictLevel(%q) = %d, want %d", in, got, want)
+		}
+	}
 }

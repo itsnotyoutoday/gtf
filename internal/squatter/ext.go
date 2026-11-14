@@ -252,7 +252,7 @@ func (b *backend) tfExec(p wire.Peer, reqID string, raw []byte) error {
 	}
 	var ok bool
 	var out []string
-	if e := b.hostDo(func() { ok, out = b.s.host.Exec(req.Line) }); e != nil {
+	if e := b.hostDo(func() { ok, out = b.s.host.Exec(req.Line, p.DeviceID()) }); e != nil {
 		return e
 	}
 	if out == nil {

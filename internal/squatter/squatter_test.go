@@ -102,7 +102,7 @@ func (h *fakeHost) Disconnect(id string) error {
 }
 func (h *fakeHost) SendGMCP(id, pkg, data string) error { return nil }
 func (h *fakeHost) SendMSDP(id, n string, v any) error  { return nil }
-func (h *fakeHost) Exec(line string) (bool, []string) {
+func (h *fakeHost) Exec(line, device string) (bool, []string) {
 	h.mu.Lock()
 	h.execs = append(h.execs, line)
 	h.mu.Unlock()

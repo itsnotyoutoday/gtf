@@ -254,7 +254,8 @@ func (h *squatHost) SendLine(id, text string, o squatter.SendOpts) error {
 	defer func() { c.remoteSend = false }()
 	if o.Command {
 		// like a line typed in that world: the world is the context, the output lands on its screen
-		c.withWorld(s, func() { c.in.ExecFull(text) })
+		origin := c.peerOrigin(o.Origin)
+		c.withWorld(s, func() { c.in.DoAs(origin, func() { c.in.ExecFull(text) }) })
 		c.afterTask()
 		return nil
 	}
@@ -379,15 +380,44 @@ func (h *squatHost) SendMSDP(id, name string, value any) error {
 	return nil
 }
 
-func (h *squatHost) Exec(line string) (bool, []string) {
+func (h *squatHost) Exec(line, device string) (bool, []string) {
 	c := h.c
 	out := []string{}
 	c.capture, c.captureWarn = &out, false
-	c.in.ExecFull(line)
+	origin := c.peerOrigin(device)
+	c.in.DoAs(origin, func() { c.in.ExecFull(line) })
 	c.capture = nil
 	ok := !c.captureWarn
 	c.afterTask()
 	return ok, out
+}
+
+// peerOrigin is the engine origin of a paired device's code and sets its restriction level from
+// squatter_restrict (none | shell | file | world; default file: no shell and no file access). Everything the
+// peer runs, and every macro, trigger, hook or timer it defines, carries this origin and stays restricted
+// when it fires later; the owner at the terminal is never restricted. The level is applied before the code
+// runs (an origin with no level would be unrestricted).
+func (c *Client) peerOrigin(device string) string {
+	origin := "peer:" + device
+	level := restrictLevel(c.in.Var("squatter_restrict"))
+	if c.in.OriginRestriction(origin) != level {
+		c.in.SetOriginRestriction(origin, level)
+	}
+	return origin
+}
+
+// restrictLevel maps the squatter_restrict setting to the engine /restrict levels; an unknown or empty
+// value is the safe default (file).
+func restrictLevel(v string) int {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "none", "off", "0":
+		return gtfparser.RestrictNone
+	case "shell", "1":
+		return gtfparser.RestrictShell
+	case "world", "3":
+		return gtfparser.RestrictWorld
+	}
+	return gtfparser.RestrictFile
 }
 
 func (h *squatHost) Worlds() []proto.TFWorld {
@@ -436,7 +466,7 @@ const squatUsage = `usage: /squatter [status | on | off | list | who | kick <nam
   pair [role]     same as /pair
 Settings are ordinary variables: %squatter %squatter_port %squatter_bind %squatter_name %squatter_dir
 %squatter_kind %squatter_tls %squatter_cert %squatter_key %squatter_scrollback %squatter_max_clients
-%squatter_max_sessions %squatter_pair_ttl %squatter_pair_role %squatter_commands %squatter_gtf %squatter_naws
+%squatter_max_sessions %squatter_pair_ttl %squatter_pair_role %squatter_commands %squatter_restrict %squatter_gtf %squatter_naws
 %squatter_world_save (see docs/SQUATTER.md).`
 
 // out prints the squatter's own output privately (see privateLine): it names the fingerprint, the

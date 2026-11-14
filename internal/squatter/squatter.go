@@ -67,7 +67,9 @@ type Host interface {
 	SendGMCP(session, pkg, data string) error
 	SendMSDP(session, name string, value any) error
 	// Exec runs a tf command line and returns what it printed (ok=false when it reported an error).
-	Exec(line string) (ok bool, out []string)
+	// device is the paired device the line came from: the host runs it (and anything it defines) under the
+	// restriction configured for that origin (squatter_restrict).
+	Exec(line, device string) (ok bool, out []string)
 	Worlds() []proto.TFWorld // with Rev set
 	// EditWorld applies a peer's world edit (gtf extension). Errors: *WorldConflict, ErrWorldMissing,
 	// ErrWorldExists, ErrWorldBusy, or any other error (reported as bad_request).
