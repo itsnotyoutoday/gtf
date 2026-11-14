@@ -18,6 +18,8 @@ def run_tf(tf, lib, script, timeout=20):
         f.write('\n/test tfclose(_o)\n/quit\n')
     SCREEN.clear()
     m, s = pty.openpty()
+    import fcntl, struct, termios
+    fcntl.ioctl(s, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 4000, 0, 0))  # wide: no line wrapping
     p = subprocess.Popen([tf, '-n', '-f' + src, '-L' + lib], stdin=s, stdout=s, stderr=s,
                          env={'TERM': 'dumb', 'PATH': os.environ['PATH'], 'HOME': d}, close_fds=True)
     t = time.time()

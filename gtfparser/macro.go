@@ -3,7 +3,6 @@ package gtfparser
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -22,13 +21,19 @@ type Macro struct {
 	Gag       bool
 	Cond      string // -E
 	Invisible bool   // -i
+	OnlyInvis bool   // -I (list filter)
+	Quiet     bool   // -q
+	WorldType string // -T
+	hasBody   bool
+	set       map[byte]string // options given on the /def or /list line
 	Attrs     string
 	World     string
 	re        *rx
 }
 
-// rawCmds take their argument text unexpanded (their bodies are code).
-var rawCmds = map[string]bool{"def": true, "trig": true, "hilite": true, "gag": true, "hook": true, "bind": true, "alias": false}
+// rawCmds: commands whose arguments skip substitution (none: only top-level
+// lines are unsubstituted, and that is handled by Exec).
+var rawCmds = map[string]bool{}
 
 // splitOptWord pulls the next /def option word: -ttext, -t'quoted text',
 // -h"event pattern".
@@ -69,48 +74,72 @@ func unquoteOpt(v string) string {
 	return v
 }
 
+// defFlags take no argument; defArgs take the rest of their word.
+const (
+	defFlags = "FfiIq"
+	defArgs  = "mnEthbBpcwTaP"
+)
+
 func (in *Interp) parseDef(args string) (*Macro, error) {
-	m := &Macro{Matching: in.globals["matching"].String()}
+	m := &Macro{Matching: in.globals["matching"].String(), Priority: 1, set: map[byte]string{}}
 	rest := strings.TrimLeft(args, " \t")
 	for strings.HasPrefix(rest, "-") && len(rest) > 1 {
 		var w string
 		w, rest = splitOptWord(rest)
-		opt, val := w[1], w[2:]
-		switch opt {
-		case 'i':
-			m.Invisible = true
-		case 'm':
-			m.Matching = val
-		case 'n':
-			m.Shots, _ = strconv.Atoi(val)
-		case 'p':
-			m.Priority, _ = strconv.Atoi(val)
-		case 'E':
-			m.Cond = unquoteOpt(val)
-		case 't':
-			m.Trigger = unquoteOpt(val)
-		case 'h':
-			m.Hook = unquoteOpt(val)
-		case 'b':
-			m.Bind = unquoteOpt(val)
-		case 'a', 'f', 'T', 'w', 'c', 'P', 'F', 'g', 'B', 'k', 'q':
-			switch opt {
-			case 'F':
-				m.Fall = true
-			case 'g':
-				m.Gag = true
-			case 'a':
-				m.Attrs += val
+		if w == "--" {
+			break
+		}
+		for j := 1; j < len(w); j++ {
+			c := w[j]
+			if strings.IndexByte(defFlags, c) >= 0 {
+				m.set[c] = ""
+				switch c {
+				case 'i':
+					m.Invisible = true
+				case 'F':
+					m.Fall = true
+				case 'I':
+					m.OnlyInvis = true
+				case 'q':
+					m.Quiet = true
+				}
+				continue
+			}
+			if strings.IndexByte(defArgs, c) < 0 {
+				return nil, fmt.Errorf("/def: invalid option '%c'", c)
+			}
+			val := unquoteOpt(w[j+1:])
+			m.set[c] = val
+			switch c {
+			case 'm':
+				m.Matching = val
+			case 'n':
+				m.Shots = int(Str(val).Int())
+			case 'p':
+				if v, err := in.EvalExpr(val); err == nil {
+					m.Priority = int(v.Int())
+				}
+			case 'c':
+			case 'E':
+				m.Cond = val
+			case 't':
+				m.Trigger = val
+			case 'h':
+				m.Hook = val
+			case 'b':
+				m.Bind = val
+			case 'B':
+			case 'T':
+				m.WorldType = val
 			case 'w':
 				m.World = val
+			case 'a':
+				m.Attrs = val
 			case 'P':
 				m.Attrs += "P" + val
 				m.Matching = "regexp"
-			case 'T': // like -t but different matching style
-				m.Trigger = unquoteOpt(val)
 			}
-		default:
-			return nil, fmt.Errorf("/def: invalid option '%c'", opt)
+			break
 		}
 	}
 	if m.Matching == "" {
@@ -127,6 +156,7 @@ func (in *Interp) parseDef(args string) (*Macro, error) {
 	}
 	if strings.HasPrefix(rest, "=") {
 		m.Body = strings.TrimLeft(rest[1:], " \t")
+		m.hasBody = true
 	}
 	m.Name = name
 	return m, nil
@@ -170,12 +200,9 @@ func (in *Interp) Undef(name string) bool {
 	return true
 }
 
-// Macros lists defined macros by name.
+// Macros lists every defined macro in definition order.
 func (in *Interp) Macros() []*Macro {
-	var out []*Macro
-	for _, m := range in.macros {
-		out = append(out, m)
-	}
+	out := append([]*Macro(nil), in.list...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
@@ -289,4 +316,106 @@ func (in *Interp) Hook(event, args string) {
 		in.popFrame()
 		in.depth--
 	}
+}
+
+func qesc(s string) string {
+	return strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(s)
+}
+
+// printDef renders a macro as TF's /list does: "/def [options] name = body".
+func (m *Macro) printDef(num bool) string {
+	var b strings.Builder
+	if num {
+		fmt.Fprintf(&b, "%% %d: ", m.ID)
+	}
+	b.WriteString("/def ")
+	if m.Invisible {
+		b.WriteString("-i ")
+	}
+	if m.Trigger != "" || m.Hook != "" {
+		f := ""
+		if m.Fall {
+			f = "F"
+		}
+		fmt.Fprintf(&b, "-%sp%d ", f, m.Priority)
+	}
+	if m.Attrs != "" {
+		b.WriteString("-a" + m.Attrs + " ")
+	}
+	if m.Shots > 0 {
+		fmt.Fprintf(&b, "-n%d ", m.Shots)
+	}
+	if m.World != "" {
+		fmt.Fprintf(&b, "-w'%s' ", qesc(m.World))
+	}
+	mflag := ""
+	if m.WorldType != "" {
+		if m.Matching != mflag {
+			b.WriteString("-m" + m.Matching + " ")
+		}
+		mflag = m.Matching
+		fmt.Fprintf(&b, "-T'%s' ", qesc(m.WorldType))
+	}
+	if m.Cond != "" {
+		fmt.Fprintf(&b, "-E'%s' ", qesc(m.Cond))
+	}
+	if m.Trigger != "" {
+		if m.Matching != mflag {
+			b.WriteString("-m" + m.Matching + " ")
+		}
+		mflag = m.Matching
+		fmt.Fprintf(&b, "-t'%s' ", qesc(m.Trigger))
+	}
+	if m.Hook != "" {
+		ev, args := firstWord(m.Hook)
+		if args != "" {
+			if m.Matching != mflag {
+				b.WriteString("-m" + m.Matching + " ")
+			}
+			fmt.Fprintf(&b, "-h'%s %s' ", ev, qesc(args))
+		} else {
+			b.WriteString("-h" + ev + " ")
+		}
+	}
+	if m.Bind != "" {
+		fmt.Fprintf(&b, "-b'%s' ", qesc(m.Bind))
+	}
+	if m.Quiet {
+		b.WriteString("-q ")
+	}
+	if strings.HasPrefix(m.Name, "-") {
+		b.WriteString("- ")
+	}
+	if m.Name != "" {
+		b.WriteString(m.Name + " ")
+	}
+	if m.Body != "" {
+		b.WriteString("= " + m.Body)
+	}
+	return b.String()
+}
+
+// printShort is the "/list -s" form.
+func (m *Macro) printShort() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%% %d: ", m.ID)
+	if m.Gag {
+		b.WriteString("(gag) ")
+	} else if m.Trigger != "" {
+		b.WriteString("(trig) ")
+	}
+	if m.Trigger != "" {
+		fmt.Fprintf(&b, "'%s' ", qesc(m.Trigger))
+	}
+	if m.Bind != "" {
+		fmt.Fprintf(&b, "(bind) '%s' ", qesc(m.Bind))
+	}
+	if m.Hook != "" {
+		ev, _ := firstWord(m.Hook)
+		b.WriteString("(hook) " + ev + " ")
+	}
+	if m.Name != "" {
+		b.WriteString(m.Name + " ")
+	}
+	return b.String()
 }

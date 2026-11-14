@@ -170,6 +170,8 @@ func cmdBreak(in *Interp, args string) Value {
 	return Int(0)
 }
 
+// cmdEval runs its text as a macro body: substitution happens as each
+// statement executes (so inside a macro the text is substituted twice).
 func cmdEval(in *Interp, args string) Value {
 	level := ""
 	if strings.HasPrefix(args, "-s") {
@@ -177,13 +179,13 @@ func cmdEval(in *Interp, args string) Value {
 		level, args = w[2:], r
 	}
 	old := in.noExp
+	defer func() { in.noExp = old }()
 	in.noExp = level == "0" || level == "off" || level == "literal"
 	in.pushFrame(in.fr.name, in.fr.text)
 	in.fr.words, in.fr.offs, in.fr.regs = in.fr.parent.words, in.fr.parent.offs, in.fr.parent.regs
 	in.fr.asFunc = in.fr.parent.asFunc
 	res := in.execText(args)
 	in.popFrame()
-	in.noExp = old
 	return res
 }
 
@@ -237,7 +239,7 @@ func cmdUndef(in *Interp, args string) Value {
 }
 
 func cmdQuit(in *Interp, args string) Value { in.Quit = true; return Int(1) }
-func cmdExit(in *Interp, args string) Value { in.ctl = ctlReturn; in.retv = Int(0); return Int(1) }
+func cmdExit(in *Interp, args string) Value { in.ctl = ctlExit; return Int(1) }
 
 func (in *Interp) findFile(name string) (string, bool) {
 	if filepath.IsAbs(name) || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "~") {
@@ -312,6 +314,7 @@ func (in *Interp) LoadFile(path string) error {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 16<<20)
 	var cur strings.Builder
+	exited := false
 	flush := func() {
 		line := cur.String()
 		cur.Reset()
@@ -320,9 +323,12 @@ func (in *Interp) LoadFile(path string) error {
 		}
 		in.depth = 0
 		in.Exec(strings.TrimLeft(line, " \t"))
+		if in.ctl == ctlExit {
+			exited = true
+		}
 		in.ctl = ctlNone
 	}
-	for sc.Scan() {
+	for sc.Scan() && !exited {
 		l := strings.TrimRight(sc.Text(), "\r")
 		if cur.Len() > 0 && strings.HasPrefix(strings.TrimLeft(l, " \t"), ";") {
 			continue // a comment line inside a continued line

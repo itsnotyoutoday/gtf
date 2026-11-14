@@ -24,6 +24,7 @@ const (
 	ctlNone ctl = iota
 	ctlBreak
 	ctlReturn
+	ctlExit // /exit: abandons everything up to the enclosing /load
 )
 
 type frame struct {
@@ -74,6 +75,12 @@ func New(h Host) *Interp {
 		lastRet: Int(1),
 	}
 	in.fr = &frame{vars: map[string]Value{}, name: ""}
+	defer func() {
+		// the keys tf itself binds before any library is loaded
+		for _, b := range [][2]string{{"^W", "/DOKEY BWORD"}, {"^R", "/DOKEY REFRESH"}, {"^V", "/DOKEY LNEXT"}} {
+			in.Define(&Macro{Matching: "glob", Priority: 1, Invisible: true, Bind: b[0], Body: b[1]})
+		}
+	}()
 	in.Warn = func(s string) { h.Echo("% " + s) }
 	for _, e := range os.Environ() { // the environment is imported as variables
 		if i := strings.IndexByte(e, '='); i > 0 {
@@ -792,9 +799,9 @@ func (in *Interp) execOne(st string) Value {
 	}
 	w, _ := firstWord(st)
 	lw := strings.ToLower(w)
-	if rawCmds[strings.TrimLeft(lw, "/!")] {
+	if rawCmds[strings.TrimLeft(lw, "/!@")] {
 		neg := strings.HasPrefix(w, "/!")
-		name := strings.TrimLeft(lw, "/!")
+		name := strings.TrimLeft(lw, "/!@")
 		_, args := firstWord(st)
 		return negate(in.runBuiltin(name, args), neg)
 	}
@@ -877,7 +884,9 @@ func (in *Interp) callMacro(m *Macro, args string, asFunc bool) Value {
 	if in.ctl == ctlReturn {
 		res = in.retv
 	}
-	in.ctl = ctlNone
+	if in.ctl != ctlExit {
+		in.ctl = ctlNone
+	}
 	in.popFrame()
 	in.depth--
 	return res

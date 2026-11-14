@@ -156,44 +156,126 @@ func defShortcut(prefix string) cmdFunc {
 	}
 }
 
+// listMatch reports whether macro m satisfies the options given to /list.
+func (in *Interp) listMatch(spec, m *Macro, style string) bool {
+	_, wantInv := spec.set['i']
+	if m.Invisible && !wantInv && !spec.OnlyInvis {
+		return false
+	}
+	if spec.OnlyInvis && !m.Invisible {
+		return false
+	}
+	pm := func(pat, s string) bool {
+		if pat == "{}" || pat == "^$" {
+			return s == ""
+		}
+		switch style {
+		case "simple":
+			return pat == s
+		case "regexp":
+			re, err := compileRegexp(pat)
+			return err == nil && re.match(s, 0) != nil
+		case "substr":
+			return strings.Contains(s, pat)
+		}
+		return globMatch(pat, s)
+	}
+	for c, v := range spec.set {
+		switch c {
+		case 't':
+			if v == "" && m.Trigger == "" || v != "" && !pm(v, m.Trigger) {
+				return false
+			}
+		case 'b':
+			if v == "" && m.Bind == "" || v != "" && !pm(v, m.Bind) {
+				return false
+			}
+		case 'h':
+			if v == "0" && m.Hook != "" || v == "" && m.Hook == "" || v != "" && v != "0" && !pm(v, m.Hook) {
+				return false
+			}
+		case 'T':
+			if v == "" && m.WorldType == "" || v != "" && !pm(v, m.WorldType) {
+				return false
+			}
+		case 'E':
+			if v == "" && m.Cond == "" || v != "" && !pm(v, m.Cond) {
+				return false
+			}
+		case 'a':
+			if v == "" && m.Attrs == "" || v != "" && !strings.ContainsAny(m.Attrs, v) {
+				return false
+			}
+		case 'n':
+			if m.Shots != int(Str(v).Int()) {
+				return false
+			}
+		case 'p':
+			if x, err := in.EvalExpr(v); err != nil || m.Priority != int(x.Int()) {
+				return false
+			}
+		case 'w':
+			if v != "" && !pm(v, m.World) {
+				return false
+			}
+		case 'F':
+			if !m.Fall {
+				return false
+			}
+		case 'q':
+			if !m.Quiet {
+				return false
+			}
+		}
+	}
+	if spec.Name != "" {
+		if strings.HasPrefix(spec.Name, "#") {
+			if int(Str(spec.Name[1:]).Int()) != m.ID {
+				return false
+			}
+		} else if !pm(spec.Name, m.Name) {
+			return false
+		}
+	}
+	if spec.hasBody && !pm(spec.Body, m.Body) {
+		return false
+	}
+	return true
+}
+
 func cmdList(in *Interp, args string) Value {
-	short, inclInvis, onlyInvis := false, false, false
-	for {
-		w, r := firstWord(args)
-		if !strings.HasPrefix(w, "-") || w == "-" {
-			break
-		}
-		args = r
-		if w == "--" {
-			break
-		}
-		switch w {
-		case "-s":
+	short := false
+	// -s and -S are list options; the rest are /def options compared to macros
+	var rest []string
+	text := strings.TrimLeft(args, " \t")
+	for strings.HasPrefix(text, "-") && len(text) > 1 {
+		var w string
+		w, text = splitOptWord(text)
+		if w == "-s" {
 			short = true
-		case "-i":
-			inclInvis = true
-		case "-I":
-			onlyInvis = true
-		}
-	}
-	pat, body := args, ""
-	if i := strings.Index(args, "="); i >= 0 {
-		pat, body = strings.TrimSpace(args[:i]), strings.TrimSpace(args[i+1:])
-	}
-	pat = strings.TrimSpace(pat)
-	last := 0
-	for _, m := range in.Macros() {
-		if m.Invisible && !inclInvis && !onlyInvis || !m.Invisible && onlyInvis {
 			continue
 		}
-		if pat != "" && !globMatch(pat, m.Name) || body != "" && !globMatch(body, m.Body) {
+		if w == "-S" {
+			continue
+		}
+		rest = append(rest, w)
+	}
+	spec, err := in.parseDef(strings.Join(rest, " ") + " " + text)
+	if err != nil {
+		in.warn("/list: %v", err)
+		return Int(0)
+	}
+	style := spec.Matching
+	last := 0
+	for _, m := range in.Macros() {
+		if !in.listMatch(spec, m, style) {
 			continue
 		}
 		last = m.ID
 		if short {
-			in.echo("% /def " + m.Name)
+			in.echo(m.printShort())
 		} else {
-			in.echo("% /def " + m.Name + " = " + m.Body)
+			in.echo(m.printDef(true))
 		}
 	}
 	return Int(int64(last))
@@ -201,10 +283,14 @@ func cmdList(in *Interp, args string) Value {
 
 func cmdListvar(in *Interp, args string) Value {
 	pat := ""
+	opts := ""
 	for strings.HasPrefix(args, "-") {
-		_, args = firstWord(args)
+		var w string
+		w, args = firstWord(args)
+		opts += w
 	}
 	pat = strings.TrimSpace(args)
+	short := strings.Contains(opts, "s")
 	var names []string
 	for k := range in.globals {
 		if pat == "" || globMatch(pat, k) {
@@ -213,7 +299,11 @@ func cmdListvar(in *Interp, args string) Value {
 	}
 	sort.Strings(names)
 	for _, k := range names {
-		in.echo("% /set " + k + "=" + in.globals[k].String())
+		if short {
+			in.echo(k)
+		} else {
+			in.echo("/set " + k + "=" + in.globals[k].String())
+		}
 	}
 	return Int(int64(len(names)))
 }
@@ -245,11 +335,13 @@ func cmdVersion(in *Interp, args string) Value {
 
 func init() {
 	for _, n := range []string{"beep", "localecho", "listsockets", "listworlds", "liststreams", "status_add", "status_clear",
-		"status_edit", "status_rm", "unbind", "bind", "dokey", "histsize", "recordline", "recall", "log", "limit", "unlimit",
+		"status_edit", "status_rm", "dokey", "histsize", "recordline", "recall", "log", "limit", "unlimit",
 		"relimit", "save", "saveworld", "unworld", "renameworld", "suspend", "restrict", "watchdog", "watchname", "input",
 		"core", "fg", "connect", "dc", "kill", "ps", "repeat", "quote", "sh", "edit", "reboot", "undefn", "help", "lcd"} {
 		builtinCmds[n] = noop
 	}
+	builtinCmds["bind"] = cmdBind
+	builtinCmds["unbind"] = cmdUnbind
 	builtinCmds["list"] = cmdList
 	builtinCmds["listvar"] = cmdListvar
 	builtinCmds["purge"] = cmdPurge
@@ -352,4 +444,45 @@ func strftime(f string, t time.Time) string {
 		b.WriteByte(f[i])
 	}
 	return b.String()
+}
+
+// /bind [seq] = body  is /def -b'seq' = body
+func cmdBind(in *Interp, args string) Value {
+	for strings.HasPrefix(args, "-") {
+		_, args = firstWord(args)
+	}
+	seq, body := args, ""
+	if i := strings.Index(args, "="); i >= 0 {
+		seq, body = strings.TrimSpace(args[:i]), strings.TrimLeft(args[i+1:], " \t")
+	}
+	if seq == "" {
+		return Int(0)
+	}
+	m := &Macro{Matching: "glob", Priority: 1, Bind: seq, Body: body}
+	// rebinding a sequence replaces its old macro
+	for _, o := range in.list {
+		if o.Bind == seq {
+			in.removeFromList(o)
+			if o.Name != "" {
+				delete(in.macros, o.Name)
+			}
+			break
+		}
+	}
+	in.Define(m)
+	return Int(1)
+}
+
+func cmdUnbind(in *Interp, args string) Value {
+	seq := strings.TrimSpace(args)
+	for _, o := range in.list {
+		if o.Bind == seq {
+			in.removeFromList(o)
+			if o.Name != "" {
+				delete(in.macros, o.Name)
+			}
+			return Int(1)
+		}
+	}
+	return Int(0)
 }
