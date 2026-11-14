@@ -25,14 +25,15 @@ internal/ui/         terminal UI: raw tty, compositor, scrollback, wrapping, mor
                      window, status line, panels
 internal/ui/vt       small VT100/ANSI screen model used by tests (and by scripts/compare_tf.py)
 internal/layout/     panel/layout system: templates, bindings, widgets, layout engine -> cell grids
-gtflib/              embedded gtf-only TF scripts (gtflib/gtf/layout.tf, gtflib/gtf/layouts/*.layout)
+gtflib/              embedded TF library: the unmodified real tf library (gtflib/tf/) and gtf-only scripts (gtflib/gtf/layout.tf, gtflib/gtf/layouts/*.layout)
 docs/                this file, PROTOCOLS.md, LAYOUTS.md, COMMAND-STATUS.md
 scripts/             compare_tf.py (screen diff vs real tf), e2e_evennia.py, env.sh
 ```
 
 The unmodified real tf library (`lib/tf/*.tf`: stdlib.tf, kbbind.tf, tfstatus.tf,
-tf-help, ...) is the engine's `tflib` package, shared by both clients; gtflib holds
-only what is new in gtf and is loaded on top of it.
+tf-help, ...) is embedded in `gtflib/tf/` (the scripting engine does not contain it; the
+engine's tests compare against a real tf build instead); `gtflib/gtf/` holds only what is new
+in gtf and is loaded on top of it.
 
 ### Allowed imports
 
@@ -104,5 +105,5 @@ Each item is marked `TODO(merge)` / `TODO(core)` in the code.
    engine's `LineResult.Bell` only (both are honoured today).
 5. `client.go`: `localecho` events are accepted without telnet ECHO negotiation (server
    `WILL ECHO` is reported with `SetLocalEcho`, which hides the input line).
-6. go.mod `replace`: the shared `tflib` package (embedded real tf library) is not in a
-   tagged engine release yet; remove the `replace` and bump the pin when it is.
+6. go.mod `replace`: the engine release this client needs is not published yet; remove the
+   temporary `replace` and bump the pin when it is.

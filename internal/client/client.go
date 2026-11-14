@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/itsnotyoutoday/gtf/gtflib"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 	"github.com/itsnotyoutoday/gtf/internal/ui"
 	"github.com/itsnotyoutoday/gtfparser"
-	"github.com/itsnotyoutoday/gtfparser/tflib"
 )
 
 // Config describes how to run the client.
@@ -142,7 +142,7 @@ func (c *Client) libraryDir() (string, error) {
 	if c.cfg.LibDir != "" {
 		return c.cfg.LibDir, nil
 	}
-	return tflib.CacheDir()
+	return gtflib.TFCacheDir()
 }
 
 func (c *Client) loadLibrary() error {

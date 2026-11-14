@@ -42,7 +42,7 @@ GPL-3.0-or-later; see `LICENSE`.
 
 - [TinyFugue](https://tf.tcp.com/~hawkeye/tf/) by Ken Keys (GPL-2.0-or-later) is the
   inspiration for GoTinyFugue and its compatibility target. Its standard library is embedded
-  unmodified through the engine's `tflib` package (see the NOTICE there); the original
-  copyright notice is shown by `/help copyright`.
+  unmodified in `gtflib/tf/` (see `gtflib/TF-NOTICE.md`); the scripting engine itself does not
+  contain it, and the original copyright notice is shown by `/help copyright`.
 - The [PCRE2](https://www.pcre.org/) project, whose regexp semantics the engine's `pcre`
   package follows.
