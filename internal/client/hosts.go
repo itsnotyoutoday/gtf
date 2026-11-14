@@ -55,7 +55,7 @@ func (c *Client) EchoTo(o gtfparser.EchoOpts, text string) {
 		}
 		for _, ln := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 			as, _ := c.attrCtx().DecodeAttr(gtfparser.AttrString{Text: ln}, base, 0)
-			c.ui.AddLine(scr, c.attrCells(as))
+			c.addLine(scr, c.attrCells(as))
 		}
 		c.scheduleRender()
 		return
@@ -65,7 +65,9 @@ func (c *Client) EchoTo(o gtfparser.EchoOpts, text string) {
 
 // EchoAttr implements gtfparser.AttrEchoHost: attributed text from the engine.
 func (c *Client) EchoAttr(s gtfparser.AttrString) {
-	c.ui.AddLine(c.screenFor(), c.attrCells(s))
+	if c.addLine(c.screenFor(), c.attrCells(s)) {
+		return
+	}
 	c.in.RecordLocalLine(s.Text)
 	c.scheduleRender()
 }
@@ -76,6 +78,12 @@ func (c *Client) EchoAttr(s gtfparser.AttrString) {
 // that world is not the foreground one it is also an alert, so it shows on the
 // status line. Alerts are drawn over the status row (alert.go).
 func (c *Client) HookMessage(m gtfparser.HookMessage) {
+	if c.capture != nil { // a remote tf.exec: these events are failures of the command
+		switch m.Event {
+		case "NOMACRO", "LOADFAIL", "CONFAIL", "ICONFAIL":
+			c.captureWarn = true
+		}
+	}
 	switch m.Class {
 	case gtfparser.HookWorld:
 		s := c.sessions[m.World]
@@ -101,7 +109,9 @@ func (c *Client) HookMessage(m gtfparser.HookMessage) {
 
 // echoFg prints a message on the foreground screen.
 func (c *Client) echoFg(t gtfparser.AttrString) {
-	c.ui.AddLine(c.fgScreen(), c.attrCells(t))
+	if c.addLine(c.fgScreen(), c.attrCells(t)) {
+		return
+	}
 	c.in.RecordLocalLine(t.Text)
 	c.scheduleRender()
 }
@@ -199,6 +209,7 @@ func (c *Client) Disconnect(world string) error {
 	if s != c.fg {
 		c.echoFg(msg)
 	}
+	s.endReason = "client_quit"
 	c.zombie(s)
 	return nil
 }
@@ -329,7 +340,9 @@ func (c *Client) DisplayLine(world, line string) {
 		c.echoLine(line)
 		return
 	}
+	c.gameLine = true
 	c.showWorldLine(s, s.ansi.Parse(line), line, nil)
+	c.gameLine = false
 }
 
 // SetPrompt implements gtfparser.PromptHost.
@@ -392,7 +405,9 @@ func (c *Client) showWorldLine(s *Session, cells []layout.Cell, plain string, re
 	if !fgNow && s.scr.Unseen == 0 && !noActive {
 		c.withWorld(s, func() { c.in.FireHookArgs("PREACTIVITY", s.World.Name) })
 	}
-	c.ui.AddLine(s.scr, cells)
+	c.tapGame = res != nil || c.gameLine
+	c.addLine(s.scr, cells)
+	c.tapGame = false
 	c.in.RecordWorldLineAttr(s.World.Name, plain, attrs)
 	if !fgNow {
 		if noActive {

@@ -66,6 +66,13 @@ type Client struct {
 
 	panels *panelState
 	help   *helpData
+	sq     *squatState // the squatter daemon (squatter.go); inert unless squatter=on
+	// squatter plumbing (squatter.go): command output capture for tf.exec, what kind of line is
+	// being added to a world screen, and remote sends in progress
+	capture                              *[]string
+	captureWarn                          bool
+	tapGame, gameLine, noTap, remoteSend bool
+	lastSquatID                          string
 
 	keyTimer      *time.Timer
 	renderMu      sync.Mutex
@@ -95,13 +102,19 @@ func New(cfg Config) (*Client, error) {
 	c.ui.SetScreen(c.base)
 	c.panels = newPanelState()
 	c.help = &helpData{}
+	c.sq = newSquatState(c)
 
 	in := gtfparser.New(c, gtfparser.WithoutEnvironment())
 	c.in = in
-	in.Warn = func(s string) { c.echoLine("% " + s) }
+	in.Warn = func(s string) {
+		if c.capture != nil {
+			c.captureWarn = true
+		}
+		c.echoLine("% " + s)
+	}
 	in.Input().OnChange = c.scheduleRender
 	c.ui.Ed = in.Input()
-	in.EnableHookEvents("GMCP", "GMCP_LOGIN", "MSDP")
+	in.EnableHookEvents("GMCP", "GMCP_LOGIN", "MSDP", "SQUAT_CONNECT", "SQUAT_DISCONNECT", "SQUAT_PAIR")
 	c.install()
 	if err := c.loadLibrary(); err != nil {
 		c.echoLine("% " + err.Error())
@@ -134,6 +147,10 @@ func (c *Client) Close() {
 	c.doneOnce.Do(func() { close(c.done) })
 	if !c.closed {
 		c.closed = true
+		func() { // the squatter writes status variables: stop it on the engine goroutine
+			defer func() { recover() }()
+			c.run.Do(func(*gtfparser.Interp) { c.sq.stop() })
+		}()
 		for _, s := range c.order {
 			s.close()
 		}
@@ -225,6 +242,7 @@ func (c *Client) Start() {
 		for _, cmd := range c.cfg.Commands {
 			in.Exec(cmd)
 		}
+		c.squatCheck() // the rc file and -c commands have set the squatter variables by now
 		if w := c.cfg.World; w != "" && !c.cfg.NoAuto {
 			in.Exec("/connect " + w)
 		}
@@ -255,7 +273,7 @@ func (c *Client) pollLoop() {
 		case <-c.done:
 			return
 		case <-t.C:
-			c.Post(func(*gtfparser.Interp) { c.pollPanels() })
+			c.Post(func(*gtfparser.Interp) { c.pollPanels(); c.squatCheck() })
 		}
 	}
 }
@@ -330,6 +348,7 @@ func (c *Client) afterTask() {
 		c.quit()
 		return
 	}
+	c.squatCheck()
 	c.checkLayoutDeps()
 	c.scheduleRender()
 }
@@ -496,7 +515,9 @@ func (c *Client) echoLine(text string) {
 func (c *Client) echoTo(scr *ui.Screen, attrs, text string) {
 	for _, ln := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		cells := c.attrsCells(ln, attrs)
-		c.ui.AddLine(scr, cells)
+		if c.addLine(scr, cells) {
+			continue
+		}
 		if scr == c.base || scr == c.fgScreen() {
 			c.in.RecordLocalLine(ln)
 		}

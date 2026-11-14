@@ -221,6 +221,9 @@ func (s *Scrollback) Len() int { return len(s.phys) }
 // Logical returns the number of logical lines.
 func (s *Scrollback) Logical() int { return len(s.lines) }
 
+// Cells returns logical line i (0 <= i < Logical()).
+func (s *Scrollback) Cells(i int) []layout.Cell { return s.lines[i].Cells }
+
 // Phys returns physical line i.
 func (s *Scrollback) Phys(i int) []layout.Cell { return s.phys[i] }
 

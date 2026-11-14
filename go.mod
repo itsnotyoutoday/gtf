@@ -7,11 +7,10 @@ go 1.24
 replace github.com/itsnotyoutoday/gtfparser => ../gtfparser
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/itsnotyoutoday/gtfparser v0.0.5
+	golang.org/x/image v0.24.0
 	golang.org/x/term v0.30.0
 )
 
-require (
-	golang.org/x/image v0.24.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-)
+require golang.org/x/sys v0.31.0 // indirect
