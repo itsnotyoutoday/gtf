@@ -94,6 +94,12 @@ Reacting from scripts: `/def -hGMCP -t'Char.Vitals *' ~lowhp = /if (gmcp_get("Ch
 /layoutdemo stop     quit and restore the plain tf screen
 ```
 
+`examples/lcars.tf` is a larger example: a Star-Trek bridge console (`/lcars` sensors with a live
+radar, contact list and forward viewscreen; `/lcars eng` engineering; `/lock`, `/pwr`, `/lcars alert red`).
+It shows how panels are driven from script variables that you would feed from GMCP/MSDP in a real game.
+Note: in `{if}` conditions compare strings with quotes (`{if x == "red"}`), and every `{color}` must be
+closed inside the same `{if}` branch that opened it.
+
 ## Implementation
 
 `internal/layout` (no terminal I/O): `ParseTemplate`, `Ctx.Eval` -> styled cells, `Layout`
