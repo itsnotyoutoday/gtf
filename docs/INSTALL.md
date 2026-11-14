@@ -102,6 +102,6 @@ builds every platform with `scripts/dist.sh` and publishes the tarballs plus `SH
 (needs `nfpm`, or network access for `go run`; the packaging in `packaging/nfpm.yaml` is built by CI on release). `scripts/test_install.sh` tests
 the installer and the updater end to end against a local fake of GitHub.
 
-Until the scripting engine (github.com/itsnotyoutoday/gtfparser) is published, `go.mod` carries a temporary
-`replace` that points at a sibling checkout, so the release workflow can only build once that is removed
-(publish the engine tag the client needs, then `go get` it and delete the `replace`).
+The `.deb`, `.rpm` and Homebrew steps of the release workflow only run when the repository variable
+`PUBLISH_PACKAGES` is `true` (Settings > Secrets and variables > Actions > Variables); until then a release publishes just
+the tarballs and the checksums that the installer and `/update` use.

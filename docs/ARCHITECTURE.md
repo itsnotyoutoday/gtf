@@ -134,5 +134,3 @@ Each item is marked `TODO(merge)` / `TODO(core)` in the code.
    engine's `LineResult.Bell` only (both are honoured today).
 5. `client.go`: `localecho` events are accepted without telnet ECHO negotiation (server
    `WILL ECHO` is reported with `SetLocalEcho`, which hides the input line).
-6. go.mod `replace`: the engine release this client needs is not published yet; remove the
-   temporary `replace` and bump the pin when it is.

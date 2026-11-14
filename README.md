@@ -31,17 +31,12 @@ Then `/update` checks for a newer version and `/update -y` installs it. See `doc
 
 ## Building
 
-The scripting engine is a separate module, [gtfparser](https://github.com/itsnotyoutoday/gtfparser),
-pulled in as a normal dependency. It is not part of this repository. Until the engine release this
-client needs is published, `go.mod` carries a temporary `replace` that points at a sibling checkout:
+    go build -o gtf ./cmd/gtf      # or: make build / make run
 
-    git clone https://github.com/itsnotyoutoday/gtfparser ../gtfparser
-    go build ./cmd/gtf
-
-(Delete the `replace` line in `go.mod` once the engine tag is on GitHub; `go build` then downloads it.)
-To work on both repositories at once, a git-ignored `go.work` (`use ( . ../gtfparser )`) gives one compile
-with engine edits seen immediately. Any change the client needs in the scripting engine is made in the
-engine repository, not here.
+The scripting engine is a separate module, [gtfparser](https://github.com/itsnotyoutoday/gtfparser), pulled in as a
+normal dependency (pinned in `go.mod`). To work on both repositories at once, a git-ignored `go.work`
+(`use ( . ../gtfparser )` with a sibling checkout) gives one compile with engine edits seen immediately. Any change
+the client needs in the scripting engine is made in the engine repository, not here.
 
 ## License and credits
 

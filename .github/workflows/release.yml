@@ -46,15 +46,23 @@ jobs:
             IFS=/ read -r os arch arm <<< "$target"
             ./scripts/dist.sh "$VERSION" "$os" "$arch" "$arm"
           done
-          # native packages for Debian/Ubuntu and RedHat/Fedora: /update never touches these, the package
-          # manager does (see docs/INSTALL.md)
+      # native packages for Debian/Ubuntu and RedHat/Fedora: /update never touches these, the package
+      # manager does (see docs/INSTALL.md). Off until the repository variable PUBLISH_PACKAGES is "true".
+      - name: Native packages (.deb, .rpm)
+        if: vars.PUBLISH_PACKAGES == 'true'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
           for target in amd64 arm64 386 arm/7; do
             IFS=/ read -r arch arm <<< "$target"
             ./scripts/package.sh "$VERSION" "$arch" "$arm"
           done
-          ./scripts/dist.sh --sums
-          # the Homebrew formula for this release (copy it into the tap's Formula/ directory)
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then ./scripts/homebrew_formula.sh "$GITHUB_REF_NAME" > dist/gtf.rb; fi
+      - name: Checksums
+        run: ./scripts/dist.sh --sums
+      # the Homebrew formula for this release (copy it into the tap's Formula/ directory)
+      - name: Homebrew formula
+        if: vars.PUBLISH_PACKAGES == 'true' && startsWith(github.ref, 'refs/tags/v')
+        run: ./scripts/homebrew_formula.sh "$GITHUB_REF_NAME" > dist/gtf.rb
       - uses: actions/upload-artifact@v4
         with:
           name: gtf
