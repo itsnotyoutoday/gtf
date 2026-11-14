@@ -322,14 +322,24 @@ func TestPairingListAttachReplayAndSend(t *testing.T) {
 	c.Close()
 	r.line(id, proto.KindGame, "while away 1")
 	r.line(id, proto.KindGame, "while away 2")
-	c2, err := r.dial(key, "", "laptop")
-	if err != nil {
-		t.Fatal(err)
+	// the server applies the client's ack asynchronously: a connection made before it has landed still sees
+	// the old unread count, so reconnect until the count is what the ack says (a few milliseconds)
+	var c2 *wire.Client
+	for attempt := 0; ; attempt++ {
+		var err error
+		c2, err = r.dial(key, "", "laptop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := c2.Sessions(); len(s) == 1 && s[0].Unread == 2 {
+			break
+		} else if attempt >= 100 {
+			t.Fatalf("unread after ack: %+v", s)
+		}
+		c2.Close()
+		time.Sleep(20 * time.Millisecond)
 	}
 	defer c2.Close()
-	if s := c2.Sessions(); len(s) != 1 || s[0].Unread != 2 {
-		t.Fatalf("unread after ack: %+v", s)
-	}
 	if err := c2.Attach(ctx, id, &last, 0); err != nil {
 		t.Fatal(err)
 	}
