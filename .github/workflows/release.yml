@@ -1,4 +1,5 @@
-# Builds static binaries (no Go needed to run them) for Linux, FreeBSD and macOS and publishes them,
+# Builds static binaries (no Go needed to run them) for Linux, FreeBSD and macOS, plus .deb and .rpm
+# packages for Linux, and publishes them,
 # with checksums, as a GitHub Release when a version tag is pushed:
 #
 #   git tag v0.0.2-rel && git push origin v0.0.2-rel           final release (files and version are 0.0.2)
@@ -44,6 +45,12 @@ jobs:
           for target in linux/amd64 linux/arm64 linux/386 linux/arm/7 freebsd/amd64 freebsd/arm64 darwin/amd64 darwin/arm64; do
             IFS=/ read -r os arch arm <<< "$target"
             ./scripts/dist.sh "$VERSION" "$os" "$arch" "$arm"
+          done
+          # native packages for Debian/Ubuntu and RedHat/Fedora: /update never touches these, the package
+          # manager does (see docs/INSTALL.md)
+          for target in amd64 arm64 386 arm/7; do
+            IFS=/ read -r arch arm <<< "$target"
+            ./scripts/package.sh "$VERSION" "$arch" "$arm"
           done
           ./scripts/dist.sh --sums
       - uses: actions/upload-artifact@v4

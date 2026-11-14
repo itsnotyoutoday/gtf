@@ -202,7 +202,12 @@ func (c *Client) startUpdateCheck() {
 	}
 	statePath := update.StatePath(dataDir(home))
 	st := update.LoadState(statePath)
+	managed := newUpdater(home).Managed()
 	notice := func(v string) {
+		if managed {
+			c.echoLine(fmt.Sprintf("%% gtf %s is available (you have %s). Ask your system administrator to upgrade the gtf package.", v, Version))
+			return
+		}
 		c.echoLine(fmt.Sprintf("%% gtf %s is available (you have %s). Type /update for details, /update -y to install it.", v, Version))
 	}
 	if v := st.AvailableFor(Version); v != "" {

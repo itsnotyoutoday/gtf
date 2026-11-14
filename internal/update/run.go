@@ -27,6 +27,11 @@ func (u *Updater) Run(ctx context.Context, channel string, install bool, w io.Wr
 		fmt.Fprintf(w, "gtf %s is up to date (newest %s release: %s).\n", u.Version, channel, res.Latest)
 		return res, nil
 	}
+	if u.Managed() {
+		fmt.Fprintf(w, "Update available: gtf %s -> %s (%s channel).\n", u.Version, res.Latest, channel)
+		fmt.Fprintln(w, ManagedAdvice)
+		return res, nil
+	}
 	if !install {
 		fmt.Fprintf(w, "Update available: gtf %s -> %s (%s channel).\n", u.Version, res.Latest, channel)
 		fmt.Fprintf(w, "Run /update -y to install it (or /update -y -r to install and restart without dropping connections).\n")

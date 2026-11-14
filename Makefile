@@ -2,7 +2,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//; s/-rel$$//' || echo 0.0.0-dev)
 LDFLAGS := -s -w -X github.com/itsnotyoutoday/gtf/internal/client.Version=$(VERSION)
 
-.PHONY: all build run test vet fmt dist dist-all clean
+.PHONY: all build run test vet fmt dist dist-all packages clean
 
 all: build
 
@@ -35,6 +35,12 @@ dist-all:
 	  os=$${t%%/*}; rest=$${t#*/}; arch=$${rest%%/*}; arm=""; case "$$rest" in */*) arm=$${rest#*/};; esac; \
 	  ./scripts/dist.sh "$(VERSION)" "$$os" "$$arch" "$$arm"; \
 	done
+	@./scripts/dist.sh --sums
+
+# .deb and .rpm for this machine's Linux architecture (needs nfpm or network for `go run`)
+packages:
+	@mkdir -p dist
+	@./scripts/package.sh "$(VERSION)" "$$(go env GOARCH)" "$$(go env GOARM)"
 	@./scripts/dist.sh --sums
 
 clean:

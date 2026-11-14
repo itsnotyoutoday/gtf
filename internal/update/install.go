@@ -14,11 +14,27 @@ const RecordFile = "install.json"
 
 // Record says how this copy of gtf was installed.
 type Record struct {
-	Scope   string `json:"scope"`   // "user" or "global"
+	Scope   string `json:"scope"`   // "user", "global", or "package" (installed by a deb/rpm)
 	BinDir  string `json:"bindir"`  // where the gtf binary lives
 	LibDir  string `json:"libdir"`  // the library directory (contains tf/, gtf/, examples/)
 	Version string `json:"version"` // the version installed
 	Repo    string `json:"repo,omitempty"`
+	// ManagedBy is "deb" or "rpm" for a copy installed by the system package manager. Such a copy
+	// is never replaced by /update: only the package manager (the system administrator) may change it.
+	ManagedBy string `json:"managed_by,omitempty"`
+}
+
+// IsManaged reports whether the system package manager owns this installation.
+func (r Record) IsManaged() bool { return r.Scope == "package" || r.ManagedBy != "" }
+
+// IsSystemPath reports whether exe lives where a distribution's packages put programs. A binary
+// there is treated as package-managed even without an install record, so /update never overwrites it.
+func IsSystemPath(exe string) bool {
+	switch filepath.Dir(exe) {
+	case "/usr/bin", "/bin", "/usr/sbin", "/sbin":
+		return true
+	}
+	return false
 }
 
 // LoadRecord reads <libdir>/install.json.

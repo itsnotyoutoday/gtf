@@ -338,3 +338,31 @@ func TestStateAndDue(t *testing.T) {
 		t.Fatal("AvailableFor")
 	}
 }
+
+func TestManagedInstallNeverUpdates(t *testing.T) {
+	c, _ := fakeReleases(t, "0.3.0", false)
+	root := t.TempDir()
+	exe := filepath.Join(root, "gtf")
+	_ = os.WriteFile(exe, []byte("OLD"), 0o755)
+	for _, rec := range []Record{{Scope: "package"}, {Scope: "global", ManagedBy: "rpm"}} {
+		u := &Updater{Client: c, Version: "0.2.0", ExePath: exe, Rec: rec, GOOS: "linux", GOARCH: "amd64"}
+		var out strings.Builder
+		res, err := u.Run(context.Background(), ChannelStable, true, &out)
+		if err != nil || !res.Newer || res.Applied {
+			t.Fatalf("%+v: %+v %v", rec, res, err)
+		}
+		if !strings.Contains(out.String(), "system administrator") || !strings.Contains(out.String(), "0.3.0") {
+			t.Fatalf("advice missing: %q", out.String())
+		}
+		_, rel, _ := u.Check(context.Background(), ChannelStable)
+		if _, err := u.Update(context.Background(), rel); err != ErrManaged {
+			t.Fatalf("Update on a managed install: %v", err)
+		}
+		if b, _ := os.ReadFile(exe); string(b) != "OLD" {
+			t.Fatal("a package-managed binary was replaced")
+		}
+	}
+	if !IsSystemPath("/usr/bin/gtf") || IsSystemPath("/usr/local/bin/gtf") || IsSystemPath(filepath.Join(root, "gtf")) {
+		t.Fatal("IsSystemPath")
+	}
+}

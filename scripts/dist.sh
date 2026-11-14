@@ -13,8 +13,10 @@ cd "$(dirname "$0")/.."
 
 if [ "${1:-}" = "--sums" ]; then
   cd dist
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum gtf-*.tar.gz > SHA256SUMS
-  else shasum -a 256 gtf-*.tar.gz > SHA256SUMS; fi
+  files=$(ls gtf-*.tar.gz gtf_*.deb gtf-*.rpm 2>/dev/null)
+  # shellcheck disable=SC2086
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum $files > SHA256SUMS
+  else shasum -a 256 $files > SHA256SUMS; fi
   cat SHA256SUMS
   exit 0
 fi

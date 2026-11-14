@@ -36,6 +36,21 @@ program); otherwise the copy embedded in the binary, extracted to the user cache
 Put your own startup commands in `~/.gtfrc`, and anything meant for every user of a global install in
 `<libdir>/local.tf` (it survives updates).
 
+### Debian/Ubuntu and RedHat/Fedora packages
+
+Each release also publishes `gtf_VERSION_ARCH.deb` and `gtf-VERSION.ARCH.rpm` (amd64, arm64, 386, armv7):
+
+```
+sudo apt install ./gtf_0.0.2_amd64.deb          # or: sudo dpkg -i ...
+sudo dnf install ./gtf-0.0.2.x86_64.rpm         # or: sudo rpm -i ...
+```
+
+They install `/usr/bin/gtf` and `/usr/lib/gtf`, and `lib/gtf/install.json` marks them as owned by the package
+manager. On such an install `/update` and `gtf --update` only say whether a newer version exists and tell you to ask
+your system administrator to upgrade the package (`sudo apt install --only-upgrade gtf`, `sudo dnf upgrade gtf`);
+they never replace the files themselves. A gtf running from `/usr/bin` is treated the same way even without that file.
+The shell installer above stays the way to install without a package manager (and without root).
+
 ## Update
 
 | | |
@@ -62,7 +77,8 @@ Tags follow the SquatClient daemon's convention: `v0.0.2-rel` is a final release
 `v0.0.2-alpha1` / `-beta1` are pre-releases. Pushing such a tag runs `.github/workflows/release.yml`, which tests,
 builds every platform with `scripts/dist.sh` and publishes the tarballs plus `SHA256SUMS`.
 
-`make dist` builds the tarball for this machine; `make dist-all` every platform. `scripts/test_install.sh` tests
+`make dist` builds the tarball for this machine; `make dist-all` every platform; `make packages` the .deb and .rpm
+(needs `nfpm`, or network access for `go run`; the packaging in `packaging/nfpm.yaml` is built by CI on release). `scripts/test_install.sh` tests
 the installer and the updater end to end against a local fake of GitHub.
 
 Until the scripting engine (github.com/itsnotyoutoday/gtfparser) is published, `go.mod` carries a temporary

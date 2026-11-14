@@ -113,6 +113,16 @@ type Updater struct {
 	GOARCH  string
 }
 
+// ErrManaged is returned when the installation belongs to the system package manager.
+var ErrManaged = errors.New("gtf was installed by the system package manager (deb/rpm)")
+
+// Managed reports whether this installation may not be changed by /update.
+func (u *Updater) Managed() bool { return u.Rec.IsManaged() || IsSystemPath(u.ExePath) }
+
+// ManagedAdvice is what to tell the user of a package-managed installation.
+const ManagedAdvice = "This copy was installed with the system package manager (deb/rpm), so /update cannot install it. " +
+	"Ask your system administrator to upgrade the gtf package (for example: sudo apt install --only-upgrade gtf, or sudo dnf upgrade gtf)."
+
 // Result is the outcome of Check or Update.
 type Result struct {
 	Current string
@@ -144,6 +154,9 @@ func (u *Updater) Check(ctx context.Context, channel string) (res Result, rel Re
 // binary cannot be replaced.
 func (u *Updater) Update(ctx context.Context, rel Release) (Result, error) {
 	res := Result{Current: u.Version, Latest: rel.Version(), Newer: true}
+	if u.Managed() {
+		return res, ErrManaged
+	}
 	if err := CanWrite(filepath.Dir(u.ExePath)); err != nil {
 		return res, fmt.Errorf("cannot write to %s: %w", filepath.Dir(u.ExePath), err)
 	}

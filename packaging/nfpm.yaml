@@ -1,0 +1,30 @@
+# Builds the .deb and .rpm of gtf with nfpm (https://nfpm.goreleaser.com); driven by scripts/package.sh,
+# which sets GTF_VERSION, GTF_ARCH (amd64 arm64 386 arm7) and GTF_STAGE (the tree to package).
+#
+# A package-managed gtf is owned by the system package manager: /update only reports new versions there
+# and tells the user to ask their system administrator (lib/gtf/install.json says scope "package").
+name: gtf
+arch: ${GTF_ARCH}
+platform: linux
+version: ${GTF_VERSION}
+version_schema: semver
+section: net
+priority: optional
+maintainer: Rick Bird <noreply@github.com>
+description: |
+  GoTinyFugue (gtf), a TinyFugue-compatible terminal MU* client.
+  Telnet with GMCP/MSDP/MSSP/MCCP2/TLS, TinyFugue scripting, panels and layouts.
+vendor: GoTinyFugue
+homepage: https://github.com/itsnotyoutoday/gtf
+license: GPL-3.0-or-later
+contents:
+  - src: ${GTF_STAGE}/bin/gtf
+    dst: /usr/bin/gtf
+    file_info:
+      mode: 0755
+  - src: ${GTF_STAGE}/lib/gtf
+    dst: /usr/lib/gtf
+    type: tree
+  - src: ${GTF_STAGE}/doc
+    dst: /usr/share/doc/gtf
+    type: tree
