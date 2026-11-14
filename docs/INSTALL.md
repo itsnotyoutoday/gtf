@@ -10,7 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/itsnotyoutoday/gtf/main/install.sh 
 | | user (default) | `--global` |
 |---|---|---|
 | program | `~/bin/gtf` | `/usr/local/bin/gtf` |
-| library | `~/lib/gtf` (`tf/`, `gtf/`, `examples/`, `docs/`) | `/usr/local/lib/gtf` |
+| library | `~/lib/gtf` (`tf/`, `gtf/` with the demos in `gtf/examples/`, `docs/`) | `/usr/local/lib/gtf` |
 | privileges | none | uses `sudo` when needed |
 | your files | `~/.gtf` (settings, update state, layouts) | `~/.gtf` per user |
 
@@ -25,6 +25,7 @@ program atomically, so it is safe to run while an old gtf is running. Re-running
 install is left alone. `--uninstall` removes the program and library (never `~/.gtf`).
 
 A release tarball unpacks to `gtf-VERSION-os-arch/` with `bin/gtf`, `lib/gtf/`, `install.sh`, `README.md`, `LICENSE`.
+The demos (`/layoutdemo`, `/lcars`) are part of the library and load themselves when you type their names.
 The static binary needs nothing else: the library is also embedded in it, and is used when no installed library of
 the same version is found.
 

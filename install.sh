@@ -25,12 +25,14 @@
 # /restart (or /update -y -r) swaps to the new version without dropping your connections.
 # Re-running this script also upgrades (an up-to-date install is left alone).
 #
-# Testing: GTF_REPO, GTF_API_BASE (releases API base) and GTF_RELEASE_BASE (download base URL) override GitHub.
+# Testing: GTF_REPO, GTF_API_BASE (releases API base), GTF_WEB_BASE (release feed base) and GTF_RELEASE_BASE
+# (download base URL) override GitHub.
 set -eu
 
 REPO="${GTF_REPO:-itsnotyoutoday/gtf}"
 API_BASE="${GTF_API_BASE:-https://api.github.com}"
 DL_BASE="${GTF_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
+WEB_BASE="${GTF_WEB_BASE:-https://github.com}"
 
 scope="" prefix="" bindir="" libdir="" version="" channel="" want_check="" yes=n uninstall=n
 
@@ -175,6 +177,12 @@ if [ -z "$tag" ]; then
     /"tag_name"/ { t=$0; sub(/.*"tag_name"[ ]*:[ ]*"/, "", t); sub(/".*/, "", t); draft=""; next }
     /"draft"/ { draft=($0 ~ /true/) ? "t" : "f"; next }
     /"prerelease"/ { p=($0 ~ /true/) ? "t" : "f"; if (draft != "t" && (pre == "y" || p == "f")) { print t; exit } }') || true
+  if [ -z "$tag" ]; then
+    # the API allows only 60 calls an hour per IP address; the release feed is not rate limited
+    tags=$(get "$WEB_BASE/$REPO/releases.atom" 2>/dev/null | sed -n 's#.*<id>tag:github.com,2008:Repository/[0-9]*/\(v[^<]*\)</id>.*#\1#p') || tags=""
+    if [ "$want_pre" = y ]; then tag=$(printf '%s\n' "$tags" | head -n1)
+    else tag=$(printf '%s\n' "$tags" | grep -e '-rel$' | head -n1) || tag=""; fi
+  fi
   [ -n "$tag" ] || die "could not find a release; see https://github.com/$REPO/releases"
 fi
 num="${tag#v}"; num="${num%-rel}"

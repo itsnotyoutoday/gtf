@@ -49,7 +49,7 @@ P="$T/prefix"
 
 # 1. install the older release into a user prefix
 sh install.sh --yes --prefix "$P" --version 0.0.2-alpha1 --no-update-check >"$T/out1" 2>&1 || { cat "$T/out1"; fail "install"; }
-[ -x "$P/bin/gtf" ] && [ -f "$P/lib/gtf/tf/stdlib.tf" ] && [ -f "$P/lib/gtf/examples/lcars.tf" ] || fail "files missing after install"
+[ -x "$P/bin/gtf" ] && [ -f "$P/lib/gtf/tf/stdlib.tf" ] && [ -f "$P/lib/gtf/gtf/examples/lcars.tf" ] || fail "files missing after install"
 grep -q '"version": "0.0.2-alpha1"' "$P/lib/gtf/install.json" || fail "install.json version"
 "$P/bin/gtf" --version | grep -q "0.0.2-alpha1" || fail "installed binary version"
 grep -q '"update_check": false' "$HOME/.gtf/config.json" || fail "update_check setting not written"

@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -48,7 +49,11 @@ type Client struct {
 	HTTP Doer   // default http.DefaultClient
 	API  string // default DefaultAPI
 	Repo string // default DefaultRepo
+	Web  string // default DefaultWeb: where the release feed and downloads live (the API-free fallback)
 }
+
+// DefaultWeb is the GitHub web site: its releases.atom feed is not rate limited, unlike the API.
+const DefaultWeb = "https://github.com"
 
 // Asset is one downloadable file of a release.
 type Asset struct {
@@ -62,6 +67,8 @@ type Release struct {
 	Prerelease bool    `json:"prerelease"`
 	Draft      bool    `json:"draft"`
 	Assets     []Asset `json:"assets"`
+	// DownloadBase is set for a release learned from the feed (no asset list): files are at DownloadBase/<name>.
+	DownloadBase string `json:"-"`
 }
 
 // Version is the tag without a leading "v" and without the "-rel" marker of final releases.
@@ -110,14 +117,50 @@ func (c *Client) Latest(ctx context.Context, channel string) (Release, error) {
 		repo = c.Repo
 	}
 	body, err := c.get(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=50", api, repo), maxAPIBody)
-	if err != nil {
-		return Release{}, err
+	if err == nil {
+		var rels []Release
+		if err = json.Unmarshal(body, &rels); err != nil {
+			err = fmt.Errorf("releases list: %w", err)
+		} else {
+			return PickLatest(rels, channel)
+		}
 	}
-	var rels []Release
-	if err := json.Unmarshal(body, &rels); err != nil {
-		return Release{}, fmt.Errorf("releases list: %w", err)
+	// The API allows only 60 calls an hour per IP address (a 403 for anyone behind a shared address):
+	// fall back to the release feed, which is not rate limited.
+	rels, ferr := c.feedReleases(ctx, repo)
+	if ferr != nil {
+		return Release{}, err // the API's error is the one worth showing
 	}
 	return PickLatest(rels, channel)
+}
+
+var feedTag = regexp.MustCompile(`<id>tag:github\.com,2008:Repository/[0-9]+/([^<]+)</id>`)
+
+// feedReleases lists releases from <web>/<repo>/releases.atom. Assets are not listed there; they are
+// found by name under <web>/<repo>/releases/download/<tag>/ (see Download).
+func (c *Client) feedReleases(ctx context.Context, repo string) ([]Release, error) {
+	web := DefaultWeb
+	if c != nil && c.Web != "" {
+		web = strings.TrimRight(c.Web, "/")
+	}
+	body, err := c.get(ctx, fmt.Sprintf("%s/%s/releases.atom", web, repo), maxAPIBody)
+	if err != nil {
+		return nil, err
+	}
+	var rels []Release
+	for _, m := range feedTag.FindAllSubmatch(body, -1) {
+		tag := string(m[1])
+		v, err := ParseVersion(tag)
+		if err != nil {
+			continue
+		}
+		rels = append(rels, Release{Tag: tag, Prerelease: v.IsPrerelease(),
+			DownloadBase: fmt.Sprintf("%s/%s/releases/download/%s", web, repo, tag)})
+	}
+	if len(rels) == 0 {
+		return nil, ErrNoRelease
+	}
+	return rels, nil
 }
 
 // ErrNoRelease means no release matches the channel.
@@ -168,6 +211,9 @@ func (r Release) FindAsset(name string) (Asset, bool) {
 		if a.Name == name {
 			return a, true
 		}
+	}
+	if r.DownloadBase != "" { // learned from the feed: the file is at its conventional URL
+		return Asset{Name: name, URL: r.DownloadBase + "/" + name}, true
 	}
 	return Asset{}, false
 }

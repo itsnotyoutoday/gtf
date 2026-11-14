@@ -33,7 +33,7 @@ import (
 // newUpdater builds the updater for the running binary.
 func newUpdater(home string) *update.Updater {
 	u := &update.Updater{
-		Client:  &update.Client{HTTP: &http.Client{Timeout: 60 * time.Second}, API: os.Getenv("GTF_UPDATE_API"), Repo: os.Getenv("GTF_UPDATE_REPO")},
+		Client:  &update.Client{HTTP: &http.Client{Timeout: 60 * time.Second}, API: os.Getenv("GTF_UPDATE_API"), Web: os.Getenv("GTF_UPDATE_WEB"), Repo: os.Getenv("GTF_UPDATE_REPO")},
 		Version: Version,
 		ExePath: exePath(),
 		GOOS:    runtime.GOOS,

@@ -1,6 +1,6 @@
 ;;;; /lcars: a TNG-style LCARS bridge console, drawn with gtf canvases and panels.
 ;;;;
-;;;;   /load examples/lcars.tf
+;;;;   (nothing to load: gtf loads this file the first time you type /lcars)
 ;;;;   /lcars             sensor console: radar dish, contacts, forward viewscreen
 ;;;;   /lcars eng         engineering console: warp core, power, damage control
 ;;;;   /lcars alert red   (or: /lcars alert off)

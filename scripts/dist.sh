@@ -5,7 +5,7 @@
 #
 # The tarball unpacks to gtf-VERSION-<label>/ with
 #   bin/gtf             the static client binary
-#   lib/gtf/{tf,gtf,examples,docs}   the library directory (what install.sh puts in <prefix>/lib/gtf)
+#   lib/gtf/{tf,gtf,docs}   (the demos are in gtf/examples)   the library directory (what install.sh puts in <prefix>/lib/gtf)
 #   install.sh README.md LICENSE
 # and `scripts/dist.sh --sums` writes dist/SHA256SUMS for everything in dist/.
 set -eu
@@ -46,8 +46,7 @@ CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" GOARM="$arm" go build -trimpath \
 cp -R gtflib/tf "$stage/$d/lib/gtf/tf"
 cp -R gtflib/gtf "$stage/$d/lib/gtf/gtf"
 cp gtflib/TF-NOTICE.md "$stage/$d/lib/gtf/TF-NOTICE.md"
-mkdir -p "$stage/$d/lib/gtf/examples" "$stage/$d/lib/gtf/docs"
-cp examples/*.tf "$stage/$d/lib/gtf/examples/"
+mkdir -p "$stage/$d/lib/gtf/docs"
 cp docs/*.md "$stage/$d/lib/gtf/docs/"
 cp README.md LICENSE install.sh "$stage/$d/"
 chmod 755 "$stage/$d/bin/gtf" "$stage/$d/install.sh"

@@ -97,7 +97,7 @@ Any drawing command also takes `a=ALPHA` (0..1). Colors are `#rrggbb`, names, or
 rings, ellipses, polygons and rounded corners are anti-aliased. `term_width()` and `term_height()` give the
 terminal size, so a script can size its canvases to the screen.
 
-`examples/lcars.tf` uses all of this: a TNG-style console with rounded elbows and pill buttons, a starfield
+`gtf/examples/lcars.tf` (just type `/lcars`) uses all of this: a TNG-style console with rounded elbows and pill buttons, a starfield
 viewscreen with ships, the radar dish, and an animated warp core (`/lcars`, `/lcars eng`).
 
 ### Data bindings and redraws
@@ -122,16 +122,15 @@ Reacting from scripts: `/def -hGMCP -t'Char.Vitals *' ~lowhp = /if (gmcp_get("Ch
 
 ## Demo
 
-`examples/layout-demo.tf` is a guided tour of everything above, no MUD connection needed:
+`gtf/examples/layout-demo.tf` is a guided tour of everything above, no MUD connection needed:
 
 ```
-/load examples/layout-demo.tf
 /layoutdemo          run all 18 scenes, one every 3 seconds
 /layoutdemo 7        jump to a single scene
 /layoutdemo stop     quit and restore the plain tf screen
 ```
 
-`examples/lcars.tf` is a larger example: a TNG-style LCARS bridge console (`/lcars` sensors with a live
+`gtf/examples/lcars.tf` is a larger example: a TNG-style LCARS bridge console (`/lcars` sensors with a live
 radar dish, contact list and forward viewscreen; `/lcars eng` engineering with an animated warp core;
 `/lock`, `/pwr`, `/lcars alert red`).
 It shows how panels are driven from script variables that you would feed from GMCP/MSDP in a real game.

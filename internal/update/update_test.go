@@ -378,3 +378,41 @@ func TestManagedInstallNeverUpdates(t *testing.T) {
 		t.Fatal("IsSystemPath")
 	}
 }
+
+// When the API is rate limited (403) the release feed still finds the newest release and its files.
+func TestLatestFallsBackToTheFeedWhenTheAPIIsRateLimited(t *testing.T) {
+	tgz := makeTarball(t, "0.4.0-alpha1", AssetLabel("linux", "amd64"), releaseFiles)
+	name := AssetName("0.4.0-alpha1", "linux", "amd64")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
+	})
+	mux.HandleFunc("/o/r/releases.atom", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<feed><entry><id>tag:github.com,2008:Repository/1/v0.4.0-alpha1</id></entry>`+
+			`<entry><id>tag:github.com,2008:Repository/1/v0.3.0-rel</id></entry>`+
+			`<entry><id>tag:github.com,2008:Repository/1/nightly</id></entry></feed>`)
+	})
+	mux.HandleFunc("/o/r/releases/download/v0.4.0-alpha1/"+name, func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(tgz) })
+	mux.HandleFunc("/o/r/releases/download/v0.4.0-alpha1/SHA256SUMS", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s  %s\n", sum(tgz), name)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	c := &Client{HTTP: ts.Client(), API: ts.URL, Web: ts.URL, Repo: "o/r"}
+	rel, err := c.Latest(context.Background(), ChannelPrerelease)
+	if err != nil || rel.Tag != "v0.4.0-alpha1" || !rel.Prerelease {
+		t.Fatalf("prerelease channel: %+v %v", rel, err)
+	}
+	if rel, err = c.Latest(context.Background(), ChannelStable); err != nil || rel.Tag != "v0.3.0-rel" {
+		t.Fatalf("stable channel: %+v %v", rel, err)
+	}
+	rel, _ = c.Latest(context.Background(), ChannelPrerelease)
+	if data, err := c.Download(context.Background(), rel, "linux", "amd64"); err != nil || len(data) == 0 {
+		t.Fatalf("download through the feed: %v", err)
+	}
+	// both the API and the feed down: the API's error is reported
+	bad := &Client{HTTP: ts.Client(), API: ts.URL, Web: ts.URL + "/none", Repo: "o/r"}
+	if _, err := bad.Latest(context.Background(), ChannelStable); err == nil || !strings.Contains(err.Error(), "403") {
+		t.Fatalf("want the API's 403, got %v", err)
+	}
+}

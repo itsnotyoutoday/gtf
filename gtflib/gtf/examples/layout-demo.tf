@@ -1,6 +1,6 @@
 ;;;; gtf layout demo: a guided tour of /panel and /layout.
 ;;;;
-;;;;   /load examples/layout-demo.tf
+;;;;   (nothing to load: gtf loads this file the first time you type /layoutdemo)
 ;;;;   /layoutdemo        run the whole tour (about 55 seconds, one scene every 3 seconds)
 ;;;;   /layoutdemo stop   stop early and put the normal tf screen back
 ;;;;   /layoutdemo N      jump straight to scene N (1-18)
