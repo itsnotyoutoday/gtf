@@ -38,18 +38,27 @@ Put your own startup commands in `~/.gtfrc`, and anything meant for every user o
 
 ### Debian/Ubuntu and RedHat/Fedora packages
 
-Each release also publishes `gtf_VERSION_ARCH.deb` and `gtf-VERSION.ARCH.rpm` (amd64, arm64, 386, armv7):
+Each release also publishes `gtf_VERSION_ARCH.deb` and `gtf-VERSION-1.ARCH.rpm` (amd64, arm64, 386, armv7; a pre-release such as `0.0.2-alpha1` is packaged as `0.0.2~alpha1`, which sorts before `0.0.2`):
 
 ```
 sudo apt install ./gtf_0.0.2_amd64.deb          # or: sudo dpkg -i ...
-sudo dnf install ./gtf-0.0.2.x86_64.rpm         # or: sudo rpm -i ...
+sudo dnf install ./gtf-0.0.2-1.x86_64.rpm        # or: sudo rpm -i ...
 ```
 
 They install `/usr/bin/gtf` and `/usr/lib/gtf`, and `lib/gtf/install.json` marks them as owned by the package
-manager. On such an install `/update` and `gtf --update` only say whether a newer version exists and tell you to ask
-your system administrator to upgrade the package (`sudo apt install --only-upgrade gtf`, `sudo dnf upgrade gtf`);
-they never replace the files themselves. A gtf running from `/usr/bin` is treated the same way even without that file.
-The shell installer above stays the way to install without a package manager (and without root).
+manager. The package build is compiled with `-tags pkgbuild`: it contains **no code to fetch or install anything
+from GitHub** (the binary is about 1.6 MB smaller). `/update` there only compares the running gtf with the one the
+package manager has installed on disk:
+
+- same version: "this is the newest gtf installed on this system", and that newer releases are for your system
+  administrator to install (`sudo apt install --only-upgrade gtf`, `sudo dnf upgrade gtf`);
+- a newer one is installed (the administrator upgraded the package while your gtf was running): it says so, and
+  `/update -r` restarts into it without dropping your connections.
+
+`/update -y` explains that it cannot install. The same message appears once at startup when a newer installed
+version is waiting. A normal-build gtf that happens to live in `/usr/bin` or has a package record is treated the
+same way and never overwrites those files. The shell installer above stays the way to install without a package
+manager (and without root).
 
 ## Update
 

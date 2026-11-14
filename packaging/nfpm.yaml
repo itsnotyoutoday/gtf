@@ -1,5 +1,6 @@
 # Builds the .deb and .rpm of gtf with nfpm (https://nfpm.goreleaser.com); driven by scripts/package.sh,
-# which sets GTF_VERSION, GTF_ARCH (amd64 arm64 386 arm7) and GTF_STAGE (the tree to package).
+# which sets GTF_VERSION and GTF_ARCH (amd64 arm64 386 arm7) and stages the files to package in dist/.pkg-root
+# (nfpm does not expand environment variables in the contents paths).
 #
 # A package-managed gtf is owned by the system package manager: /update only reports new versions there
 # and tells the user to ask their system administrator (lib/gtf/install.json says scope "package").
@@ -18,13 +19,13 @@ vendor: GoTinyFugue
 homepage: https://github.com/itsnotyoutoday/gtf
 license: GPL-3.0-or-later
 contents:
-  - src: ${GTF_STAGE}/bin/gtf
+  - src: dist/.pkg-root/bin/gtf
     dst: /usr/bin/gtf
     file_info:
       mode: 0755
-  - src: ${GTF_STAGE}/lib/gtf
+  - src: dist/.pkg-root/lib/gtf
     dst: /usr/lib/gtf
     type: tree
-  - src: ${GTF_STAGE}/doc
+  - src: dist/.pkg-root/doc
     dst: /usr/share/doc/gtf
     type: tree

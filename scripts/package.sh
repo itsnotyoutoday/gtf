@@ -15,11 +15,12 @@ goarch="$2"; arm="${3:-}"
 [ -n "$ver" ] && [ -n "$goarch" ] || { echo "version and GOARCH must not be empty" >&2; exit 2; }
 nfarch="$goarch"; [ "$goarch" = arm ] && nfarch="arm${arm:-7}"
 
-stage="dist/.pkg-$nfarch"
+stage="dist/.pkg-root"
 [ -d "$stage" ] && rm -r "$stage"
 mkdir -p "$stage/bin" "$stage/lib/gtf" "$stage/doc" dist
 
-CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" GOARM="$arm" go build -trimpath \
+# -tags pkgbuild: the distribution build contains no GitHub fetch/install code (the package manager owns the files)
+CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" GOARM="$arm" go build -trimpath -tags pkgbuild \
   -ldflags "-s -w -X github.com/itsnotyoutoday/gtf/internal/client.Version=$ver" \
   -o "$stage/bin/gtf" ./cmd/gtf
 chmod 755 "$stage/bin/gtf"
@@ -34,7 +35,7 @@ cp README.md LICENSE "$stage/doc/"
 printf '{\n  "scope": "package",\n  "managed_by": "package",\n  "bindir": "/usr/bin",\n  "libdir": "/usr/lib/gtf",\n  "version": "%s"\n}\n' "$ver" > "$stage/lib/gtf/install.json"
 
 if command -v nfpm >/dev/null 2>&1; then NFPM="nfpm"; else NFPM="go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1"; fi
-export GTF_VERSION="$ver" GTF_ARCH="$nfarch" GTF_STAGE="$PWD/$stage"
+export GTF_VERSION="$ver" GTF_ARCH="$nfarch"
 for fmt in deb rpm; do
   $NFPM package --config packaging/nfpm.yaml --packager "$fmt" --target dist/
 done
