@@ -25,17 +25,18 @@ type World = gtfparser.WorldInfo
 
 // Session is one world connection with its own screen.
 type Session struct {
-	c      *Client
-	World  World
-	conn   *gnet.Conn
-	scr    *ui.Screen
-	ansi   ui.AnsiParser
-	store  *data.Store
-	state  gtfparser.SockState
-	pend   string // partial line (no newline yet)
-	prompt string // current prompt text (plain)
-	opts   gtfparser.ConnectOptions
-	addr   string // "ip port" being tried / connected to
+	c           *Client
+	World       World
+	conn        *gnet.Conn
+	scr         *ui.Screen
+	ansi        ui.AnsiParser
+	store       *data.Store
+	state       gtfparser.SockState
+	pend        string        // partial line (no newline yet)
+	prompt      string        // current prompt text (plain)
+	promptCells []layout.Cell // the same with its colours (the server's prompt is ANSI); nil when a script set it
+	opts        gtfparser.ConnectOptions
+	addr        string // "ip port" being tried / connected to
 	// numquiet is tf's "quiet login": how many of the server's first lines are
 	// still to be hidden (/connect -q with automatic login)
 	numquiet int
@@ -398,6 +399,7 @@ func (s *Session) setPrompt(text string) {
 		s.numquiet = 0
 	}
 	s.prompt = text
+	s.promptCells = nil
 	s.c.in.SetPrompt(s.World.Name, text)
 }
 
@@ -415,6 +417,7 @@ func (s *Session) promptEnd() {
 	s.c.withWorld(s, func() {
 		if r := s.c.in.FireHookArgs("PROMPT", plain); r.Count == 0 {
 			s.setPrompt(plain)
+			s.promptCells = pcells // after setPrompt: a script-set prompt (SetPrompt) clears the colours
 		}
 	})
 }

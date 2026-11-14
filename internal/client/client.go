@@ -471,9 +471,11 @@ func (c *Client) syncUI() {
 	if c.fg != nil {
 		u.Hidden = !in.LocalEcho(c.fg.World.Name)
 		u.Prompt = c.fg.prompt
+		u.PromptCells = c.fg.promptCells
 	} else {
 		u.Hidden = false
 		u.Prompt = ""
+		u.PromptCells = nil
 	}
 	cells := c.statusCells(u.W)
 	c.applyAlert(cells)

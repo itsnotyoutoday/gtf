@@ -45,12 +45,19 @@ def need(cond, msg):
     if not cond:
         print("FAIL:", msg); print(screen.decode(errors="replace")[-1500:]); os.kill(pid, 9); sys.exit(1)
 
+mark = 0  # everything before this has been matched already
 def wait_for(text, secs):
+    """Wait until `text` appears in the screen output after the previous match (the output may arrive in any chunking)."""
+    global mark
     end = time.time() + secs
-    while time.time() < end:
-        if text in pump(0.3):
+    while True:
+        i = screen.find(text, mark)
+        if i >= 0:
+            mark = i + len(text)
             return True
-    return False
+        if time.time() >= end:
+            return False
+        pump(0.3)
 
 srv.settimeout(10)
 g, _ = srv.accept()

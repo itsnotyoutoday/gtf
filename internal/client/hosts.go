@@ -348,6 +348,9 @@ func (c *Client) DisplayLine(world, line string) {
 // SetPrompt implements gtfparser.PromptHost.
 func (c *Client) SetPrompt(world, text string) {
 	if s := c.sessions[world]; s != nil {
+		if s.prompt != text {
+			s.promptCells = nil // a script changed the prompt: no colours to keep
+		}
 		s.prompt = text
 	}
 }

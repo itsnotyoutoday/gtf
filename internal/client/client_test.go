@@ -280,3 +280,27 @@ func TestVersionComesFromVersionFile(t *testing.T) {
 		t.Fatalf("VersionLine %q lacks %q", VersionLine(), Version)
 	}
 }
+
+// A prompt (the server's @prompt text, ANSI coloured, ended by IAC GA) goes in the input bar WITH its colours.
+func TestColouredPromptKeepsItsColourInTheInputBar(t *testing.T) {
+	c, scr, d := newTestClient(t)
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/addworld w localhost 4000")
+		in.Exec("/connect w")
+	})
+	srv := <-d.srv
+	srv.Send([]byte("hello\r\n\x1b[1;36m[N/P] Page \x1b[0m->"))
+	srv.Send(nettest.IAC(telnet.GA))
+	waitScreen(t, c, scr, "[N/P] Page ->")
+	var attr string
+	c.Do(func(*gtfparser.Interp) {
+		for y := 0; y < scr.H; y++ {
+			if strings.Contains(scr.Row(y), "[N/P] Page ->") && scr.Row(y) != "" {
+				attr = scr.CellAt(strings.Index(scr.Row(y), "["), y).Attr
+			}
+		}
+	})
+	if attr == "" || !strings.Contains(attr, "1") || !(strings.Contains(attr, "36") || strings.Contains(attr, "fg=")) {
+		t.Fatalf("the prompt in the input bar lost its colour: attr %q\n%s", attr, scr.Dump())
+	}
+}

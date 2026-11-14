@@ -31,6 +31,9 @@ type UI struct {
 	Ed     Editor
 	Hidden bool   // do not echo typed text (password mode)
 	Prompt string // text shown before the input
+	// PromptCells is the same prompt with its colours and attributes (the server's @prompt text is ANSI);
+	// when set and equal to Prompt it is drawn instead of the plain text.
+	PromptCells []layout.Cell
 
 	status [][]layout.Cell
 	old    []string // lines already entered, shown above the current one in the input window
@@ -225,20 +228,33 @@ func (g *grid) putLine(x, y, maxw int, cells []layout.Cell) {
 func (u *UI) inputRows() ([][]layout.Cell, int, int) {
 	w := max(u.W-1, 1) // tf wraps the input line one column short of the edge
 	ph := []rune(u.Prompt)
-	var text []rune
-	text = append(text, ph...)
-	cur := len(ph)
+	// one cell per rune of prompt + input, so the prompt keeps its colours
+	var text []layout.Cell
+	if len(u.PromptCells) > 0 && StripCells(u.PromptCells) == u.Prompt {
+		for _, c := range u.PromptCells {
+			if c.R != 0 { // the filler after a double-width rune
+				text = append(text, c)
+			}
+		}
+	} else {
+		for _, r := range ph {
+			text = append(text, layout.Cell{R: r})
+		}
+	}
+	cur := len(text)
 	if !u.Hidden {
 		ed := u.editor()
 		t := ed.Text()
 		bc := min(max(ed.Cursor(), 0), len(t))
-		text = append(text, []rune(t)...)
+		for _, r := range t {
+			text = append(text, layout.Cell{R: r})
+		}
 		cur += utf8.RuneCountInString(t[:bc])
 	}
 	var cur_rows [][]layout.Cell
 	for i := 0; i == 0 || i < len(text); i += w {
 		end := min(i+w, len(text))
-		cur_rows = append(cur_rows, PlainCells(string(text[i:end]), layout.Attr{}))
+		cur_rows = append(cur_rows, append([]layout.Cell(nil), text[i:end]...))
 	}
 	cy, cx := cur/w, cur%w
 	if cur > 0 && cur%w == 0 && cur == len(text) {
