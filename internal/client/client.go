@@ -102,6 +102,8 @@ type Client struct {
 	capture                              *[]string
 	captureWarn                          bool
 	tapGame, gameLine, noTap, remoteSend bool
+	inLine                               bool // a line received from a world is being run through triggers and hooks
+	inWarn                               bool // the interpreter is printing a diagnostic (its Warn hook)
 	lastSquatID                          string
 	worldAuthor                          string // device name while a peer's world edit runs ("" = local)
 
@@ -143,11 +145,17 @@ func New(cfg Config) (*Client, error) {
 
 	in := gtfparser.New(c, gtfparser.WithoutEnvironment())
 	c.in = in
+	// what /features reports: the capabilities gtf really has (the engine reports only what a client declares)
+	for _, f := range []string{"256colors", "IPv6", "MCCPv2", "ssl"} {
+		in.SetFeature(f, true)
+	}
 	in.Warn = func(s string) {
 		if c.capture != nil {
 			c.captureWarn = true
 		}
+		c.inWarn = true // an interpreter diagnostic: the squatter does not forward these (see tapKind)
 		c.echoLine("% " + s)
+		c.inWarn = false
 	}
 	in.Input().OnChange = c.scheduleRender
 	c.ui.Ed = in.Input()
@@ -263,8 +271,15 @@ func (c *Client) loadLibrary() error {
 	c.loadGtfLib()
 	if !c.cfg.NoRC {
 		c.loadRC()
+		c.runStartupMacro()
 	}
 	return nil
+}
+
+// runStartupMacro runs the gtf_startup macro (gtflib/gtf/startup.tf) if it is still defined: gtf's own startup steps, written in the language so a
+// personal config can change or remove them. It runs after the personal config; -f skips it together with the config.
+func (c *Client) runStartupMacro() {
+	c.in.Exec("/if ( ismacro(\"gtf_startup\") ) /gtf_startup%; /endif")
 }
 
 func (c *Client) banner() {

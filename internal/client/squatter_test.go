@@ -44,6 +44,7 @@ func squatClient(t *testing.T, extra ...string) (*Client, *vt.Screen, *fakeDiale
 	dir := t.TempDir() + "/sq"
 	c.Do(func(in *gtfparser.Interp) {
 		in.Exec("/set squatter_port=0")
+		in.Exec("/set squatter_bind=127.0.0.1") // the tests stay on this machine (the default is every interface)
 		in.Exec("/set squatter_dir=" + dir)
 		in.Exec("/set squatter_name=gtftest")
 		for _, e := range extra {
@@ -414,6 +415,7 @@ func TestSquatterPortInUseIsReported(t *testing.T) {
 	c2.Do(func(in *gtfparser.Interp) {
 		in.Exec("/set squatter_dir=" + t.TempDir() + "/two")
 		in.Exec("/set squatter_port=" + port)
+		in.Exec("/set squatter_bind=127.0.0.1")
 		in.Exec("/set squatter=on")
 		c2.squatCheck()
 	})
@@ -434,7 +436,7 @@ func TestSquatterPublicBindWarnsAndPlainWSIsRefused(t *testing.T) {
 		in.Exec("/set squatter=on")
 		c.squatCheck()
 	})
-	waitScreen(t, c, scr, "which other machines can reach")
+	waitScreen(t, c, scr, "listening on every interface")
 	c.Do(func(in *gtfparser.Interp) { in.Exec("/set squatter_tls=off"); c.squatCheck() })
 	waitScreen(t, c, scr, "plain ws://")
 	if v(c, "squatter_state") != "error" {
@@ -512,6 +514,7 @@ func TestSquatterOnRetriesAfterError(t *testing.T) {
 	c2.Do(func(in *gtfparser.Interp) {
 		in.Exec("/set squatter_dir=" + t.TempDir() + "/two")
 		in.Exec("/set squatter_port=" + port)
+		in.Exec("/set squatter_bind=127.0.0.1")
 		in.Exec("/set squatter=on")
 		c2.squatCheck()
 	})
@@ -583,5 +586,91 @@ func TestRestrictLevelDefaultsToFile(t *testing.T) {
 		if got := restrictLevel(in); got != want {
 			t.Errorf("restrictLevel(%q) = %d, want %d", in, got, want)
 		}
+	}
+}
+
+// The client's own text (script errors, "% ..." messages, command output, /recall) is not forwarded to remote clients, only game text and what a
+// trigger prints while a game line is handled; squatter_local=on forwards it all.
+func TestSquatterDoesNotForwardTheClientsOwnText(t *testing.T) {
+	c, scr, d := squatClient(t)
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/addworld w god pw localhost 4000")
+		in.Exec("/def -t'alert*' trig = /echo trigger output")
+		in.Exec("/connect w")
+	})
+	srv := <-d.srv
+	srv.Expect([]byte("connect god pw\r\n"))
+	srv.Send([]byte("Welcome\r\n"))
+	waitScreen(t, c, scr, "Welcome")
+	pc, _ := pairPeer(t, c, "admin", "phone")
+	ss := pc.Sessions()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := pc.Attach(ctx, ss[0].ID, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, pc, func(l string) bool { return l == "game:Welcome" })
+
+	// local text typed or run at the terminal: command output and a script error
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/echo local note one")
+		in.Exec("/nosuchcommand")
+		in.Exec("/squat")
+	})
+	waitScreen(t, c, scr, "local note one")
+	srv.Send([]byte("alert dragon\r\nmarker one\r\n"))
+	got := readUntil(t, pc, func(l string) bool { return l == "game:marker one" })
+	for _, l := range got {
+		if strings.HasPrefix(l, "system:") && !strings.Contains(l, "trigger output") {
+			t.Fatalf("the client's own text reached the remote client: %q in %q", l, got)
+		}
+	}
+	if contains(got, "system:local note one") || !contains(got, "system:trigger output") {
+		t.Fatalf("local text is not forwarded, a trigger's output is: %q", got)
+	}
+
+	// squatter_local=on forwards it
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/set squatter_local=on")
+		c.squatCheck()
+		in.Exec("/echo local note two")
+	})
+	got = readUntil(t, pc, func(l string) bool { return strings.HasSuffix(l, "local note two") })
+	if !contains(got, "system:local note two") {
+		t.Fatalf("%q", got)
+	}
+}
+
+// What is replayed to a remote client that attaches later does not include the client's own text either.
+func TestSquatterSeedSkipsTheClientsOwnText(t *testing.T) {
+	c, scr, d := newTestClient(t)
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/addworld w god pw localhost 4000")
+		in.Exec("/connect w")
+	})
+	srv := <-d.srv
+	srv.Expect([]byte("connect god pw\r\n"))
+	srv.Send([]byte("game before\r\n"))
+	waitScreen(t, c, scr, "game before")
+	c.Do(func(in *gtfparser.Interp) { in.Exec("/echo local before") })
+	waitScreen(t, c, scr, "local before")
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/set squatter_dir=" + t.TempDir() + "/s")
+		in.Exec("/set squatter_port=0")
+		in.Exec("/set squatter_bind=127.0.0.1")
+		in.Exec("/set squatter=on")
+		c.squatCheck()
+	})
+	eventually(t, "listening", func() bool { return v(c, "squatter_state") == "listening" })
+	pc, _ := pairPeer(t, c, "operator", "late")
+	ss := pc.Sessions()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := pc.Attach(ctx, ss[0].ID, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	got := readUntil(t, pc, func(l string) bool { return l == "game:game before" })
+	if contains(got, "game:local before") || contains(got, "system:local before") {
+		t.Fatalf("the client's own text was replayed: %q", got)
 	}
 }

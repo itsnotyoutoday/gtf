@@ -136,7 +136,7 @@ func RestoreScreen(st ScreenState, keep func([]layout.Cell) bool) (*Screen, erro
 		if err != nil {
 			return nil, err
 		}
-		s.SB.lines = append(s.SB.lines, Line{cells})
+		s.SB.lines = append(s.SB.lines, Line{Cells: cells})
 	}
 	for i, l := range s.SB.lines {
 		if keep != nil && !keep(l.Cells) {

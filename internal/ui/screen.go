@@ -21,6 +21,8 @@ type Screen struct {
 	// Tap, if set, sees every logical line added to the screen with UI.AddLine (the squatter
 	// mirrors a world's output to remote clients through it).
 	Tap func(cells []layout.Cell)
+	// Local marks the lines added while it is set as client-produced text (messages, errors, /recall output) rather than game output.
+	Local bool
 }
 
 // NewScreen makes an empty screen.
@@ -49,7 +51,12 @@ func (s *Screen) Add(cells []layout.Cell, winlines int) int {
 	}
 	before := s.SB.Len()
 	oldVis := s.vis
-	added, dropped := s.SB.Add(cells)
+	var added, dropped int
+	if s.Local {
+		added, dropped = s.SB.AddLocal(cells)
+	} else {
+		added, dropped = s.SB.Add(cells)
+	}
 	if dropped > 0 {
 		s.vis = max(0, s.vis-dropped)
 		oldVis = max(0, oldVis-dropped)

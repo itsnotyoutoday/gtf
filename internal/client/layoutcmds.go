@@ -390,12 +390,7 @@ func (c *Client) cmdLayout(in *gtfparser.Interp, args string) gtfparser.Value {
 			in.Warn("/layout save: no active layout")
 			return gtfparser.Int(0)
 		}
-		path := ""
-		if len(f) > 0 {
-			path = f[0]
-		} else {
-			path = filepath.Join(c.userLayoutDir(), l.Name+".layout")
-		}
+		path := c.layoutSavePath(l.Name, f)
 		if in.Restriction() >= gtfparser.RestrictFile {
 			in.Warn("/layout save: restricted")
 			return gtfparser.Int(0)
@@ -446,6 +441,25 @@ func (c *Client) cmdLayout(in *gtfparser.Interp, args string) gtfparser.Value {
 	}
 	in.Warn("/layout: unknown subcommand " + sub + " (list new use load reload save show delete clear off dirs)")
 	return gtfparser.Int(0)
+}
+
+// layoutSavePath is where /layout save writes: a plain name (/layout save mine) goes to the user's layout folder as mine.layout, where /layout use
+// finds it; a name with a directory part (./mine, ~/x/mine.layout, /tmp/mine) is that path; no name uses the layout's own name.
+func (c *Client) layoutSavePath(layout string, args []string) string {
+	name := layout
+	if len(args) > 0 {
+		name = args[0]
+	}
+	if strings.HasPrefix(name, "~/") {
+		return filepath.Join(c.cfg.HomeDir, name[2:])
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return name
+	}
+	if !strings.HasSuffix(name, ".layout") {
+		name += ".layout"
+	}
+	return filepath.Join(c.userLayoutDir(), name)
 }
 
 func (c *Client) userLayoutDir() string { return filepath.Join(c.cfg.HomeDir, ".gtf", "layouts") }

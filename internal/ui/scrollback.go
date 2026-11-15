@@ -192,6 +192,7 @@ func Wrap(s []layout.Cell, width int, cfg WrapConfig) [][]layout.Cell {
 // Line is one logical line of output.
 type Line struct {
 	Cells []layout.Cell
+	Local bool // text the client itself produced (messages, errors, /recall output), not a line from the game
 }
 
 // Scrollback holds logical lines and their wrapped physical form at the
@@ -230,7 +231,19 @@ func (s *Scrollback) Phys(i int) []layout.Cell { return s.phys[i] }
 // Add appends a logical line and returns how many physical lines it became
 // and how many physical lines were dropped from the front.
 func (s *Scrollback) Add(cells []layout.Cell) (added, dropped int) {
-	s.lines = append(s.lines, Line{cells})
+	return s.add(cells, false)
+}
+
+// AddLocal is Add for text the client itself produced (see Line.Local).
+func (s *Scrollback) AddLocal(cells []layout.Cell) (added, dropped int) {
+	return s.add(cells, true)
+}
+
+// IsLocal reports whether logical line i is client-produced text.
+func (s *Scrollback) IsLocal(i int) bool { return i >= 0 && i < len(s.lines) && s.lines[i].Local }
+
+func (s *Scrollback) add(cells []layout.Cell, local bool) (added, dropped int) {
+	s.lines = append(s.lines, Line{Cells: cells, Local: local})
 	var p [][]layout.Cell
 	if s.Keep == nil || s.Keep(cells) {
 		p = Wrap(cells, s.width, s.cfg)
@@ -315,7 +328,7 @@ func (s *Scrollback) InsertAt(idx int, cells []layout.Cell) (at, k int) {
 	}
 	s.lines = append(s.lines, Line{})
 	copy(s.lines[idx+1:], s.lines[idx:])
-	s.lines[idx] = Line{cells}
+	s.lines[idx] = Line{Cells: cells}
 	before := len(s.phys)
 	s.dirty = true
 	s.Rewrap(s.width, s.cfg)

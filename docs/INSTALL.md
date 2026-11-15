@@ -34,8 +34,9 @@ the same version is found.
 In order: `-L<dir>` on the command line; an installed library next to the binary (`../lib/gtf`), `$GTF_LIBDIR`,
 `~/lib/gtf`, `/usr/local/lib/gtf`, `/usr/lib/gtf` (only when its `install.json` says it is the same version as the
 program); otherwise the copy embedded in the binary, extracted to the user cache directory.
-Put your own startup commands in `~/.gtfrc`, and anything meant for every user of a global install in
-`<libdir>/local.tf` (it survives updates).
+Put your own startup commands in `~/.tfrc` (gtf also reads `~/tfrc`, `./.tfrc` and `./tfrc`; the file name is TinyFugue's), and
+anything meant for every user of a global install in `<libdir>/tf/local.tf`, the file the library loads (it survives updates and
+reinstalls; a `local.tf` at the top of `<libdir>` is kept too).
 
 ### Debian/Ubuntu and RedHat/Fedora packages
 

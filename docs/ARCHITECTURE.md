@@ -1,7 +1,7 @@
 # GoTinyFugue (gtf) architecture
 
-GoTinyFugue (binary `gtf`) is a terminal MU* client that looks and behaves like, and is compatible with, TinyFugue (tf) by Ken Keys. It is
-**only the client**: the scripting language and tf's state live in the shared
+GoTinyFugue (binary `gtf`) is a terminal MU* client that is compatible with TinyFugue (tf, by Ken Keys); it is its own program, not TinyFugue. It is
+**only the client**: the TinyFugue-compatible scripting language and its state live in the shared
 engine module [`github.com/itsnotyoutoday/gtfparser`](https://github.com/itsnotyoutoday/gtfparser),
 which this repository consumes as an ordinary pinned dependency (the same
 engine that backs SquatClient). The client attaches to the engine only through
@@ -12,6 +12,7 @@ its public extension points.
 ```
 cmd/gtf/             main only: flags -> client.Main. No logic.
 cmd/vtdump/          developer tool: render a captured byte stream through internal/ui/vt
+cmd/helpwiki/        developer tool: build the GitHub wiki pages from the help topics (writes files only)
 internal/client/     application wiring: sessions (one per world connection), event routing
                      net<->interpreter<->ui, implements the engine's host interfaces
 internal/client/data per-session store of GMCP/MSDP/MSSP data (gmcp:Char.Vitals.hp ...)
@@ -35,13 +36,14 @@ internal/squatter/   squatter daemon + tf bridge built into gtf (SquatClient pai
 internal/cmcpui/     CMCP cell renderer: a bound screen tree (cmcp core `pack`) -> a grid of truecolor cells, keyboard
                      operation of the widgets, themes (plain + empire accents); no protocol logic (docs/CMCP.md)
 internal/layout/     panel/layout system: templates, bindings, widgets, layout engine -> cell grids
+help/                gtf's own documentation: one Markdown file per topic (topics/), the plain-text renderer behind /help and the wiki generator; see help/README.md
 gtflib/              embedded TF library: the unmodified real tf library (gtflib/tf/) and gtf-only scripts (gtflib/gtf/layout.tf, gtflib/gtf/layouts/*.layout)
 docs/                this file, PROTOCOLS.md, LAYOUTS.md, COMMAND-STATUS.md
 scripts/             compare_tf.py (screen diff vs real tf), e2e_evennia.py, env.sh
 ```
 
-The unmodified real tf library (`lib/tf/*.tf`: stdlib.tf, kbbind.tf, tfstatus.tf,
-tf-help, ...) is embedded in `gtflib/tf/` (the scripting engine does not contain it; the
+TinyFugue's unmodified standard library and manual (`lib/tf/*.tf`: stdlib.tf, kbbind.tf, tfstatus.tf,
+tf-help, ..., copyright their authors, notices intact) are embedded in `gtflib/tf/` (the scripting engine does not contain it; the
 engine's tests compare against a real tf build instead); `gtflib/gtf/` holds only what is new
 in gtf and is loaded on top of it.
 
@@ -49,15 +51,17 @@ in gtf and is loaded on top of it.
 
 ```
 cmd/gtf          -> internal/client, gtflib
-internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/cmcpui, internal/update, internal/handoff, gtflib, the engine module
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/cmcpui, internal/update, internal/handoff, help, gtflib, the engine module
 internal/handoff -> nothing internal
-internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/squatter(/...), gtflib, the engine module
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/squatter(/...), help, gtflib, the engine module
 internal/squatter -> itself only (no gtf package, no engine)
 internal/ui      -> internal/layout
 internal/net     -> internal/net/... only
 internal/layout  -> nothing internal
 internal/cmcpui  -> internal/layout
 internal/update  -> nothing internal
+help             -> nothing internal
+cmd/helpwiki     -> help
 gtflib           -> nothing internal
 ```
 

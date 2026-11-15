@@ -144,6 +144,7 @@ func newRig(t *testing.T, mod func(*Config)) *rig {
 	h.sq = sq
 	cfg := DefaultConfig(t.TempDir())
 	cfg.Enabled, cfg.Port, cfg.Dir, cfg.Name = true, 0, t.TempDir()+"/sq", "testbox"
+	cfg.Bind = "127.0.0.1" // the tests stay on this machine (the default is every interface)
 	if mod != nil {
 		mod(&cfg)
 	}

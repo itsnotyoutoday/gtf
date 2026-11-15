@@ -52,8 +52,8 @@ func VersionVar() string {
 
 // CopyrightLine is the second banner line.
 func CopyrightLine() string {
-	return "Copyright (C) " + Year + " " + Holder + ". Inspired by and compatible with TinyFugue " +
-		TFVersion + ", Copyright (C) 1993-2007 Ken Keys."
+	return "Copyright (C) " + Year + " " + Holder + ". Compatible with TinyFugue " +
+		TFVersion + " (Copyright (C) 1993-2007 Ken Keys)."
 }
 
 // EngineVersion reports the linked gtfparser module version, if known.
@@ -92,8 +92,10 @@ var ownNotice = []string{
 	"  " + ClientURL,
 	"  " + EngineURL,
 	"",
-	Name + " is inspired by and compatible with TinyFugue by Ken Keys, whose",
-	"standard library it embeds unmodified.  The original TinyFugue copyright",
-	"and license notice follows.",
+	"The notice above covers gtf's own code.  TinyFugue, the program gtf is",
+	"compatible with, is copyright Ken Keys and contributors; gtf is not",
+	"affiliated with them.  gtf embeds TinyFugue's standard library and manual",
+	"unmodified, and TinyFugue's original copyright and license notice, which",
+	"applies to those files, follows.",
 	"",
 }

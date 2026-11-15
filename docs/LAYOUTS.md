@@ -1,14 +1,14 @@
 # Panels and layouts
 
 gtf can draw extra panels (a sidebar, top/bottom bars, boxes) around the normal
-tf screen, driven by GMCP/MSDP/TF variables, defined in TF-flavoured text files.
-With no panel defined the screen is exactly tf's.
+TinyFugue-style screen, driven by GMCP/MSDP/TF variables, defined in TinyFugue-flavoured text files.
+With no panel defined the screen is the plain TinyFugue-style one.
 
 ```
 /layout use sidebar                       load gtflib/gtf/layouts/sidebar.layout and show it
 /panel -dock left -w 24 -border rounded -title Vitals \
        vitals = HP {bar "gmcp:Char.Vitals.hp" "gmcp:Char.Vitals.maxhp" width=12 color=auto} {gmcp:Char.Vitals.hp}
-/layout save mine                         write ~/.gtf/layouts/mine.layout
+/layout save mine                         write the file named (./mine); /layout save with no name writes ~/.gtf/layouts/<layout>.layout
 ```
 
 ## /panel
@@ -146,23 +146,6 @@ are in the core's `raster/testdata/`.
 * `/canvas sprite` rasterises at w x h pixels (default: the canvas) and blits onto a `/canvas` surface at pixel x, y.
 * Input is size-limited (1 MB document, 4096 shapes, 12 levels of nesting, 50 000 path segments, 1M pixels) and the
   rasteriser has a hard work budget; hostile files give an error, never a hang.
-
-## Demo
-
-`gtf/examples/layout-demo.tf` is a guided tour of everything above, no MUD connection needed:
-
-```
-/layoutdemo          run all 18 scenes, one every 3 seconds
-/layoutdemo 7        jump to a single scene
-/layoutdemo stop     quit and restore the plain tf screen
-```
-
-`gtf/examples/lcars.tf` is a larger example: a TNG-style LCARS bridge console (`/lcars` sensors with a live
-radar dish, contact list and forward viewscreen; `/lcars eng` engineering with an animated warp core;
-`/lock`, `/pwr`, `/lcars alert red`).
-It shows how panels are driven from script variables that you would feed from GMCP/MSDP in a real game.
-Note: in `{if}` conditions compare strings with quotes (`{if x == "red"}`), and every `{color}` must be
-closed inside the same `{if}` branch that opened it.
 
 ## Implementation
 

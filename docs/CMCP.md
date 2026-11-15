@@ -25,8 +25,9 @@ scroll, nothing is drawn on the text pane or the input line.
 * `%cmcp_layout side` is an alternative arrangement (output on the whole left, widgets stacked on the right) for packs and built-ins.
 * `%cmcp_ascii` (on, off, auto: on when the locale is not UTF-8) draws only ASCII.
 
-Other themes (`klingon`, `romulan`, `ferengi`, `tos`, `soft`, `ops`) currently change only the palette; their frames wait for the
-theme-pack format (docs/CMCP-THEMES.md).
+Other themes are interpreted from the shared CMCP core's reference theme packs (their `cell` rendition), each with its own frame and
+controls as well as its palette; `tng`'s frame is built into gtf. `/cmcp themes` lists what is embedded and announced and which is
+active. Making themes is the protocol's business (the CMCP specification and docs/CMCP-THEMES.md), not this client's.
 
 ## Screen menu
 
@@ -116,7 +117,7 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_start_collapsed` | off | start with the screen off |
 | `%cmcp_ascii` | auto | ASCII-only drawing |
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
-| `%cmcp_theme` | (plain) | `plain`, `tng`, `klingon`, `romulan`, `ferengi`: palette tokens; plain leaves colours to the terminal |
+| `%cmcp_theme` | (unset: the ship's theme, else `tng`) | a theme name from `/cmcp themes`, or `plain` (no frame, colours left to the terminal); setting it fixes the theme (see `%cmcp_theme_mode`) |
 | `%cmcp_theme_mode` | ship | `ship` follows the ship's suggested theme (console, ship, screen); `fixed` keeps `%cmcp_theme` (`%cmcp_ship_theme on` is the old spelling of `ship`) |
 | `%cmcp_textport` | balanced | the output's size: `compact` (~20%), `balanced` (~35%), `large` (~50%); F3 expands to ~80% |
 | `%cmcp_motion` | on | `off` makes the F3 animation instant |

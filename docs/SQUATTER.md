@@ -14,18 +14,18 @@ every other event source.
 
 ## Quick start
 
-In your rc file (gtf loads `~/.tfrc`; `/set` at runtime works the same):
+In gtf:
 
 ```
-/set squatter=on
-```
-
-Then, in gtf:
-
-```
-/squatter            show state, listen address, TLS fingerprint
+/squatter on         start it; says which address(es) it listens on
 /pair                print a one-time pairing code
 ```
+
+That is all: by default it listens on every interface (port 10328), so SquatClient can connect to the
+machine's public address, and `/squatter on` prints the public, Tailscale and LAN addresses it found.
+To start it every time, put `/set squatter=on` in your rc file (gtf loads `~/.tfrc`). `/squatter`
+alone shows the state, listen address and TLS fingerprint. To listen somewhere else, see
+"Choosing the address" below.
 
 In SquatClient add a squatter of type **"gtf (GoTinyFugue)"** (it is stored as kind `tf-squatterd`
 with flavor `gtf`; older SquatClients can use kind "TinyFugue", with the TinyFugue-only features
@@ -43,7 +43,8 @@ devices are kept**. Switching `squatter=off` drops everything the squatter held.
 |---|---|---|
 | `squatter` | `off` | `on` starts the daemon |
 | `squatter_port` | `10328` | TCP port (`0` = any free port, see `squatter_addr`). 10328 is tf-squatterd's port; squatterd itself uses 10327 |
-| `squatter_bind` | `127.0.0.1` | address to listen on. Anything but loopback prints a warning (see Security) |
+| `squatter_bind` | `0.0.0.0` | address to listen on: every interface by default (the public address, Tailscale, the LAN). `127.0.0.1` keeps it on this machine; with `squatter_tls=off` the default is `127.0.0.1` (plain `ws://` is loopback only). Anything but loopback prints where it listens when it starts (see Security) |
+| `squatter_local` | `off` | `on` also forwards the client's own text (messages, script errors, `/recall` output, command output) to remote clients as `system` lines. Off: only game text and what a trigger or hook prints while a game line is handled are forwarded (see "What remote clients see") |
 | `squatter_name` | the host name | the instance name announced in the welcome |
 | `squatter_dir` | `~/.gtf/squatter` | state directory (mode 0700): TLS key and certificate, paired devices, pairing codes |
 | `squatter_kind` | `tf` | `tf`: announce `tf-squatterd` on `/tfsp` (SquatClient treats gtf as a TinyFugue, enabling control/world/exec features); `swp`: announce plain `squatterd` on `/swp`, sessions only |
@@ -101,7 +102,7 @@ SQUAT_PAIR" in gtfparser, listed in its CORE-CHANGES.md); gtf needs an engine th
 
 ## Walk-through of a pairing
 
-1. `/set squatter=on`. gtf creates `~/.gtf/squatter/` (0700) and a self-signed ECDSA P-256 certificate
+1. `/squatter on`. gtf creates `~/.gtf/squatter/` (0700) and a self-signed ECDSA P-256 certificate
    (key 0600) the first time, and listens.
 2. `/pair` prints the code and the certificate fingerprint.
 3. SquatClient connects, receives the TLS certificate and shows its fingerprint (trust on first use);
@@ -192,13 +193,44 @@ run therefore backs up your hand-edited file; the 5 newest backups are kept) and
 Worlds that only exist in memory (typed `/addworld`, not yet saved) are written too, as with `/saveworld`.
 The file is written on the engine goroutine (it is small).
 
+## What remote clients see
+
+A remote client (SquatClient) shows what the game sent, plus the lines you and it typed. gtf knows where
+every line came from and forwards only what belongs there:
+
+* **Forwarded:** game text (after your triggers and highlights), what you sent to the game (echo), and what a trigger
+  or hook prints while a game line is being handled (as a `system` line).
+* **Not forwarded:** gtf's own messages and script errors (`% ...`, "not supported by this client"), the output of commands you
+  type, `/recall` output (it carries its own `[hh:mm]` stamps, which would show twice next to the remote client's
+  timestamps), and the output of hooks that run at connect time. A client that attaches later is not replayed these either.
+* **A command a paired device typed** shows its own output, errors included, to that device.
+
+`/set squatter_local=on` forwards the client's own text as well; it takes effect at once and does not
+disconnect anyone.
+
+## Choosing the address
+
+| you want | do |
+|---|---|
+| reachable from anywhere (the default) | nothing; `/squatter on`, then `/pair` |
+| only through Tailscale | `/squatter bind <the machine's 100.x Tailscale address>` (`/squatter on` lists it) |
+| only on this machine (use an ssh tunnel or VPN) | `/squatter bind 127.0.0.1` |
+| a different port | `/squatter port 4444` |
+| remember it | `/set squatter_bind=...` and `/set squatter_port=...` in your rc file |
+
+Changes apply at once. With the default bind the pairing URL and `/pair` show the best address found:
+a public IPv4 address first, then Tailscale, then a LAN address. Only the local network interfaces are
+read; nothing is looked up on the internet. A machine behind NAT shows its LAN address, so there use
+the router's public address (and a port forward) or Tailscale.
+
 ## Security notes
 
-* **Loopback by default.** `squatter_bind` is `127.0.0.1`. Reaching gtf from another machine means
-  either an ssh tunnel (`ssh -L 10328:localhost:10328 host`) or binding a public address, which prints a
-  warning each time the listener starts: the pairing port is then reachable by anyone who can route to
-  it. Everything is TLS and device-key authenticated, the rate limit applies per address, but the
-  attack surface is a TLS+WebSocket server in the process that holds your game passwords.
+* **Every interface by default.** `squatter_bind` is `0.0.0.0`, so the pairing port is reachable by anyone
+  who can route to the machine. Starting the squatter prints where it listens and the reminder to pair
+  only your own devices. Everything is TLS and device-key authenticated, the rate limit applies per
+  address, but the attack surface is a TLS+WebSocket server in the process that holds your game
+  passwords. To keep it on this machine use `/squatter bind 127.0.0.1` and reach it with an ssh tunnel
+  (`ssh -L 10328:localhost:10328 host`) or a VPN.
 * **A paired admin device can run commands.** `/pair` defaults to role `admin` (`squatter_pair_role`)
   because forwarding TinyFugue scripting is the point; an admin can do whatever gtf's engine lets a
   typed command do, including `/sh` and `/load` unless you restricted it (`/restrict`). Pair

@@ -38,6 +38,11 @@ func (c *Client) install() {
 		"term_height": func(*gtfparser.Interp, []gtfparser.Value) (gtfparser.Value, error) {
 			return gtfparser.Int(int64(c.ui.H)), nil
 		},
+		// the world definitions file the WORLDFILE macro names ("" when none is defined), "~" expanded: lets a script decide what to do with it
+		"worldfile": func(in *gtfparser.Interp, _ []gtfparser.Value) (gtfparser.Value, error) {
+			p, _ := in.WorldFile()
+			return gtfparser.Str(p), nil
+		},
 	}
 	for n, f := range funcs {
 		in.RegisterFunction(n, f)

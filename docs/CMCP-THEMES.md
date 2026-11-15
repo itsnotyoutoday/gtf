@@ -1,6 +1,9 @@
-# CMCP cell themes: design note (draft, nothing implemented from it yet)
+# CMCP cell themes: design note
 
-Status: design only. Written after studying the hand-built `/lcars` (gtflib/gtf/examples/lcars.tf, drawn with `/canvas` rounded
+Status: **implemented**; this is the design it was built from, kept for the reasoning, and the code (`internal/cmcpui`: `theme.go`,
+`frame.go`, `cellframe.go`) is authoritative where the two differ. `tng` has a hand-built frame; the other themes are drawn by the
+interpreter from the shared core's reference theme packs (their `cell` rendition). With nothing chosen or suggested the theme is `tng`;
+`plain` is the no-frills choice. `/cmcp themes` shows what is embedded and active. Written after studying the hand-built `/lcars` (gtflib/gtf/examples/lcars.tf, drawn with `/canvas` rounded
 elbows and pill buttons plus the `{radar}` widget) and SquatClient's themes (`theme_*.lua`, `docs/gfx-shots/themes/*.png`).
 The current CMCP screens in gtf are generic: text widgets on a flat background. They lose to both, for one reason: **they draw
 data, not a console**. A console has a frame, a palette, shaped controls and pictures; the layout follows from the frame.
@@ -128,5 +131,5 @@ wide band under the viewscreen. In every theme it is at least max(8, h/4) rows a
 
 * Should the console-switch column (SCAN / POWER / WEAPONS ...) be real (a click or key = the `show` action / `man`) or only
   decoration? Today a screen has no such switch; `/cmcp screen` is the only way.
-* One default theme when the ship suggests none: `plain` (owner's choice wins) or `tng`?
+* One default theme when the ship suggests none: `plain` (owner's choice wins) or `tng`? (Decided in the code: `tng`; `%cmcp_theme plain` opts out.)
 * Is it acceptable for the std screens (no pack hints) to be arranged by the theme rather than by the pack tree?

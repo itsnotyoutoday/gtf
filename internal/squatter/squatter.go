@@ -199,6 +199,15 @@ func (s *Squatter) Apply(cfg Config, seed func()) {
 		s.mu.Unlock()
 		return
 	}
+	// squatter_local only says what is forwarded: it takes effect at once without restarting the listener (which would drop the clients)
+	if same := cfg; same.Local != old.Local {
+		same.Local = old.Local
+		if same == old && wasOn == cfg.Enabled && (s.state == StateListening || s.state == StateError || s.state == StateOff) {
+			s.cfg.Local = cfg.Local
+			s.mu.Unlock()
+			return
+		}
+	}
 	s.cfg = cfg
 	r := s.run
 	s.run = nil
@@ -240,7 +249,8 @@ func (s *Squatter) Apply(cfg Config, seed func()) {
 	s.run, s.state, s.stateErr = nr, StateListening, ""
 	s.mu.Unlock()
 	s.publish(nr)
-	if w := cfg.BindWarning(); w != "" {
+	_, port, _ := net.SplitHostPort(nr.addr)
+	if w := cfg.ListeningNotice(port); w != "" {
 		s.host.Notice("% " + w)
 	}
 }
@@ -632,14 +642,19 @@ func (s *Squatter) Pair(role string) (PairInfo, error) {
 	}
 	if IsLoopback(cfg.Bind) {
 		host = "localhost"
-	} else if cfg.Bind != "0.0.0.0" && cfg.Bind != "::" {
+	} else if !anyBind(cfg.Bind) {
 		host = cfg.Bind
+	} else if a := bestAddr(); a != "" {
+		host = a // listening on every interface: the address a remote client should use
 	}
 	scheme := "wss"
 	if !cfg.TLS {
 		scheme = "ws"
 	}
 	_, port, _ := net.SplitHostPort(r.addr)
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]" // an IPv6 literal
+	}
 	return PairInfo{Code: code, Role: role, Expires: exp, Fingerprint: r.fp,
 		URL: fmt.Sprintf("%s://%s:%s%s", scheme, host, port, cfg.Path())}, nil
 }

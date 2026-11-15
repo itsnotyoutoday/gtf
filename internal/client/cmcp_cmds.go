@@ -13,16 +13,8 @@ import (
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
-const cmcpUsage = `usage: /cmcp [status | keys | screens | close | width <cols|auto|+N|-N> | packs | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]
-  status        the CMCP state of the foreground world: handshake, ship, console, screen, subscriptions
-  packs         layout packs known for this world and their consent state
-  screen [id]   show the console screen (id: std.operations, <pack>/<screen>); no id: say which is shown
-  send V k=v..  send a catalogue verb (like clicking its button); the equivalent text is echoed
-  focus         enter the screen's keyboard focus (Tab on an empty line)
-  log           toggle the log view: output at ~80% of the height (F3)
-  hide, show    switch the whole screen off or on (F4); %cmcp_start_collapsed starts it off
-Settings (variables): %cmcp (on/off) %cmcp_theme %cmcp_ship_theme (off) %cmcp_bell (off) %cmcp_era (tng)
-%cmcp_sounds_dir (stored, unused) %cmcp_pack_consent (always|ask|never; default always) %cmcp_debug`
+// cmcpUsage is the one-line usage shown for a mistake; the full text is /help cmcp.
+const cmcpUsage = `usage: /cmcp [status | keys | screens | close | width <cols|auto|+N|-N> | packs | themes | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]`
 
 func (c *Client) cmdCmcp(in *gtfparser.Interp, args string) gtfparser.Value {
 	args = strings.TrimSpace(args)
@@ -35,9 +27,8 @@ func (c *Client) cmdCmcp(in *gtfparser.Interp, args string) gtfparser.Value {
 			in.Host.Echo(l)
 		}
 	case "help", "?":
-		for _, l := range strings.Split(cmcpUsage, "\n") {
-			in.Host.Echo(l)
-		}
+		c.showHelp("cmcp") // the full text lives in /help cmcp; the usage constant is the short form for errors
+		return gtfparser.Int(1)
 	case "on", "off":
 		in.SetVar("cmcp", sub)
 		in.Host.Echo("% cmcp=" + sub + " (applies to connections opened from now on)")
@@ -48,6 +39,8 @@ func (c *Client) cmdCmcp(in *gtfparser.Interp, args string) gtfparser.Value {
 	default:
 		if !c.cmcpSubcommand(in, s, sub, rest) {
 			in.Host.Echo("% /cmcp: unknown subcommand " + sub)
+			in.Host.Echo(cmcpUsage)
+			in.Host.Echo("% /help cmcp explains them.")
 			return gtfparser.Int(0)
 		}
 	}

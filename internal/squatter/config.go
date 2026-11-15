@@ -33,6 +33,7 @@ const (
 	VarGTF         = "squatter_gtf"
 	VarNAWS        = "squatter_naws"
 	VarWorldSave   = "squatter_world_save"
+	VarLocal       = "squatter_local"
 
 	// output variables, written by the squatter (never read back)
 	VarState       = "squatter_state"
@@ -44,12 +45,12 @@ const (
 
 // ConfigVars are the configuration variables, in the order /squatter status shows them.
 var ConfigVars = []string{VarEnabled, VarPort, VarBind, VarName, VarDir, VarKind, VarTLS, VarCert, VarKey,
-	VarScrollback, VarMaxClients, VarMaxSessions, VarPairTTL, VarPairRole, VarCommands, VarGTF, VarNAWS, VarWorldSave}
+	VarScrollback, VarMaxClients, VarMaxSessions, VarPairTTL, VarPairRole, VarCommands, VarGTF, VarNAWS, VarWorldSave, VarLocal}
 
 // Defaults.
 const (
-	DefaultPort        = 10328 // tf-squatterd's port; squatterd itself uses 10327
-	DefaultBind        = "127.0.0.1"
+	DefaultPort        = 10328     // tf-squatterd's port; squatterd itself uses 10327
+	DefaultBind        = "0.0.0.0" // every interface: the public address, a VPN (Tailscale) address and the LAN; plain ws:// (squatter_tls=off) defaults to loopback
 	DefaultScrollback  = 20000
 	DefaultMaxClients  = 8
 	DefaultMaxSessions = 32
@@ -91,6 +92,7 @@ type Config struct {
 	GTF         bool   // negotiate the gtf extension (docs/SWP-GTF.md)
 	NAWS        string // NAWSActive, NAWSMin, NAWSMax or NAWSLocal
 	WorldSave   bool   // save the world file after a peer changed a world
+	Local       bool   // also forward the client's own text (messages, script errors, /recall output) as system lines (default off: only game text)
 }
 
 // DefaultConfig is the configuration with every variable unset.
@@ -162,6 +164,9 @@ func ConfigFromVars(get func(string) string, home string) (Config, []string) {
 		}
 	}
 	boolVar(VarTLS, &c.TLS)
+	if strings.TrimSpace(get(VarBind)) == "" && !c.TLS {
+		c.Bind = "127.0.0.1" // plain ws:// is only allowed on loopback
+	}
 	strVar(VarCert, &c.CertFile)
 	strVar(VarKey, &c.KeyFile)
 	intVar(VarScrollback, &c.Scrollback, 100, 1000000)
@@ -185,6 +190,7 @@ func ConfigFromVars(get func(string) string, home string) (Config, []string) {
 	boolVar(VarCommands, &c.Commands)
 	boolVar(VarGTF, &c.GTF)
 	boolVar(VarWorldSave, &c.WorldSave)
+	boolVar(VarLocal, &c.Local)
 	if v := strings.ToLower(strings.TrimSpace(get(VarNAWS))); v != "" {
 		switch v {
 		case NAWSActive, NAWSMin, NAWSMax, NAWSLocal:
@@ -225,16 +231,6 @@ func (c Config) Validate() error {
 		return fmt.Errorf("%s and %s must be set together", VarCert, VarKey)
 	}
 	return nil
-}
-
-// BindWarning is the text shown when the daemon listens beyond this machine ("" for loopback).
-func (c Config) BindWarning() string {
-	if IsLoopback(c.Bind) {
-		return ""
-	}
-	return fmt.Sprintf("squatter: listening on %s:%d, which other machines can reach. Connections need TLS and a paired "+
-		"device key, but a paired device with role admin can run commands in this client: pair only your own devices, "+
-		"and prefer %s=127.0.0.1 behind an ssh tunnel or VPN.", c.Bind, c.Port, VarBind)
 }
 
 // ConfigFromVarsMap is ConfigFromVars over a map (for tests and tools).

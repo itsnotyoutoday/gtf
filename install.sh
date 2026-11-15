@@ -226,7 +226,9 @@ run mkdir -p "$bindir" "$(dirname "$libdir")"
 # library: stage next to the destination, keep the user's local.tf, swap in, keep the old one as .old
 [ ! -d "$libdir.new" ] || run rm -r "$libdir.new"
 run cp -R "$src/lib/gtf" "$libdir.new"
+# the client loads local.tf from the tf/ library folder; one at the library root is kept as well
 [ ! -f "$libdir/local.tf" ] || run cp "$libdir/local.tf" "$libdir.new/local.tf"
+[ ! -f "$libdir/tf/local.tf" ] || run cp "$libdir/tf/local.tf" "$libdir.new/tf/local.tf"
 printf '{\n  "scope": "%s",\n  "bindir": "%s",\n  "libdir": "%s",\n  "version": "%s",\n  "repo": "%s"\n}\n' \
   "$scope" "$bindir" "$libdir" "$num" "$REPO" > "$tmp/install.json"
 run cp "$tmp/install.json" "$libdir.new/install.json"

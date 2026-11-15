@@ -1,8 +1,8 @@
 # Command status
 
-tf's commands are implemented by the shared engine; the client supplies the
+The TinyFugue-compatible commands are implemented by the shared engine; the client supplies the
 sockets, screen and keyboard they act on. Status is "client side wired" unless
-noted. Real tf is the reference: `scripts/compare_tf.py` runs both side by side
+noted. TinyFugue 5.0 beta 8 is the compatibility reference: `scripts/compare_tf.py` runs both side by side
 in ptys and diffs the rendered screens (the scenarios cover startup, typing, input
 editing keys, wrapping, the input window, `/help`, `/listworlds`, `/limit`, the more
 pager, ...).

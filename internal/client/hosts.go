@@ -376,7 +376,9 @@ func (c *Client) processLine(s *Session, line string) {
 		c.bell()
 	}
 	var res *gtfparser.LineResult
+	c.inLine = true
 	c.withWorld(s, func() { res = c.in.ProcessText(gtfparser.LineInput{Text: plain, World: s.World.Name}) })
+	c.inLine = false
 	if res.Bell {
 		c.bell()
 	}

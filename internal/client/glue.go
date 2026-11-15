@@ -40,7 +40,7 @@ func (c *Client) loadGtfLib() {
 		return
 	}
 	c.in.SetVar("GTFLIBDIR", d)
-	for _, f := range []string{"identity.tf", "layout.tf"} {
+	for _, f := range []string{"identity.tf", "layout.tf", "startup.tf"} {
 		p := filepath.Join(d, "gtf", f)
 		if _, err := os.Stat(p); err == nil {
 			if err := c.in.LoadFile(p); err != nil {

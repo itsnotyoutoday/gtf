@@ -165,7 +165,7 @@ func TestIdentityBannerVersionAndCopyright(t *testing.T) {
 	txt := scr.Text()
 	for _, w := range []string{
 		"GoTinyFugue version " + Version + " (gtf), a TinyFugue-compatible client",
-		"Copyright (C) 2026 Rick Bird. Inspired by and compatible with TinyFugue 5.0 beta 8, Copyright (C) 1993-2007 Ken Keys.",
+		"Copyright (C) 2026 Rick Bird. Compatible with TinyFugue 5.0 beta 8 (Copyright (C) 1993-2007 Ken Keys).",
 		"Type `/quit' to quit gtf.",
 	} {
 		if !strings.Contains(txt, w) {

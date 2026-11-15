@@ -112,7 +112,11 @@ func (c *Client) squatSeed() {
 			continue
 		}
 		sb := s.scr.SB
+		keepLocal := c.sq.sq.Config().Local
 		for i := max(0, sb.Logical()-2000); i < sb.Logical(); i++ {
+			if sb.IsLocal(i) && !keepLocal {
+				continue // client-produced text is not replayed to remote clients
+			}
 			c.sq.sq.Line(s.squatID, proto.KindGame, cellsToSpans(sb.Cells(i)), false, "")
 		}
 		if s.open() {
@@ -174,11 +178,36 @@ func (c *Client) squatTap(s *Session, cells []layout.Cell) {
 	if s.squatID == "" || c.noTap {
 		return
 	}
-	kind := proto.KindSystem
-	if c.tapGame {
-		kind = proto.KindGame
+	kind, ok := c.tapKind(cells)
+	if !ok {
+		return
 	}
 	c.sq.sq.Line(s.squatID, kind, cellsToSpans(cells), false, "")
+}
+
+// tapKind says whether a line shown on a world's screen goes to the squatter's clients, and as what. Game text always does. Other text is the
+// client's own: it is NOT forwarded (script errors, "% ..." messages, command output, /recall, the output of hooks at connect time), with one
+// exception: what a trigger or hook prints while a game line is being handled goes out as a "system" line, as the TinyFugue bridge does.
+// squatter_local=on forwards all of it.
+func (c *Client) tapKind(cells []layout.Cell) (string, bool) {
+	if c.tapGame {
+		return proto.KindGame, true
+	}
+	if c.remoteSend || c.sq.sq.Config().Local { // a command a paired peer typed shows its own output (errors included)
+		return proto.KindSystem, true
+	}
+	if c.inWarn {
+		return "", false // an interpreter diagnostic (script error, "not supported by this client", ...)
+	}
+	if c.inLine && !isClientMessage(ui.StripCells(cells)) {
+		return proto.KindSystem, true
+	}
+	return "", false
+}
+
+// isClientMessage: TinyFugue's own errors, warnings and notices start with "% " (or "%% ").
+func isClientMessage(text string) bool {
+	return strings.HasPrefix(text, "% ") || strings.HasPrefix(text, "%% ")
 }
 
 // squatPrompt mirrors a prompt (a partial line flushed by GA/EOR/timeout).
@@ -204,7 +233,10 @@ func (c *Client) addLine(scr *ui.Screen, cells []layout.Cell) bool {
 		*c.capture = append(*c.capture, ui.StripCells(cells))
 		return true
 	}
+	_, fwd := c.tapKind(cells)
+	scr.Local = !fwd // the client's own text is not replayed to remote clients when they attach
 	c.ui.AddLine(scr, cells)
+	scr.Local = false
 	return false
 }
 
@@ -217,7 +249,10 @@ func (c *Client) privateLine(text string) {
 	}
 	c.noTap = true
 	defer func() { c.noTap = false }()
-	c.ui.AddLine(c.screenFor(), ui.PlainCells(text, layout.Attr{}))
+	scr := c.screenFor()
+	scr.Local = true
+	c.ui.AddLine(scr, ui.PlainCells(text, layout.Attr{}))
+	scr.Local = false
 	c.scheduleRender()
 }
 
@@ -492,20 +527,8 @@ func (h *squatHost) Notice(text string) { h.c.privateLine(text) }
 
 // ---------------------------------------------------------------- commands
 
-const squatUsage = `usage: /squatter [status | on | off | list | who | kick <name> | unpair <name> | fingerprint | port <n> | bind <addr> | name <name> | pair [role]]
-  /squatter       show the state, listen address and fingerprint
-  on, off         set %squatter (the daemon starts and stops at once)
-  list            connected clients, paired devices and the sessions held
-  who             who is attached, which world each views, who is typing
-  kick <name>     disconnect a client by device name (the whole rest of the line) or id prefix
-  unpair <name>   forget a paired device (name or id prefix of 4+ characters) and disconnect it
-  fingerprint     the TLS fingerprint a client pins when it pairs
-  port, bind, name  set %squatter_port, %squatter_bind, %squatter_name (applies at once)
-  pair [role]     same as /pair
-Settings are ordinary variables: %squatter %squatter_port %squatter_bind %squatter_name %squatter_dir
-%squatter_kind %squatter_tls %squatter_cert %squatter_key %squatter_scrollback %squatter_max_clients
-%squatter_max_sessions %squatter_pair_ttl %squatter_pair_role %squatter_commands %squatter_restrict %squatter_gtf %squatter_naws
-%squatter_world_save (see docs/SQUATTER.md).`
+// squatUsage is the one-line usage shown for a mistake; the full text is /help squatter.
+const squatUsage = `usage: /squatter [status | on | off | list | who | kick <name> | unpair <name> | fingerprint | port <n> | bind <addr> | name <name> | pair [role]]`
 
 // out prints the squatter's own output privately (see privateLine): it names the fingerprint, the
 // state directory and the paired devices, so it must not enter any scrollback.
@@ -537,7 +560,7 @@ func (c *Client) cmdSquatter(in *gtfparser.Interp, args string) gtfparser.Value 
 	case "", "status":
 		c.out(sq.StatusLines()...)
 		if st, _ := sq.State(); st == squatter.StateOff {
-			c.out("  (set squatter=on, for example in your rc file, to start it)")
+			c.out("  (/squatter on starts it; put /set squatter=on in your rc file to start it every time)")
 		}
 		return gtfparser.Int(1)
 	case "on", "off":
@@ -603,11 +626,11 @@ func (c *Client) cmdSquatter(in *gtfparser.Interp, args string) gtfparser.Value 
 	case "pair":
 		return c.cmdPair(in, strings.Join(f, " "))
 	case "help", "?":
-		c.out(strings.Split(squatUsage, "\n")...)
+		c.showHelp("squatter") // the full text is /help squatter
 		return gtfparser.Int(1)
 	}
 	c.out("% /squatter: unknown subcommand " + sub)
-	c.out(strings.Split(squatUsage, "\n")[0])
+	c.out(squatUsage, "% /help squatter explains them.")
 	return gtfparser.Int(0)
 }
 

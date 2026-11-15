@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w
 
-.PHONY: all build run test vet fmt dist dist-all packages clean
+.PHONY: all build run test vet fmt wiki helpcheck dist dist-all packages clean
 
 all: build
 
@@ -21,7 +21,15 @@ vet:
 	go vet ./...
 
 fmt:
-	gofmt -w cmd internal gtflib
+	gofmt -w cmd internal gtflib help
+
+# validate the help topics and their links
+helpcheck:
+	go run ./cmd/helpwiki -check
+
+# build the GitHub wiki pages from the help topics into build/wiki (publishing is a separate step: help/README.md)
+wiki:
+	go run ./cmd/helpwiki -out build/wiki
 
 # The release tarball for this machine: dist/gtf-VERSION-<os>-<arch>.tar.gz (+ SHA256SUMS)
 dist:

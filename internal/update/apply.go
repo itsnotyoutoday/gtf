@@ -190,9 +190,13 @@ func (u *Updater) Update(ctx context.Context, rel Release) (Result, error) {
 			_ = os.RemoveAll(next)
 			return res, err
 		}
-		// what belongs to this machine, not to the release, carries over
-		if b, err := os.ReadFile(filepath.Join(u.LibDir, "local.tf")); err == nil {
-			_ = os.WriteFile(filepath.Join(next, "local.tf"), b, 0o644)
+		// what belongs to this machine, not to the release, carries over: the client loads local.tf from the tf/ library folder
+		// (<libdir>/tf/local.tf); one at the library root (where older notes put it) is kept too
+		for _, rel := range []string{"local.tf", filepath.Join("tf", "local.tf")} {
+			if b, err := os.ReadFile(filepath.Join(u.LibDir, rel)); err == nil {
+				_ = os.MkdirAll(filepath.Dir(filepath.Join(next, rel)), 0o755)
+				_ = os.WriteFile(filepath.Join(next, rel), b, 0o644)
+			}
 		}
 		rec := u.Rec
 		rec.Version, rec.LibDir = rel.Version(), u.LibDir

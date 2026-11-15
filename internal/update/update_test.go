@@ -190,6 +190,7 @@ func TestUpdateReplacesBinaryAndLibrary(t *testing.T) {
 	_ = os.WriteFile(exe, []byte("OLD"), 0o755)
 	_ = os.WriteFile(filepath.Join(lib, "tf", "stdlib.tf"), []byte("OLD-stdlib"), 0o644)
 	_ = os.WriteFile(filepath.Join(lib, "local.tf"), []byte("MY-LOCAL"), 0o644)
+	_ = os.WriteFile(filepath.Join(lib, "tf", "local.tf"), []byte("MY-TF-LOCAL"), 0o644) // where the client really loads it from
 	u := &Updater{Client: c, Version: "0.2.0", ExePath: exe, LibDir: lib, Rec: Record{Scope: "user", BinDir: bin}, GOOS: "linux", GOARCH: "amd64"}
 	res, rel, err := u.Check(context.Background(), ChannelPrerelease)
 	if err != nil || !res.Newer || res.Latest != "0.3.0-beta1" {
@@ -212,7 +213,10 @@ func TestUpdateReplacesBinaryAndLibrary(t *testing.T) {
 		t.Fatal("library not replaced")
 	}
 	if read(filepath.Join(lib, "local.tf")) != "MY-LOCAL" {
-		t.Fatal("the user's local.tf was lost")
+		t.Fatal("the user's local.tf (library root) was lost")
+	}
+	if read(filepath.Join(lib, "tf", "local.tf")) != "MY-TF-LOCAL" {
+		t.Fatal("the user's tf/local.tf, the one the client loads, was lost in the update")
 	}
 	if rec, err := LoadRecord(lib); err != nil || rec.Version != "0.3.0-beta1" || rec.Scope != "user" {
 		t.Fatalf("record %+v %v", rec, err)

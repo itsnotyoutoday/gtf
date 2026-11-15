@@ -16,12 +16,21 @@ func TestConfigDefaults(t *testing.T) {
 	if len(w) != 0 {
 		t.Fatal(w)
 	}
-	if c.Enabled || c.Port != 10328 || c.Bind != "127.0.0.1" || c.Dir != "/home/u/.gtf/squatter" || c.Kind != KindTF || !c.TLS ||
+	if c.Enabled || c.Port != 10328 || c.Bind != "0.0.0.0" || c.Dir != "/home/u/.gtf/squatter" || c.Kind != KindTF || !c.TLS ||
 		c.PairRole != "admin" || c.PairTTL != 10*time.Minute || !c.Commands || c.MaxClients != 8 || c.Path() != "/tfsp" {
 		t.Fatalf("%+v", c)
 	}
-	if c.BindWarning() != "" {
+	if !strings.Contains(c.ListeningNotice("10328"), "every interface") || !strings.Contains(c.ListeningNotice("10328"), "/pair") {
+		t.Fatalf("the default bind (every interface) says where it listens and what to do next: %q", c.ListeningNotice("10328"))
+	}
+	lo := c
+	lo.Bind = "127.0.0.1"
+	if lo.ListeningNotice("10328") != "" {
 		t.Fatal("loopback must not warn")
+	}
+	// plain ws:// without an explicit bind stays on loopback (it is only allowed there)
+	if p, _ := ConfigFromVars(vars(map[string]string{VarTLS: "off"}), "/home/u"); p.Bind != "127.0.0.1" || p.Validate() != nil {
+		t.Fatalf("plain ws:// defaults to loopback: %+v", p)
 	}
 }
 
@@ -38,7 +47,7 @@ func TestConfigValues(t *testing.T) {
 		c.Commands || c.CertFile != "/c" || c.KeyFile != "/k" || c.Path() != "/swp" {
 		t.Fatalf("%+v", c)
 	}
-	if !strings.Contains(c.BindWarning(), "0.0.0.0:4444") {
+	if !strings.Contains(c.ListeningNotice("4444"), "port 4444") {
 		t.Fatal("public bind needs a warning")
 	}
 	if c.Validate() == nil {
