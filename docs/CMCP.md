@@ -28,6 +28,13 @@ scroll, nothing is drawn on the text pane or the input line.
 Other themes (`klingon`, `romulan`, `ferengi`, `tos`, `soft`, `ops`) currently change only the palette; their frames wait for the
 theme-pack format (docs/CMCP-THEMES.md).
 
+## Screen menu
+
+The left column lists the screens the current console may show (the core's screen menu, `UI.Screens`), the current one lit, the ones
+its data does not allow dimmed (the hint, for example `man medical`, appears in the header). In focus mode `[` and `]` step to the
+previous or next screen (wrapping) and a digit 1-9 picks the n-th; the choice is local (the server is not told), keeps the focus on
+the new screen, and ends on a console change, a ship hop or a disconnect.
+
 ## What you see
 
 When a server puts you at a console (`man opera` on the Evennia PoC), the output area becomes the console screen: widgets around
@@ -99,7 +106,10 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_ascii` | auto | ASCII-only drawing |
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
 | `%cmcp_theme` | (plain) | `plain`, `tng`, `klingon`, `romulan`, `ferengi`: palette tokens; plain leaves colours to the terminal |
-| `%cmcp_ship_theme` | off | when on and `%cmcp_theme` is unset, follow the console's/ship's/screen's suggested theme (spec 6.6) |
+| `%cmcp_theme_mode` | ship | `ship` follows the ship's suggested theme (console, ship, screen); `fixed` keeps `%cmcp_theme` (`%cmcp_ship_theme on` is the old spelling of `ship`) |
+| `%cmcp_textport` | balanced | the output's size: `compact` (~20%), `balanced` (~35%), `large` (~50%); F3 expands to ~80% |
+| `%cmcp_motion` | on | `off` makes the F3 animation instant |
+| `%cmcp_dev_loopback_http` | off | DEVELOPER ONLY: accept an http:// pack origin when it is loopback, equals the origin this connection's Welcome announced, and the game host is loopback (never set in release builds) |
 | `%cmcp_bell` | off | ring the terminal bell for alerts (`red_alert`, `yellow_alert`, `proximity_warning`, `comm_beep`, `hail`) |
 | `%cmcp_era` | tng | sound era; stored, unused (gtf plays no sound) |
 | `%cmcp_sounds_dir` | | local sound folder; stored, unused, never sent anywhere |
