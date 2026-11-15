@@ -86,6 +86,25 @@ type Options struct {
 	Version string // shown in the welcome: "gtf/<version>"
 	Home    string // home directory (for the default state directory)
 	Logger  *slog.Logger
+	// TLS, if set, makes the clients' TLS connections exportable so that /restart can carry them (handoff_conns.go).
+	// Without it the standard library's TLS is used and a connected client is dropped by a restart (it reconnects).
+	TLS TLSMigrator
+}
+
+// TLSMigrator is TLS whose live connections can be handed to another process. The squatter imports no gtf
+// package; internal/client implements this with internal/net/tlsmigrate.
+type TLSMigrator interface {
+	// Listen wraps a bound socket in a TLS listener whose connections this migrator can export.
+	Listen(raw net.Listener, cfg *tls.Config) (net.Listener, error)
+	// Check says whether nc is one of its connections and whether it could be exported now (a TLS 1.2
+	// CBC session never can): mine=false means it is not a TLS connection of this migrator.
+	Check(nc net.Conn) (mine bool, err error)
+	// Export returns the session state of nc (KEY MATERIAL) and a duplicate of its TCP socket. nc is left as it is.
+	Export(nc net.Conn) (blob []byte, sock *os.File, err error)
+	// Import continues an exported session over a duplicate of its socket: no I/O, no handshake.
+	Import(sock net.Conn, blob []byte) (net.Conn, error)
+	// Discard ends nc's use of the session silently (no close_notify) once another process owns it.
+	Discard(nc net.Conn) error
 }
 
 // Squatter is the daemon.
@@ -94,6 +113,7 @@ type Squatter struct {
 	log     *slog.Logger
 	version string
 	active  atomic.Bool
+	tlsm    TLSMigrator
 
 	mu       sync.Mutex // config, listener, registry
 	cfg      Config
@@ -105,6 +125,9 @@ type Squatter struct {
 	serial   uint64
 	announce map[string]bool // device ids already announced as paired
 	inherit  net.Listener    // an inherited listening socket for the next start (AdoptListener)
+	carry    *carryState     // a handover under way (old process, handoff_conns.go)
+	pending  *pendingConns   // clients inherited from the old process, adopted by the first start (new process)
+	hintPort int             // the port the previous process was bound to (used when squatter_port=0 and nothing was inherited)
 
 	pmu   sync.Mutex // peers, presence, the local terminal's state
 	peers map[uint64]*peerInfo
@@ -134,6 +157,7 @@ type running struct {
 	fp   string
 	addr string
 	cfg  Config
+	tcfg *tls.Config // nil without TLS
 }
 
 const (
@@ -152,7 +176,7 @@ func New(h Host, o Options) *Squatter {
 	if v == "" {
 		v = "dev"
 	}
-	return &Squatter{host: h, log: l, version: v, state: StateOff, cfg: DefaultConfig(o.Home),
+	return &Squatter{host: h, log: l, version: v, tlsm: o.TLS, state: StateOff, cfg: DefaultConfig(o.Home),
 		sessions: map[string]*session{}, peers: map[uint64]*peerInfo{}, announce: map[string]bool{},
 		ntimers: map[string]*time.Timer{}, nsent: map[string]int{}, local: localState{cols: 80, rows: 24}}
 }
@@ -190,7 +214,10 @@ func (s *Squatter) Apply(cfg Config, seed func()) {
 		}
 		s.sessions, s.order = map[string]*session{}, nil
 		s.state, s.stateErr = StateOff, ""
+		in := s.inherit
+		s.inherit = nil
 		s.mu.Unlock()
+		s.dropInherited(in)
 		s.publish(nil)
 		return
 	}
@@ -221,7 +248,10 @@ func (s *Squatter) Apply(cfg Config, seed func()) {
 func (s *Squatter) fail(err error) {
 	s.mu.Lock()
 	s.state, s.stateErr = StateError, err.Error()
+	in := s.inherit
+	s.inherit = nil
 	s.mu.Unlock()
+	s.dropInherited(in)
 	s.publish(nil)
 	s.host.Notice("% squatter: " + err.Error())
 }
@@ -260,7 +290,28 @@ func (s *Squatter) start(cfg Config) (*running, error) {
 	s.mu.Lock()
 	raw := s.inherit
 	s.inherit = nil
+	ptls := cfg.TLS
+	if s.pending != nil {
+		ptls = s.pending.tls
+	}
 	s.mu.Unlock()
+	if raw != nil && !inheritUsable(cfg, raw, ptls) {
+		s.dropInherited(raw) // the configuration changed since: the clients reconnect
+		raw = nil
+	}
+	if raw == nil && cfg.Port == 0 {
+		// a restarted gtf that could not inherit the socket asks for the old port again, so that a
+		// client that knows the address finds it; any free port will do when that is taken
+		s.mu.Lock()
+		hint := s.hintPort
+		s.hintPort = 0
+		s.mu.Unlock()
+		if hint > 0 {
+			if l, err := net.Listen("tcp", net.JoinHostPort(strings.Trim(cfg.Bind, "[]"), strconv.Itoa(hint))); err == nil {
+				raw = l
+			}
+		}
+	}
 	if raw == nil {
 		var err error
 		raw, err = net.Listen("tcp", net.JoinHostPort(strings.Trim(cfg.Bind, "[]"), strconv.Itoa(cfg.Port)))
@@ -268,7 +319,9 @@ func (s *Squatter) start(cfg Config) (*running, error) {
 			return nil, fmt.Errorf("listen on %s:%d: %w", cfg.Bind, cfg.Port, err)
 		}
 	}
-	return s.serve(cfg, as, tcfg, fp, raw), nil
+	nr := s.serve(cfg, as, tcfg, fp, raw)
+	s.adoptPending(nr)
+	return nr, nil
 }
 
 // LoadCert returns the TLS identity: the configured files, or the one in <dir>/tls (made on first use).
@@ -295,20 +348,36 @@ func (s *Squatter) serve(cfg Config, as *auth.Store, tcfg *tls.Config, fp string
 		sc.ExtraFeatures = nil
 	}
 	srv := wire.NewServer(sc)
-	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second,
+	r := &running{ln: raw, srv: srv, as: as, fp: fp, addr: raw.Addr().String(), cfg: cfg, tcfg: tcfg}
+	s.listen(r, raw)
+	return r
+}
+
+// listen serves r.srv on the bound socket raw (TLS on top of it when configured). With a TLSMigrator
+// the TLS layer is one whose connections can be handed to the next process by /restart (a
+// configuration it cannot express falls back to the standard library: such a client is simply dropped
+// by a restart and reconnects).
+func (s *Squatter) listen(r *running, raw net.Listener) {
+	hs := &http.Server{Handler: r.srv.Handler(), ReadHeaderTimeout: 10 * time.Second,
 		ErrorLog: slog.NewLogLogger(s.log.Handler(), slog.LevelWarn)}
 	var l net.Listener = raw
-	if tcfg != nil {
-		hs.TLSConfig = tcfg
-		l = tls.NewListener(raw, tcfg)
+	if r.tcfg != nil {
+		hs.TLSConfig = r.tcfg
+		l = tls.NewListener(raw, r.tcfg)
+		if s.tlsm != nil {
+			if ml, err := s.tlsm.Listen(raw, r.tcfg); err == nil {
+				l = ml
+			}
+		}
 	}
-	r := &running{ln: raw, hs: hs, srv: srv, as: as, fp: fp, addr: raw.Addr().String(), cfg: cfg}
+	s.mu.Lock()
+	r.hs, r.ln = hs, raw
+	s.mu.Unlock()
 	go func() {
 		if err := hs.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.log.Warn("squatter: server stopped", "err", err)
 		}
 	}()
-	return r
 }
 
 // closeRunning stops accepting at once and drops the clients in the background (a client

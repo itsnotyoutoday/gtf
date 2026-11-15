@@ -64,11 +64,13 @@ type Server struct {
 	cancel context.CancelFunc
 	nextID atomic.Uint64
 
-	mu      sync.Mutex
-	closed  bool
-	clients map[uint64]*client
-	preauth int
-	wg      sync.WaitGroup
+	mu       sync.Mutex
+	closed   bool
+	quiesced bool // a handover is under way: no new clients (carry.go)
+	clients  map[uint64]*client
+	preauth  int
+	wg       sync.WaitGroup
+	qn       chan struct{} // signalled whenever a goroutine parks
 }
 
 // NewServer builds a Server. Backend and Auth are required.
@@ -99,7 +101,7 @@ func NewServer(cfg ServerConfig) *Server {
 		log = slog.New(slog.NewTextHandler(discard{}, nil))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{cfg: cfg, log: log, ctx: ctx, cancel: cancel, clients: map[uint64]*client{}}
+	return &Server{cfg: cfg, log: log, ctx: ctx, cancel: cancel, clients: map[uint64]*client{}, qn: make(chan struct{}, 1)}
 }
 
 type discard struct{}
@@ -138,7 +140,7 @@ func (s *Server) Close() {
 type client struct {
 	s    *Server
 	id   uint64
-	ws   *websocket.Conn
+	ws   *wsConn
 	ctx  context.Context
 	stop context.CancelFunc
 	out  chan []byte
@@ -151,6 +153,23 @@ type client struct {
 	caps     proto.Caps
 	dropped  bool
 	lastRecv time.Time
+	joined   time.Time
+
+	// quiescing for a handover to another process (carry.go)
+	gmu      sync.Mutex
+	pausing  bool
+	rparked  bool
+	wparked  bool
+	resume   chan struct{} // closed by Resume
+	pend     *wsMsg        // a message read but not dispatched when the reader stopped
+	wake     chan struct{} // nudges an idle writer
+	carried  bool          // exported: the connection now belongs to another process
+	exported [][]byte      // the queued frames Export took out (Resume puts them back)
+}
+
+type wsMsg struct {
+	typ  websocket.MessageType
+	data []byte
 }
 
 func (c *client) ID() uint64         { return c.id }
@@ -203,6 +222,12 @@ func (c *client) Close(reason string) {
 	c.mu.Unlock()
 	c.s.log.Info("wire: dropping client", "device", c.devID, "reason", reason)
 	c.stop()
+	c.gmu.Lock()
+	carried := c.carried
+	c.gmu.Unlock()
+	if carried {
+		return // another process owns the connection: say nothing on it
+	}
 	go func() { _ = c.ws.Close(websocket.StatusPolicyViolation, truncate(reason, 100)) }()
 }
 
@@ -230,7 +255,7 @@ func remoteIP(r *http.Request) string {
 	return h
 }
 
-func (s *Server) writeDirect(ctx context.Context, ws *websocket.Conn, v any) error {
+func (s *Server) writeDirect(ctx context.Context, ws *wsConn, v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -262,7 +287,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer endPreauth()
 
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true}) // auth is by key, not origin
+	ws, err := acceptWS(w, r) // auth is by key, not origin
 	if err != nil {
 		return
 	}
@@ -336,7 +361,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	ws.SetReadLimit(MaxFrameBytes)
 	c := &client{s: s, id: s.nextID.Add(1), ws: ws, ctx: ctx, stop: stop,
 		out: make(chan []byte, s.cfg.QueueLimit), devID: dev.DeviceID, devName: dev.Name, role: roleOf(dev.Role), user: userName,
-		caps: proto.DefaultCaps(), lastRecv: time.Now()}
+		caps: proto.DefaultCaps(), lastRecv: time.Now(), joined: time.Now(), resume: make(chan struct{}), wake: make(chan struct{}, 1)}
 	if hello.Caps != nil {
 		c.caps = *hello.Caps
 	}
@@ -347,7 +372,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		c.offer = hello.Offer
 	}
 	s.mu.Lock()
-	if s.closed || len(s.clients) >= s.cfg.MaxClients {
+	if s.closed || s.quiesced || len(s.clients) >= s.cfg.MaxClients {
 		s.mu.Unlock()
 		fail(proto.ErrRateLimited, "too many clients")
 		return
@@ -408,19 +433,41 @@ func (c *client) writeLoop() {
 	}
 	pingFrame, _ := json.Marshal(Simple(TPing))
 	for {
+		if c.isPausing() {
+			// a handover: what is queued goes out first, so that nothing the client should see is left
+			// behind, then the writer stands still until Resume (or until the connection is gone)
+			for drained := false; !drained; {
+				select {
+				case b := <-c.out:
+					if !write(b) {
+						return
+					}
+				default:
+					drained = true
+				}
+			}
+			if !c.parkWriter() {
+				return
+			}
+			continue
+		}
 		select {
 		case <-c.ctx.Done():
 			return
+		case <-c.wake:
 		case b := <-c.out:
 			if !write(b) {
 				return
 			}
 		case <-ping.C:
+			if c.isPausing() {
+				continue
+			}
 			if !write(pingFrame) {
 				return
 			}
 		case <-check.C:
-			if c.idle() > s.cfg.PongTimeout {
+			if c.idle() > s.cfg.PongTimeout && !c.isPausing() {
 				c.Close("no pong")
 				return
 			}
@@ -428,11 +475,48 @@ func (c *client) writeLoop() {
 	}
 }
 
+// nextMsg returns the next message to dispatch: the one a handover interrupted, else the next one
+// read. While a handover is in progress it parks instead of returning.
+func (c *client) nextMsg() (websocket.MessageType, []byte, error) {
+	for {
+		c.gmu.Lock()
+		if c.pend != nil && !c.pausing {
+			m := c.pend
+			c.pend = nil
+			c.gmu.Unlock()
+			return m.typ, m.data, nil
+		}
+		pausing := c.pausing
+		c.gmu.Unlock()
+		if pausing {
+			if !c.parkReader() {
+				return 0, nil, net.ErrClosed
+			}
+			continue
+		}
+		typ, data, err := c.ws.Read(c.ctx)
+		if errors.Is(err, errWSPaused) {
+			continue
+		}
+		if err != nil {
+			return 0, nil, err
+		}
+		c.gmu.Lock()
+		if c.pausing { // a message that arrived as the handover began: it is dispatched by whoever resumes
+			c.pend = &wsMsg{typ, data}
+			c.gmu.Unlock()
+			continue
+		}
+		c.gmu.Unlock()
+		return typ, data, nil
+	}
+}
+
 func (c *client) readLoop() {
 	s := c.s
 	bad := 0
 	for {
-		typ, data, err := c.ws.Read(c.ctx)
+		typ, data, err := c.nextMsg()
 		if err != nil {
 			return
 		}

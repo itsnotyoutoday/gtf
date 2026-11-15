@@ -82,6 +82,9 @@ func (c *Client) Abandon() {
 			s.cancel()
 		}
 	}
+	if c.sq != nil {
+		c.sq.sq.Abandon() // what exec does to the listener and the clients' sockets
+	}
 	go c.run.Close() // asynchronous: it may be called from the runner goroutine itself
 }
 

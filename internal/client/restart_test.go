@@ -20,6 +20,7 @@ import (
 
 	"github.com/itsnotyoutoday/gtf/internal/net/nettest"
 	"github.com/itsnotyoutoday/gtf/internal/net/telnet"
+	"github.com/itsnotyoutoday/gtf/internal/ui"
 	"github.com/itsnotyoutoday/gtf/internal/ui/vt"
 	"github.com/itsnotyoutoday/gtfparser"
 )
@@ -40,6 +41,7 @@ type rig struct {
 	probe  func(ProbeRequest) error // nil: the in-process rehearsal
 	seen   []byte                   // the state file as the probe saw it
 	dialer Dialer                   // replaces the script dialer when set
+	term   ui.Terminal              // replaces the shared virtual terminal when set (tests that do not look at the screen)
 }
 
 func newRig(t *testing.T) *rig {
@@ -63,7 +65,11 @@ func (r *rig) config() Config {
 	if r.dialer != nil {
 		dl = r.dialer
 	}
-	return Config{Term: r.scr, HomeDir: r.home, NoRC: true, Quiet: true, Dialer: dl, Interactive: true,
+	var term ui.Terminal = r.scr
+	if r.term != nil {
+		term = r.term
+	}
+	return Config{Term: term, HomeDir: r.home, NoRC: true, Quiet: true, Dialer: dl, Interactive: true,
 		RestartProbe: r.doProbe, RestartExec: r.doExec}
 }
 

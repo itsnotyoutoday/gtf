@@ -48,6 +48,9 @@ type ClientOptions struct {
 	Caps              proto.Caps
 	PinnedFingerprint string // AA:BB:... ; empty = trust on first use (read ServerFingerprint after Dial)
 	InsecureLoopback  bool   // allow ws:// to loopback
+	// TLSTune, if set, may adjust the TLS configuration of a wss:// connection (cipher suites, versions) after the
+	// fingerprint pinning is in place; used by tests of what a restricted client does.
+	TLSTune func(*tls.Config)
 	// ExpectKind, if set ("squatterd" or "tf-squatterd"), makes Dial refuse a server
 	// of another kind BEFORE the public key is sent (see KindMismatchError). It also
 	// picks the default endpoint path (/swp or /tfsp).
@@ -187,6 +190,9 @@ func Dial(ctx context.Context, rawURL string, opts ClientOptions) (*Client, erro
 	switch u.Scheme {
 	case "wss":
 		cfg := tlsutil.PinnedConfig(opts.PinnedFingerprint, func(fp string) { c.serverFP.Store(fp) })
+		if opts.TLSTune != nil {
+			opts.TLSTune(cfg)
+		}
 		hc.Transport = &http.Transport{TLSClientConfig: cfg, ForceAttemptHTTP2: false, TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{}}
 	case "ws":
 		if !opts.InsecureLoopback || !isLoopbackHost(u.Hostname()) {

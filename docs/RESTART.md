@@ -72,6 +72,7 @@ why and starts fresh (the connections are lost, the inherited descriptors are cl
 | Interpreter | everything gtfparser's `SaveState` carries (see the engine's `docs/state-export.md`): variables, macros with their ids, triggers, hooks, bindings, worlds, histories, `/repeat` `/quote` `/at` processes with remaining times, `/limit`, status line, ... |
 | Panels | layout definitions (rebuilt from their `/layout save` script), the active layout and per-world assignments, canvases (name and size) |
 | Alert | the status-line alert with its remaining time |
+| Squatter | its sessions with ids, scrollback and sequence numbers, the listening socket and the connected remote clients, TLS ones included (see "The squatter") |
 
 ## What does not survive
 
@@ -123,6 +124,7 @@ encoding, the new one after importing. A rehearsal drops its adopted sessions wi
 | `sessions` | 1 | yes | per world: state, options, partial line, prompt, ANSI colour state, GMCP/MSDP/MSSP store, `conn` (`kind` tcp/tls, descriptor slot, `HandoffState`: telnet machine state v1, UTF-8 carry, env, TLS blob), `reconnect`+`endReason` |
 | `panels` | 1 | no | layouts (as scripts), current/per-world/file assignment, canvases (name, size) |
 | `client` | 1 | no | start time, alert |
+| `squatter` | 1 | only while descriptors ride along | the squatter's state, `bind` (world -> session id), `conns` (listener and clients, see below) |
 | *carriers* | their own | their own | see "Extending" |
 
 Rules (as RELOAD.md): a reader always reads older versions of a section it knows; a newer *envelope* is read only
@@ -140,8 +142,8 @@ writes them): that is another reason for 0600 and deletion.
 
 ## Extending: carriers
 
-Another component (the squatter daemon, for instance) registers a section instead of editing the core, in
-`restart_sections.go`:
+Another component registers a section instead of editing the core, in `restart_sections.go` (the squatter does, in
+`restart_squatter.go`: see "The squatter" below):
 
 ```go
 client.RegisterRestartSection("squatter", carrier) // RestartCarrier
@@ -166,6 +168,57 @@ refuses the file and the old process keeps running. Carriers' `RestartPlan` `end
 without `-f` like sessions do. Tested with a registered carrier (data, a descriptor, plan refusal, rollback
 notification, an unknown required section refusing, an unknown optional one skipped).
 
+## The squatter
+
+The squatter (`docs/SQUATTER.md`, `internal/squatter`, glued in `internal/client/restart_squatter*.go`) registers the carrier
+`squatter`. It has two layers, and the second falls back to the first.
+
+**State (always).** `squatter.Export` writes every session: id, metadata, the scrollback entries with their sequence numbers
+(`squatter_scrollback` many), per-device read marks, GMCP/MSDP snapshots, the remote-echo (password prompt) flag, ended
+sessions still held, the width last told to each game (NAWS), the counter that makes new ids and which devices were announced as
+just paired. The section also records which world's connection each session mirrors. The new process
+`DecodeState`s it (checks everything, a newer format is `ErrStateTooNew`, damage `ErrStateCorrupt`), `Activate`s the squatter
+and `ImportState`s before the first `Apply`, so nothing is seeded from the screens: the sessions keep their ids and numbers. A
+session whose game connection did not come through (`/restart -f`, a connection that was still being set up) is ended
+(`squatter_restarted`, still held, visible in SquatClient) and the reconnected world gets a session of its own. The paired
+devices and the TLS certificate are files in `squatter_dir` and are simply read again (same fingerprint, no pairing code needed);
+the settings come back with the variables, and the first `squatCheck` listens again. With `squatter_port=0` the old port is asked
+for first. A client that reconnects after a state-only restart attaches with its last sequence number and gets exactly the
+entries after it (tested: no gap, no duplicate, numbers continue).
+
+**Connections (when everything goes right).** The squatter's HTTP/WebSocket server is its own (`internal/squatter/wire`: a
+small RFC 6455 implementation instead of a library, because a library keeps bytes it has read ahead in private buffers) and its
+TLS is the vendored one of `internal/net/tlsmigrate` (the client gives it to the squatter through `squatter.TLSMigrator`;
+`internal/squatter` imports no gtf package). `/restart` then:
+
+1. **Quiesce** (`RestartQuiesce`): the listener stops accepting (its socket is duplicated first, so connections that arrive
+   wait in the kernel); every client's reader and writer stand still. A writer writes what is queued first. A reader that is in
+   the middle of a request (waiting for the engine goroutine, which `/restart` occupies) is answered: the squatter's calls into
+   gtf (`Host.Do`/`Post`) go through a queue that the quiesce runs on the engine goroutine, so no request is lost or repeated.
+   A message read but not yet dispatched is kept. A client that has not stopped after 3 s is dropped.
+2. **Save**: per client the bytes it had sent and the server had read but not used, a fragmented message in progress, a
+   message not yet dispatched, frames queued and not written, its identity (client id, device, role, hello extensions) and the
+   squatter's own state for it (which sessions it follows, the gtf-extension state), the TLS session as for game connections, and
+   a duplicate of its socket; plus the listening socket. The section becomes `required` while descriptors ride along, so an
+   older binary refuses the file.
+3. **Rehearsal**: the probe child imports everything (listener, sockets, TLS sessions) and lets go without a byte on any wire.
+4. **New process**: the first `Apply` listens on the inherited socket (not if the port or `squatter_tls` changed) and adopts the
+   clients with their old ids (so the extension's `cid` stays valid), not announcing anything: no hello, no welcome, no
+   `SQUAT_CONNECT` hook. Their requests and our lines carry on over the same TLS sessions.
+
+**Falls back, never fails.** A client whose transport cannot be carried (TLS 1.2 with a CBC suite, a renegotiated session, a
+connection that is not TCP) is not exported: the exec drops it, it reconnects and resumes through the state layer; it does not
+make `/restart` refuse (`RestartPlan` lists it as carried with kind `reconnects: <why>`). If the connections part of the section
+cannot be used by the new process (a newer format, a descriptor that is not what it says) it is dropped, the inherited
+descriptors are closed and the squatter comes up from its state alone. If exporting fails after the quiesce, the clients are
+resumed and the restart goes on state-only. If the restart is abandoned for any reason after the quiesce (a failed rehearsal, a
+failed exec), `RestartRollback` listens again on the duplicated socket and resumes every client where it was, with its queued
+frames back in front. `squatCarryConns` (a package variable) switches the connections layer off for tests.
+
+Not carried: pending pairing codes live on disk and survive; a typing indicator and the rate-limit buckets of a carried client
+start fresh. Key material: the old process clears its copies after encoding; like the game connections' it exists only in the 0600
+state file.
+
 ## Testing
 
 * `internal/handoff`: round trip, 0600/0700, deletion, version rules, corruption (truncated, bit flip, bad
@@ -184,4 +237,12 @@ notification, an unknown required section refusing, an unknown optional one skip
   bit-flipped file, and the old process keeps the connection.
 * `scripts/restart_pty.py <gtf>`: the real binary under a pseudo terminal: pid kept, connection kept, terminal raw
   while running and **restored to cooked mode after /quit** (run it after `go build ./cmd/gtf`).
+* The squatter: `internal/squatter/handoff_test.go` (state round trip, newer/truncated/corrupt refused, all-or-nothing import,
+  resume exactly after a restart over the same directory), `internal/squatter/wire` (`wsconn_test.go`: the WebSocket layer cut at
+  every byte of a stream; `carry_test.go`: quiesce, export, adopt, pending message, half frame, queued frames),
+  `internal/client/restart_squatter*_test.go`: state-only restarts with a real peer (same ids, no gap or duplicate, same
+  fingerprint, no re-pairing), a peer that stays connected over TLS and plain with traffic both ways during the restart, a request
+  queued while `/restart` occupies the engine, a client that cannot be carried while another is, rollback and bad sections, the
+  connections layer failing back to state; `TestRestartRealExecKeepsSquatterClientConnected` with real processes: a real exec and
+  rehearsal child, twice in a row.
 * Engine side: see the engine's `docs/state-export.md` and its `state*_test.go`.

@@ -82,6 +82,18 @@ type RestoreContext struct {
 	// Probe is set in the rehearsal process (see RestartRestore).
 	Probe bool
 	files []*os.File
+	owner []string // the section that owns each descriptor (from the state file)
+}
+
+// CloseOwned closes the inherited descriptors that were handed over by the section, for a carrier that
+// decides not to use them (they would otherwise stay open, a listening socket included, for the life
+// of the process).
+func (r *RestoreContext) CloseOwned(section string) {
+	for i, f := range r.files {
+		if f != nil && i < len(r.owner) && r.owner[i] == section {
+			f.Close()
+		}
+	}
 }
 
 // File returns the inherited descriptor in a slot returned by AddFile.

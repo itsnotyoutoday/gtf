@@ -239,40 +239,26 @@ it. The squatter reaches gtf through the `squatter.Host` interface (`Do`/`Post` 
 it needs); `internal/ui.Screen.Tap` is the one hook in the UI that mirrors every line added to a world's
 screen.
 
-## Surviving /restart (not wired yet)
+## Surviving /restart
 
-(Still not wired by the shared-control work; nothing here makes it harder. The extension's state is all
-rebuildable or exportable: peers reconnect and renegotiate, `Presence()` snapshots who is attached and what
-they view, world revisions are the engine's and are larger after a restart than before it, so a peer's old
-`baseRev` is merely stale, never wrongly accepted, and the NAWS state is recomputed from the peers' widths
-when they re-attach.)
+`/restart` (docs/RESTART.md, "The squatter") carries the squatter: `internal/client/restart_squatter.go` registers the carrier
+`squatter`, with these pieces from this package:
 
-`/restart` (branch `hot-restart`, separate work) restarts gtf without dropping connections. The squatter
-is built so the listener and the peers' state can follow, with no dependency on that code:
+* `Export() ([]byte, error)` / `DecodeState` / `ImportState(st, ring)`: the sessions (ids, metadata, scrollback entries with
+  their sequence numbers, acks, GMCP/MSDP snapshots, remote-echo flag, ended sessions, NAWS widths, the id counter). The format is
+  versioned (`ErrStateTooNew`, `ErrStateCorrupt`, optional additions never bump the version). The new process calls `Activate()`
+  and `ImportState` before the first `Apply`, so nothing is seeded. Paired devices and the certificate are files in
+  `squatter_dir` and are reused: same fingerprint, no re-pairing. A client that reconnects resumes with its last sequence number.
+* `PlanConns`, `QuiesceConns`, `ExportConns`, `ResumeConns`, `PrepareConns`, `AdoptConns` (`handoff_conns.go`): the listening
+  socket and the connected clients, TLS ones included. `wire.Server.Quiesce/Export/Adopt/Resume` stop a client's reader and writer
+  at a clean point and hand over its unread bytes, half-received message, undispatched message and unwritten frames with its
+  identity; the server side of WebSocket is `wire/wsconn.go` (a small RFC 6455 implementation, because a library's read-ahead
+  buffers cannot be exported). TLS comes from `Options.TLS` (`TLSMigrator`, implemented in `internal/client/squatter_tls.go` with
+  `internal/net/tlsmigrate`; this package imports no gtf package). A client that cannot be carried reconnects and resumes.
+* `ReloadNotice()` sends `server.restarting` to clients that are not carried.
 
-* `Export() ([]byte, error)` serialises the sessions (ids, metadata, scrollback entries with their seq
-  numbers, acks, GMCP/MSDP snapshots); `Import(blob) ([]string, error)` restores them in the new
-  process (call `Activate()` first, before the first `Apply`).
-* `ListenerFile() (*os.File, error)` is a duplicate of the listening socket to inherit;
-  `AdoptListener(net.Listener)` makes the next start use the inherited socket instead of binding.
-* `ReloadNotice()` sends `server.restarting` to every client so they reconnect and replay from their
-  last seq at once. Peers themselves are not carried (a TLS WebSocket cannot move between processes
-  here); with the preserved seq numbers a reconnect is seamless.
+What is carried per client: id (so the extension's `cid` stays valid), device, role, hello extensions, the sessions it follows,
+the gtf-extension state (features, view, attached sessions, widths, last input). Not carried: typing indicators and rate-limit
+buckets (they start fresh). World revisions are the engine's and larger after a restart than before it: a peer's old `baseRev`
+is merely stale, never wrongly accepted.
 
-When the `RegisterRestartSection(name, carrier)` registry exists on the restart branch (it does in
-that worktree's working tree at the time of writing), the integration is one carrier in
-`internal/client`, section `"squatter"`, `Required()` false:
-
-```
-RestartQuiesce  sq.ReloadNotice()
-RestartSave     blob := sq.Export(); slot := w.AddFile("listener", sq.ListenerFile());
-                data = {blob, slot, map[world-name]squatID of the carried sessions}
-RestartRestore  sq.Activate(); sq.AdoptListener(net.FileListener(ctx.File(slot)));
-                sq.Import(blob); for each restored Session set s.squatID from the map;
-                then c.squatCheck() (reads the variables, adopts the listener, starts serving)
-RestartRollback nothing (the listener was only duplicated)
-```
-
-The sessions section must have rebuilt the `Session` objects before the squatter section restores
-(registration order), so the ids can be re-attached. Tested here: Export/ListenerFile/Import/AdoptListener
-across two squatter instances in one process (`TestStateExportImport`), not an actual exec.

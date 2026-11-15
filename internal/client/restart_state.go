@@ -438,6 +438,9 @@ func (c *Client) restore(r *Restoration) error {
 	// extra sections
 	names, cs := registeredCarriers()
 	ctx := &RestoreContext{Probe: r.Probe, files: r.files}
+	for _, fd := range r.bundle.File.FDs {
+		ctx.owner = append(ctx.owner, fd.Section)
+	}
 	for i, n := range names {
 		sec, ok := r.bundle.Section(n)
 		if !ok {

@@ -5,17 +5,15 @@ package squatter
 
 // Carrying the squatter across a restart of gtf that keeps the game connections (/restart).
 //
-// The restart code is written elsewhere; this file only gives it the pieces, with no
-// dependency on it. The intended use (docs/SQUATTER.md, "Surviving /restart"):
+// This file has the squatter's own state and no dependency on the restart code
+// (internal/client/restart_squatter.go is the carrier; docs/RESTART.md, "The squatter"):
 //
-//	old process:  blob, _ := sq.Export()            // sessions, scrollback, acks, GMCP/MSDP state
-//	              f, _ := sq.ListenerFile()         // the listening socket as an *os.File to inherit
-//	new process:  sq.AdoptListener(ln)              // ln = net.FileListener(inherited file)
-//	              ids, _ := sq.Import(blob)         // before the first Apply
-//	              ...rebind each id to the restored connection, then Apply(cfg, nil)
+//	old process:  blob, _ := sq.Export()            // sessions, scrollback, acks, GMCP/MSDP state, NAWS
+//	new process:  st, err := DecodeState(blob)      // validates everything, touches nothing
+//	              sq.Activate(); sq.ImportState(st, ring)   // before the first Apply: no seeding then
 //
-// Peers are not carried: a SquatClient reconnects by itself and replays from its last seq
-// (the old process may send {"t":"server.restarting"} first, see ReloadNotice).
+// The listener and the connected clients are carried by handoff_conns.go; without them, clients
+// reconnect and resume from the stored sequence numbers.
 
 import (
 	"encoding/json"
@@ -23,13 +21,28 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 
+	"github.com/itsnotyoutoday/gtf/internal/squatter/proto"
 	"github.com/itsnotyoutoday/gtf/internal/squatter/scrollback"
 	"github.com/itsnotyoutoday/gtf/internal/squatter/wire"
 )
 
-// stateVersion is the version of the Export format.
+// stateVersion is the version of the Export format. Adding optional members never changes it; a
+// reader refuses a newer one (ErrStateTooNew) and reads every older one.
 const stateVersion = 1
+
+// Errors from DecodeState (use errors.Is).
+var (
+	ErrStateTooNew  = errors.New("squatter state is from a newer gtf")
+	ErrStateCorrupt = errors.New("squatter state is corrupt")
+)
+
+// maxStateSessions and maxStateEntries bound what a state file may claim.
+const (
+	maxStateSessions = 4096
+	maxStateEntries  = 2000000
+)
 
 // SessionState is one session in an exported state.
 type SessionState struct {
@@ -50,14 +63,51 @@ type exported struct {
 	Version  int            `json:"version"`
 	Serial   uint64         `json:"serial"`
 	Sessions []SessionState `json:"sessions"`
+	// added without a version bump (optional):
+	NAWS     map[string]int `json:"naws,omitempty"`     // the width last told to the game, per session
+	Announce []string       `json:"announce,omitempty"` // device ids already announced as freshly paired
+	Port     int            `json:"port,omitempty"`     // the port that was bound (a hint when squatter_port=0)
+}
+
+// State is a decoded, validated squatter state (DecodeState).
+type State struct{ ex exported }
+
+// SessionIDs lists the sessions in the state, in order.
+func (st *State) SessionIDs() []string {
+	ids := make([]string, len(st.ex.Sessions))
+	for i, ss := range st.ex.Sessions {
+		ids[i] = ss.ID
+	}
+	return ids
+}
+
+// Worlds maps each session id to the world name it was recorded with.
+func (st *State) Worlds() map[string]string {
+	m := make(map[string]string, len(st.ex.Sessions))
+	for _, ss := range st.ex.Sessions {
+		m[ss.ID] = ss.Meta.World
+	}
+	return m
 }
 
 // Export serialises the sessions. It does not stop anything.
 func (s *Squatter) Export() ([]byte, error) {
 	s.mu.Lock()
 	serial := s.serial
+	port := 0
+	if s.run != nil {
+		if _, p, err := net.SplitHostPort(s.run.addr); err == nil {
+			port, _ = strconv.Atoi(p)
+		}
+	}
+	var ann []string
+	for id, on := range s.announce {
+		if on {
+			ann = append(ann, id)
+		}
+	}
 	s.mu.Unlock()
-	ex := exported{Version: stateVersion, Serial: serial}
+	ex := exported{Version: stateVersion, Serial: serial, Port: port, Announce: ann}
 	for _, ss := range s.sessionList() {
 		ss.mu.Lock()
 		first, last := ss.store.Bounds()
@@ -81,6 +131,14 @@ func (s *Squatter) Export() ([]byte, error) {
 		}
 		ex.Sessions = append(ex.Sessions, st)
 	}
+	s.nmu.Lock()
+	if len(s.nsent) > 0 {
+		ex.NAWS = make(map[string]int, len(s.nsent))
+		for k, v := range s.nsent {
+			ex.NAWS[k] = v
+		}
+	}
+	s.nmu.Unlock()
 	return json.Marshal(ex)
 }
 
@@ -92,52 +150,159 @@ func copyAcks(m map[string]uint64) map[string]uint64 {
 	return out
 }
 
-// Import restores the sessions of an Export into a squatter that has none yet (it must be
-// active: call it after the first Apply, or before it with Activate). It returns the session ids.
-func (s *Squatter) Import(blob []byte) ([]string, error) {
+// DecodeState parses and checks a state written by Export. Nothing is adopted: a refused state
+// leaves everything as it was. A truncated or damaged state is ErrStateCorrupt, a newer format
+// ErrStateTooNew.
+func DecodeState(blob []byte) (*State, error) {
+	var head struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(blob, &head); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrStateCorrupt, err)
+	}
+	if head.Version > stateVersion {
+		return nil, fmt.Errorf("%w (format %d, this gtf reads up to %d)", ErrStateTooNew, head.Version, stateVersion)
+	}
+	if head.Version < 1 {
+		return nil, fmt.Errorf("%w: no format version", ErrStateCorrupt)
+	}
 	var ex exported
 	if err := json.Unmarshal(blob, &ex); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrStateCorrupt, err)
 	}
-	if ex.Version != stateVersion {
-		return nil, fmt.Errorf("squatter state version %d, want %d", ex.Version, stateVersion)
+	if len(ex.Sessions) > maxStateSessions {
+		return nil, fmt.Errorf("%w: %d sessions", ErrStateCorrupt, len(ex.Sessions))
+	}
+	seen := map[string]bool{}
+	total := 0
+	for _, ss := range ex.Sessions {
+		if ss.ID == "" || seen[ss.ID] {
+			return nil, fmt.Errorf("%w: session id %q is empty or repeated", ErrStateCorrupt, ss.ID)
+		}
+		seen[ss.ID] = true
+		switch ss.Meta.State {
+		case "", proto.StateConnecting, proto.StateConnected, proto.StateEnded:
+		default:
+			return nil, fmt.Errorf("%w: session %s has state %q", ErrStateCorrupt, ss.ID, ss.Meta.State)
+		}
+		total += len(ss.Entries)
+		if total > maxStateEntries {
+			return nil, fmt.Errorf("%w: too many scrollback entries", ErrStateCorrupt)
+		}
+		var prev uint64
+		for i, e := range ss.Entries {
+			seq := e.Seq()
+			if seq == 0 || (i > 0 && seq != prev+1) {
+				return nil, fmt.Errorf("%w: session %s: scrollback is not contiguous at entry %d", ErrStateCorrupt, ss.ID, i)
+			}
+			prev = seq
+		}
+	}
+	return &State{ex: ex}, nil
+}
+
+// ImportState restores the sessions of a decoded state into a squatter that has none yet. It must
+// be active (Activate, or after the first Apply). ring is the scrollback size to give the sessions
+// (the configured squatter_scrollback; the squatter's own configuration is not applied yet when a
+// restarted gtf imports). All or nothing.
+func (s *Squatter) ImportState(st *State, ring int) error {
+	ex := &st.ex
+	if ring <= 0 {
+		ring = DefaultScrollback
+	}
+	s.mu.Lock()
+	if len(s.sessions) != 0 {
+		s.mu.Unlock()
+		return errors.New("squatter already has sessions")
+	}
+	s.mu.Unlock()
+	type built struct {
+		id string
+		ss *session
+	}
+	var list []built
+	closeAll := func() {
+		for _, b := range list {
+			b.ss.close()
+		}
+	}
+	for _, x := range ex.Sessions {
+		ss, err := s.newSession(x.ID, x.Meta, ring)
+		if err != nil {
+			closeAll()
+			return err
+		}
+		list = append(list, built{x.ID, ss})
+		ss.endedAt, ss.endReason, ss.endDetail, ss.lastText, ss.remoteEcho = x.EndedAt, x.EndReason, x.EndDetail, x.LastText, x.RemoteEcho
+		for k, v := range x.Acks {
+			ss.acks[k] = v
+		}
+		for k, v := range x.Gmcp {
+			ss.gmcpLatest[k] = v
+		}
+		for k, v := range x.Msdp {
+			ss.msdpLatest[k] = v
+		}
+		if err := ss.store.Seed(x.Entries); err != nil {
+			closeAll()
+			return fmt.Errorf("session %s: %w", x.ID, err)
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.sessions) != 0 {
-		return nil, errors.New("squatter already has sessions")
+		closeAll()
+		return errors.New("squatter already has sessions")
 	}
 	if ex.Serial > s.serial {
 		s.serial = ex.Serial
 	}
-	var ids []string
-	for _, st := range ex.Sessions {
-		ss, err := s.newSession(st.ID, st.Meta, s.cfg.Scrollback)
-		if err != nil {
-			return ids, err
-		}
-		ss.endedAt, ss.endReason, ss.endDetail, ss.lastText, ss.remoteEcho = st.EndedAt, st.EndReason, st.EndDetail, st.LastText, st.RemoteEcho
-		for k, v := range st.Acks {
-			ss.acks[k] = v
-		}
-		for k, v := range st.Gmcp {
-			ss.gmcpLatest[k] = v
-		}
-		for k, v := range st.Msdp {
-			ss.msdpLatest[k] = v
-		}
-		if err := ss.store.Seed(st.Entries); err != nil {
-			return ids, err
-		}
-		s.sessions[st.ID] = ss
-		s.order = append(s.order, st.ID)
-		ids = append(ids, st.ID)
+	for _, b := range list {
+		s.sessions[b.id] = b.ss
+		s.order = append(s.order, b.id)
 	}
-	return ids, nil
+	for _, id := range ex.Announce {
+		s.announce[id] = true
+	}
+	s.hintPort = ex.Port
+	s.nmu.Lock()
+	for k, v := range ex.NAWS {
+		s.nsent[k] = v
+	}
+	s.nmu.Unlock()
+	return nil
 }
 
-// Activate turns the taps on without a listener, for Import before the first Apply.
+// Import is DecodeState + ImportState with the configured scrollback size; it returns the session ids.
+func (s *Squatter) Import(blob []byte) ([]string, error) {
+	st, err := DecodeState(blob)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	ring := s.cfg.Scrollback
+	s.mu.Unlock()
+	if err := s.ImportState(st, ring); err != nil {
+		return nil, err
+	}
+	return st.SessionIDs(), nil
+}
+
+// SessionLastSeq is the newest sequence number a session holds (0 for none or an unknown session).
+func (s *Squatter) SessionLastSeq(id string) uint64 {
+	if ss := s.session(id); ss != nil {
+		_, last := ss.store.Bounds()
+		return last
+	}
+	return 0
+}
+
+// Activate turns the taps on without a listener, for ImportState before the first Apply.
 func (s *Squatter) Activate() { s.active.Store(true) }
+
+// EndSession marks a session as ended with the given reason (a session whose connection did not
+// survive a restart); it does nothing for an unknown or already ended one.
+func (s *Squatter) EndSession(id, reason, detail string) { s.SessionEnded(id, reason, detail) }
 
 // ListenerFile returns a duplicate of the listening socket for the next process to inherit.
 func (s *Squatter) ListenerFile() (*os.File, error) {

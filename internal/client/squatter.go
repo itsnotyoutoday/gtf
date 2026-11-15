@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 	"github.com/itsnotyoutoday/gtf/internal/squatter"
@@ -21,7 +22,39 @@ import (
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
+// squatQueue holds the work the squatter's network goroutines have asked the engine goroutine to do
+// (Host.Do and Host.Post). It is run by tasks posted to the engine, and by /restart's quiesce, which
+// occupies the engine goroutine while a client's request may be waiting for it.
+type squatQueue struct {
+	mu sync.Mutex
+	q  []func()
+}
+
+func (q *squatQueue) push(f func()) {
+	q.mu.Lock()
+	q.q = append(q.q, f)
+	q.mu.Unlock()
+}
+
+// drain runs what is queued, in order, on the calling goroutine (the engine goroutine).
+func (q *squatQueue) drain() {
+	for {
+		q.mu.Lock()
+		if len(q.q) == 0 {
+			q.mu.Unlock()
+			return
+		}
+		f := q.q[0]
+		q.q[0] = nil
+		q.q = q.q[1:]
+		q.mu.Unlock()
+		f()
+	}
+}
+
 type squatState struct {
+	q        squatQueue
+	quiesced bool // a /restart has quiesced the squatter's connections and not yet resumed or exec'd
 	c        *Client
 	sq       *squatter.Squatter
 	sig      string
@@ -32,7 +65,7 @@ type squatState struct {
 
 func newSquatState(c *Client) *squatState {
 	st := &squatState{c: c, warned: map[string]bool{}}
-	st.sq = squatter.New(&squatHost{c: c}, squatter.Options{Version: strings.TrimPrefix(Version, "v"), Home: c.cfg.HomeDir})
+	st.sq = squatter.New(&squatHost{c: c}, squatter.Options{Version: strings.TrimPrefix(Version, "v"), Home: c.cfg.HomeDir, TLS: squatTLS{}})
 	return st
 }
 
@@ -226,14 +259,19 @@ type squatHost struct{ c *Client }
 func (h *squatHost) Do(f func()) {
 	c := h.c
 	d := make(chan struct{})
-	c.Post(func(*gtfparser.Interp) { f(); close(d) })
+	c.sq.q.push(func() { f(); close(d) })
+	c.Post(func(*gtfparser.Interp) { c.sq.q.drain() })
 	select {
 	case <-d:
 	case <-c.done:
 	}
 }
 
-func (h *squatHost) Post(f func()) { h.c.Post(func(*gtfparser.Interp) { f(); h.c.afterTask() }) }
+func (h *squatHost) Post(f func()) {
+	c := h.c
+	c.sq.q.push(func() { f(); c.afterTask() })
+	c.Post(func(*gtfparser.Interp) { c.sq.q.drain() })
+}
 
 func (c *Client) squatSession(id string) *Session {
 	for _, s := range c.order {

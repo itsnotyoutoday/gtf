@@ -321,7 +321,13 @@ func (c *Client) Restart(force bool) (err error) {
 	}
 	err = execFn(exe, argv, env)
 	if errors.Is(err, ErrExecDone) {
-		return nil // only a test hook says this: the "new process" has taken over
+		// only a test hook says this: the "new process" has taken over. A real exec closes the old
+		// process's descriptors (they are close-on-exec; the new process has its own copies): do the same,
+		// so that a connection the new process does not adopt really ends.
+		for _, f := range files {
+			f.Close()
+		}
+		return nil
 	}
 	// exec returns only when it failed
 	undoHandoverFiles(files)
