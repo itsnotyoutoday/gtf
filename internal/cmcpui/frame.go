@@ -234,7 +234,7 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 		yy := y * 2
 		for k := 0; yy < ph; k++ {
 			h2 := min(seg-1, ph-yy)
-			round := ""
+			round := "none" // an unmatched corner list rounds nothing (an empty one rounds all four)
 			if yy+seg >= ph {
 				round = "bl"
 				h2 = ph - yy
