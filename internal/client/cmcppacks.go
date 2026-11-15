@@ -76,6 +76,7 @@ type packJob struct {
 	state  string // asking | fetching | ready | refused | failed
 	inline *fetch.Inline
 	why    string
+	ship   string // the ship whose announcement asked for it: a question outlives neither the ship nor the pack's need
 }
 
 // consentMode is %cmcp_pack_consent: ask (default), always or never.
@@ -337,7 +338,7 @@ func (c *Client) cmcpPackWanted(s *Session, ref msg.PackRef) {
 	if cs.jobs[ref.SHA256] != nil {
 		return
 	}
-	j := &packJob{ref: ref}
+	j := &packJob{ref: ref, ship: s.cm.UI().Ship.ID}
 	cs.jobs[ref.SHA256] = j
 	c.packStart(s, j)
 }

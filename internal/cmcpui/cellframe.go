@@ -194,6 +194,7 @@ func (d *drawer) cellFrame() {
 	}
 	d.cellNav(top, bottom)
 	d.cellLogPill(top, bottom)
+	d.cellFocusLine(top, bottom)
 }
 
 // themeVars are the closed template names of 19.5.
@@ -233,23 +234,24 @@ func (d *drawer) cellNav(top, bottom int) {
 	y := top + 1
 	items := jlist(nav, "items")
 	type entry struct {
-		label, role string
-		cur, ok     bool
+		label, role    string
+		cur, ok        bool
+		active, cursor bool
 	}
 	var ents []entry
 	if len(d.env.Nav) > 0 {
-		for i, e := range navWindow(d.env.Nav, g.H-top-bottom-2) {
+		for i, e := range navWindow(d.navEntries(), g.H-top-bottom-2) {
 			role := "p"
 			if len(items) > 0 {
 				m, _ := items[i%len(items)].(map[string]any)
 				role = jstr(m, "role")
 			}
-			ents = append(ents, entry{strings.ToUpper(e.Title), role, e.Active, e.Available})
+			ents = append(ents, entry{strings.ToUpper(e.Title), role, e.Active || e.Cursor, e.Available, e.Active, e.Cursor})
 		}
 	} else {
 		for i, it := range items {
 			m, _ := it.(map[string]any)
-			ents = append(ents, entry{strings.ToUpper(jstr(m, "label")), jstr(m, "role"), i == cur, true})
+			ents = append(ents, entry{strings.ToUpper(jstr(m, "label")), jstr(m, "role"), i == cur, true, i == cur, false})
 		}
 	}
 	for _, e := range ents {
@@ -295,6 +297,22 @@ func (d *drawer) cellNav(top, bottom int) {
 			for k, r := range []rune(txt) {
 				g.Set(1+k, y, layout.Cell{R: r, A: layout.Attr{FG: col, BG: bg, Bold: isCur}})
 			}
+		}
+		// the menu's markers, whatever the style: an arrow and reverse video on the keyboard
+		// cursor, a dot on the screen being shown
+		if e.cursor || e.active {
+			mk := '●'
+			if e.cursor {
+				mk = '▶'
+				for x := 0; x < nw-1; x++ {
+					c := g.At(x, y)
+					c.A.Reverse, c.A.Bold = true, true
+					g.Set(x, y, c)
+				}
+			}
+			c := g.At(0, y)
+			c.R = mk
+			g.Set(0, y, c)
 		}
 		y += 2
 	}
@@ -470,4 +488,31 @@ func fractionRect(a Rect, f []float64) Rect {
 	x1 := a.X + int(math.Round((f[0]+f[2])*float64(a.W)))
 	y1 := a.Y + int(math.Round((f[1]+f[3])*float64(a.H)))
 	return Rect{X: x0, Y: y0, W: max(x1-x0-1, 1), H: max(y1-y0, 1)} // one column of air between neighbours
+}
+
+// cellFocusLine puts the keyboard state, or a pending consent question, on a row of the frame in
+// inverse: the focused panel and the keys that work.
+func (d *drawer) cellFocusLine(top, bottom int) {
+	g := d.f.Grid
+	txt := ""
+	switch {
+	case d.env.Consent != "":
+		txt = " " + d.env.Consent + " "
+	case d.st.Active:
+		txt = " " + d.f.Header() + " "
+	}
+	if txt == "" {
+		return
+	}
+	y := 0
+	if top == 0 {
+		y = g.H - 1
+	}
+	a := layout.Attr{FG: dark, BG: d.env.Theme.role("x"), Bold: true}
+	for i, r := range []rune(clean(txt)) {
+		if i >= g.W-14 {
+			break
+		}
+		g.Set(1+i, y, layout.Cell{R: r, A: a})
+	}
 }

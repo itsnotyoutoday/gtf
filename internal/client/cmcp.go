@@ -256,3 +256,14 @@ func (c *Client) cmcpAfterRestore() {
 		s.conn.SendProto("gmcp", "Core.Supports.Set", append(append([]string(nil), gmcpproto.DefaultSupports...), "Cobra 1"))
 	}
 }
+
+// cmcpKeyDefs gives the keys the CMCP screen consumes a harmless TF definition, so the engine's
+// undefined-key error ("The key shift_tab is undefined") never appears when no screen is up. A
+// definition the player made is left alone.
+func (c *Client) cmcpKeyDefs(in *gtfparser.Interp) {
+	for _, k := range []string{"shift_tab", "f2", "f3", "f4", "f5", "f6"} {
+		if in.Var("cmcp_nodef_"+k) == "" {
+			in.Exec("/def -q key_" + k + " = /test 1")
+		}
+	}
+}

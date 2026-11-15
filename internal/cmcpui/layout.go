@@ -148,6 +148,7 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		}
 	}
 	d := &drawer{f: f, env: env, st: st, c: &canvas{g: g, clip: Rect{W: w, H: h}}}
+	d.navItem(top, bottom, left)
 	for _, p := range a.leaves {
 		d.collect(p)
 		f.Boxes = append(f.Boxes, p.r)
@@ -161,6 +162,14 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	}
 	if i := f.index(st.Focus); i >= 0 {
 		f.Hint = d.hint(f.Items[i])
+		if st.Active {
+			f.FocusName = d.focusName(f.Items[i])
+			f.FocusKind = f.Items[i].Kind
+			if f.FocusKind == "nav" && len(d.env.Nav) > 0 {
+				f.FocusLabel = d.env.Nav[max(0, min(st.ws("~nav").cur, len(d.env.Nav)-1))].Title
+			}
+			d.markFocus(f.Items[i])
+		}
 	}
 	if outer != f.Text {
 		d.textBorder(outer)
@@ -318,7 +327,7 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 	prot := -1
 	for i, k := range kids {
 		w := k.Layout.Weight
-		if a.noWeight && !horiz {
+		if (a.noWeight || a.sidebar) && !horiz {
 			w = 0
 		}
 		switch {
@@ -393,9 +402,18 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 		need := -avail
 		for need > 0 {
 			big := -1
+			// pictures give way first, down to a small but readable size: the controls and the
+			// readouts below them are what the player operates
 			for i := range kids {
-				if i != prot && wt[i] <= 0 && ext[i] > 1 && (big < 0 || ext[i] > ext[big]) {
+				if i != prot && wt[i] <= 0 && !isContainer(kids[i]) && pictureWidget(kids[i].Widget) && ext[i] > 6 && (big < 0 || ext[i] > ext[big]) {
 					big = i
+				}
+			}
+			if big < 0 {
+				for i := range kids {
+					if i != prot && wt[i] <= 0 && ext[i] > 1 && (big < 0 || ext[i] > ext[big]) {
+						big = i
+					}
 				}
 			}
 			if big < 0 {

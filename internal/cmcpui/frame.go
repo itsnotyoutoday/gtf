@@ -126,7 +126,10 @@ func (d *drawer) tngBands() {
 	alert := strings.ToUpper(orDefault(d.env.Alert, "green")) + " ALERT"
 	keys := "TAB: SCREEN KEYS"
 	if d.st.Active {
-		keys = "KEYS ON  ESC: INPUT"
+		keys = strings.ToUpper(d.f.FocusName)
+	}
+	if d.env.Consent != "" {
+		keys = d.env.Consent
 	}
 	if d.env.Notice != "" {
 		keys = strings.ToUpper(d.env.Notice)
@@ -176,10 +179,19 @@ func (d *drawer) tngBands() {
 	cb.RoundRect(0, 0, elbowW, bh, float64(bh)/2, "bl", d.bandColor(0), 1)
 	// the status strip: hull, shields, core, lock and alert as coloured segments
 	x = elbowW + 2
-	for i, t := range d.env.Status {
+	status := d.env.Status
+	if d.st.Active {
+		// while the screen has the keyboard the strip says which keys work
+		status = []string{strings.ToUpper(d.f.Header())}
+	}
+	for i, t := range status {
 		sw := runeLen(t) + 4
 		if x+sw+10 > w {
-			break
+			sw = w - x - 10
+			if sw < 8 {
+				break
+			}
+			t = string([]rune(t)[:sw-4])
 		}
 		col := d.bandColor(i + 1)
 		cb.Rect(x, 0, sw, bh-1, col, 1, true)
@@ -224,7 +236,7 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 	cv := layout.NewCanvas(lw, rows)
 	ph := cv.H
 	y := 0
-	ents := d.env.Nav
+	ents := d.navEntries()
 	if len(ents) == 0 {
 		for i, n := range consoleNames {
 			ents = append(ents, NavEntry{Title: n, Available: true, Active: i == consoleTab(d.env.Title)})
@@ -239,6 +251,9 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 		if e.Active {
 			col = layout.Lerp(col, rgbC(255, 255, 255), 0.35)
 		}
+		if e.Cursor {
+			col, fg = rgbC(255, 255, 255), rgbC(0, 0, 0) // the menu's keyboard cursor: a white pill
+		}
 		n := strings.ToUpper(e.Title)
 		if len([]rune(n)) > lw-3 {
 			n = string([]rune(n)[:lw-4]) + "…"
@@ -247,6 +262,11 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 		cv.Text(max(lw-2-len([]rune(n)), 0), y, n, layout.Attr{FG: fg, BG: col, Bold: true})
 		if e.Active {
 			cv.Rect(lw-1, y*2, 1, 2, rgbC(255, 255, 255), 1, true)
+		}
+		if e.Cursor {
+			cv.Text(0, y, "▶", layout.Attr{FG: fg, BG: col, Bold: true})
+		} else if e.Active {
+			cv.Text(0, y, "●", layout.Attr{FG: fg, BG: col, Bold: true})
 		}
 		y += 2
 	}

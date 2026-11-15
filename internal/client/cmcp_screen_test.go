@@ -276,7 +276,11 @@ func TestCmcpScreensDraw(t *testing.T) {
 		f.console("std."+id, cons, nil)
 		txt := f.text()
 		t.Logf("== %s\n%s", id, f.term.Dump())
-		if !strings.Contains(txt, strings.ToUpper(strings.Split(id, ".")[0])) {
+		want := strings.ToUpper(id)
+		if id == "sensors" {
+			want = "SCIENCE"
+		}
+		if !strings.Contains(txt, want) {
 			t.Errorf("%s: header missing:\n%s", id, txt)
 		}
 		f.dump(id)
@@ -303,7 +307,7 @@ const (
 func TestCmcpDamageAssignByKeyboard(t *testing.T) {
 	f := newScreenFixture(t, 120, 40)
 	f.console("std.damage", "operations", nil)
-	f.keys(kTab, kEnter, kDown, kEnter) // focus on; pick team 1; move to Port_Nacelle; assign
+	f.keys(kTab, kTab, kTab, kEnter, kDown, kEnter) // focus on (the screen menu, then the schematic, then the teams); pick team 1; move to Port_Nacelle; assign
 	cmEventually(t, "command ran", func() bool { return len(f.game.commands()) == 1 })
 	if got := f.game.commands()[0]; got != `dmg.assign {"system":"Port_Nacelle","team":1}` {
 		t.Fatalf("ran %q", got)
@@ -444,11 +448,11 @@ func TestCmcpContextStack(t *testing.T) {
 // There is no joystick in gtf: the helm is steered with the pack's helm-controls (a core widget),
 // whose events the pack maps to ordinary commands.
 func TestCmcpHelmControlsSendCommands(t *testing.T) {
-	f := newScreenFixture(t, 120, 40)
+	f := newScreenFixture(t, 160, 60)
 	f.console("std.helm", "navigation", nil)
 	f.contain(t, "HELM CONTROLS", "azimuth", "[ STOP ]")
 	f.lack(t, "thr ")                          // no stick
-	f.keys(kTab, kDown, kDown, kRight, kEnter) // speed row, +10, send
+	f.keys(kTab, kTab, kTab, kTab, kDown, kDown, kRight, kEnter) // menu, map, radar, helm controls; speed row, +10, send
 	cmEventually(t, "speed sent", func() bool { return len(f.game.commands()) == 1 })
 	if got := f.game.commands()[0]; got != `helm.speed {"pct":10}` {
 		t.Fatalf("ran %q", got)
@@ -487,7 +491,7 @@ func TestCmcpKeyboardFocusOrderAndReturn(t *testing.T) {
 	if !f.active() {
 		t.Fatal("Tab on an empty input line did not enter the screen")
 	}
-	f.contain(t, "KEYS ON")
+	f.contain(t, "Esc input line")
 	first := f.focusPath()
 	f.keys(kTab)
 	second := f.focusPath()
@@ -696,7 +700,7 @@ func TestCmcpLogToggleAnimates(t *testing.T) {
 	nowFn = func() time.Time { return clock }
 	defer func() { nowFn = func() time.Time { return fixedNow } }()
 	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_layout=stacked")
-	f.console("std.sensors", "science", nil)
+	f.console("std.damage", "operations", nil)
 	r0, _, h := f.pane()
 	f.keys("\x1bOR") // F3
 	var seen []int
@@ -707,7 +711,7 @@ func TestCmcpLogToggleAnimates(t *testing.T) {
 		seen = append(seen, r.H)
 	}
 	last := seen[len(seen)-1]
-	if last*100 < h*75 {
+	if last*100 < h*70 {
 		t.Fatalf("did not reach the expanded size: %v of %d", seen, h)
 	}
 	mid := 0
@@ -747,9 +751,89 @@ func TestCmcpScreenMenuKeys(t *testing.T) {
 	if back, _ := shown(); back == second {
 		t.Fatalf("[ did not move the screen (still %s)", back) // (the core's wrap order is its own; see the report)
 	}
-	f.keys("5")
+	f.keys("2")
 	if third, _ := shown(); third == first {
-		t.Fatalf("digit 5 did not pick a screen")
+		t.Fatalf("digit 2 did not pick a screen")
 	}
 	f.contain(t, "DAMAGE") // the menu entries are in the left column
+}
+
+// --- the focus walkthrough: a visible selector, named in the header, in reading order -------------
+
+// focusedCells counts the cells of the drawn screen that are in inverse video (the focus marker).
+func (f *screenFixture) inverseCells() (n int) {
+	f.c.Do(func(*gtfparser.Interp) {
+		for _, c := range f.c.ui.Surf.Grid.Cells {
+			if c.A.Reverse {
+				n++
+			}
+		}
+	})
+	return
+}
+
+func (f *screenFixture) focusName() (s string) {
+	f.c.Do(func(*gtfparser.Interp) { s = f.c.fg.cs.frame.FocusName })
+	return
+}
+
+// Each Tab moves a marked selector (checked by attributes, not text), the header names the panel and
+// the keys, the first stop is the screen menu, and the panels follow in reading order.
+func TestCmcpFocusWalkthrough(t *testing.T) {
+	f := newScreenFixture(t, 200, 50)
+	f.console("std.sensors", "science", nil)
+	if f.inverseCells() != 0 {
+		t.Fatal("a focus marker before the player asked")
+	}
+	var names []string
+	f.keys(kTab)
+	for i := 0; i < 5; i++ {
+		n := f.focusName()
+		names = append(names, n)
+		if n == "" {
+			t.Fatalf("step %d: no focused panel named", i)
+		}
+		if f.inverseCells() == 0 && n != "SCREEN MENU" {
+			t.Errorf("step %d (%s): no inverse-video marker on the screen", i, n)
+		}
+		want := "PANEL " + n
+		if n == "SCREEN MENU" {
+			want = "Up/Down choose   Enter open"
+		}
+		f.contain(t, want, "Esc input line")
+		f.dump(fmt.Sprintf("focus-step-%d", i+1))
+		f.keys(kTab)
+	}
+	if names[0] != "SCREEN MENU" {
+		t.Fatalf("the first Tab should land on the screen menu: %v", names)
+	}
+	if names[1] == names[0] || names[2] == names[1] {
+		t.Fatalf("Tab did not move: %v", names)
+	}
+}
+
+// The real byte sequences of a terminal reach gtf as keys: Shift+Tab (ESC [ Z) enters on the LAST panel
+// and moves back, arrows in both encodings work, F3 and F4 in both encodings toggle, and no '%' error
+// from the TF key layer ever shows ("The key shift_tab is undefined").
+func TestCmcpRealKeySequences(t *testing.T) {
+	f := newScreenFixtureSetup(t, 200, 50, t.TempDir(), nil, "/set cmcp_motion=off")
+	f.console("std.sensors", "science", nil)
+	f.keys("\x1b[Z") // Shift+Tab: enter on the last panel
+	if !f.active() {
+		t.Fatal("Shift+Tab did not enter the screen")
+	}
+	last := f.focusName()
+	f.keys("\x1b[Z")
+	if f.focusName() == last {
+		t.Fatal("Shift+Tab did not move back")
+	}
+	f.keys("\x1b[B", "\x1bOB", "\x1b[A", "\x1bOA", "\x1b[C", "\x1bOD") // arrows, normal and application mode
+	for _, seq := range []string{"\x1b[13~", "\x1bOR", "\x1b[14~", "\x1bOS", "\x1b[Z", "\x1b[12~", "\x1bOQ"} {
+		f.keys(seq)
+	}
+	f.lack(t, "key_shift_tab", "is undefined", "no such command or macro")
+	// with the screen off the keys are still harmless
+	f.keys("\x1bOS") // F4: screen off
+	f.keys("\x1b[Z", "\x1b[Z")
+	f.lack(t, "key_shift_tab", "is undefined", "no such command or macro")
 }

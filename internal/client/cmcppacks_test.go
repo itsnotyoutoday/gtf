@@ -214,3 +214,44 @@ func TestCmcpOneThemePerShip(t *testing.T) {
 		t.Fatalf("after a ship hop: %s", got)
 	}
 }
+
+// A pack question left over from the previous ship must not survive the ship hop: the consent line
+// is only ever about the current ship's packs.
+func TestCmcpStaleConsentDroppedOnShipHop(t *testing.T) {
+	raw, ref := readPack(t)
+	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f.console("fspace-std/damage", "operations", packConsole(ref))
+	f.render()
+	f.contain(t, "F5 = ALLOW") // the question, in gtf's own status line
+	f.console("std.operations", "operations", func(c *msg.Console) { c.Ship.ID = "other-ship"; c.Ship.Name = "Other" })
+	f.render()
+	f.lack(t, "F5 = ALLOW", "LAYOUT PACK")
+}
+
+// The key hint and the focus state are gtf's own line, the same in every theme; the screen menu lists
+// only real, available screens; /cmcp screens lists all of them with the console that provides each.
+func TestCmcpHintLineEveryTheme(t *testing.T) {
+	for _, th := range []string{"tng", "tos", "ops", "soft", "klingon", "romulan", "ferengi"} {
+		f := newScreenFixture(t, 120, 40)
+		f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = th })
+		f.contain(t, "INPUT - Tab or F2: screen menu   Shift+Tab: last panel", "/cmcp keys")
+		f.keys(kTab)
+		f.contain(t, "MENU ", "Up/Down choose   Enter open", "Esc input line")
+		f.keys(kDown, kDown)
+		f.keys("\x1b")
+		f.contain(t, "INPUT - Tab or F2")
+		f.dump("hint-" + th)
+	}
+}
+
+func TestCmcpMenuAvailableOnlyAndScreensList(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "operations", nil)
+	f.lack(t, "FSPACE", "fspace-")
+	exec(f.c, "/cmcp screens")
+	f.render()
+	f.contain(t, "std.operations", "to use") // a dimmed entry names the console that provides it
+	exec(f.c, "/cmcp keys")
+	f.render()
+	f.contain(t, "SCREEN MENU", "Esc")
+}

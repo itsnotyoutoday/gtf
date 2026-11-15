@@ -30,10 +30,9 @@ theme-pack format (docs/CMCP-THEMES.md).
 
 ## Screen menu
 
-The left column lists the screens the current console may show (the core's screen menu, `UI.Screens`), the current one lit, the ones
-its data does not allow dimmed (the hint, for example `man medical`, appears in the header). In focus mode `[` and `]` step to the
-previous or next screen (wrapping) and a digit 1-9 picks the n-th; the choice is local (the server is not told), keeps the focus on
-the new screen, and ends on a console change, a ship hop or a disconnect.
+The left column lists **only the screens the current console may show** (the core's `UI.MenuScreens()`), the shown one marked with a dot
+and the keyboard highlight with an arrow in reverse video. `/cmcp screens` lists ALL screens, with `man <console> to use` for the ones
+another console provides. The choice is local (the server is not told) and ends on a console change, a ship hop or a disconnect.
 
 ## What you see
 
@@ -53,20 +52,27 @@ of the later-edition widgets (log, sector-map, portrait, pad-diagram). `scope` f
 
 ## Keyboard (keyboard first)
 
-The input line always works and is never taken over: typing, Enter, history and completion behave exactly as without CMCP.
-The screen has a **focus mode**:
+The input line always works and is never taken over. The screen has **focus mode**, made of **areas** in reading order: the SCREEN MENU
+(the left column), then the screen's panels; the input line is outside. gtf's own status line (the row above `(world) ... time`,
+the same in every theme and layout) always names the area and the keys valid there (spec 6.12.2), and shows a pending pack question.
+`/cmcp keys` prints this table.
 
-| key | action |
-|---|---|
-| **Tab** on an empty input line | enter the screen (with text in the line Tab stays tf's completion key); also **F2**, and `/cmcp focus` |
-| Tab / Shift-Tab | next / previous panel; past the last (first) one they return to the input line |
-| Up / Down | move in a list, table, picker, team assigner, helm controls; at the ends the focus moves on |
-| Left / Right | adjust a slider (Left/Down -, Right/Up +), choose a radar contact or schematic zone, change a helm value |
-| `+` `-` | sliders (and helm values) |
-| Enter, Space | activate: a button's click, the selected row's select, a zone, a team |
-| an **underlined letter** | press that button or toggle (first free letter or digit of its text, or the pack's `key` prop) |
-| Esc | back to the input line; so does any printable key the screen does not use (it is then typed there) |
-| y / n | answer a pack consent prompt |
+| where | key | action |
+|---|---|---|
+| input line | **Tab** (empty line) or **F2** | enter focus on the **screen menu**; with text in the line Tab stays tf's completion |
+| input line | **Shift+Tab** | enter focus on the **last panel** |
+| anywhere | Tab / Shift+Tab | next / previous area or panel (wraps) |
+| anywhere | **Esc** | step out to the input line (so does a printable key the area does not use; it is then typed) |
+| MENU | Up / Down | move the highlight through the available screens (wraps) |
+| MENU | Home / End / PgUp / PgDn | first / last / 5 up / 5 down |
+| MENU | **Enter** | open the highlighted screen and move into its first panel (a locked one says `man <console> to use`) |
+| PANEL list/table | Up / Down | move the row (never leaves the panel: use Tab) |
+| PANEL | Left / Right | tabs, buttons in a row, sliders (and radar contacts, helm values) |
+| PANEL | Enter | activate (a button's click, the row's select) |
+| PANEL | an **underlined letter** | press that button or toggle |
+| anywhere in focus | `[` `]` `1`-`9` | quick aliases: previous / next / n-th screen (not advertised in the header) |
+| anywhere | F3 / F4 | log view / screen off (work from the input line too) |
+| pack question | **F5 / F6** | allow / refuse (own keys, never mixed with the focus keys; also `/cmcp pack allow|deny`) |
 
 A control with `hold_ms` (the transporter's energize) takes its key **three times within two seconds** (a terminal has no key
 release). Shift-Arrow and Alt-Arrow are never bound (terminals and tmux swallow them). Every action is also a typeable command
@@ -90,6 +96,8 @@ AI, someone else took the console) nothing is offered.
 /cmcp pack allow|deny [id] answer a consent prompt
 /cmcp screen [id]         say which screen is shown; with an id (std.damage, pack/screen) show it locally
 /cmcp send <verb> k=v ... send a catalogue verb like a button would (validated, echoed)
+/cmcp keys                the keyboard table
+/cmcp screens             every screen and which console provides it
 /cmcp focus               toggle screen keys (F2)
 /cmcp on|off              set %cmcp (new connections); off also ends CMCP on the foreground connection
 ```
@@ -126,7 +134,7 @@ audio would otherwise never hear about them; spec 9.9 only names `Sound.Play`. `
 `Cobra.Welcome`/`Cobra.Console` announce a pack; the shared `fetch` package gets it (inline chunks, or HTTPS from the announced
 origin only, which must be the game host or one in `%cmcp_origins`), checks the SHA-256, parses it whole-or-nothing and caches it
 under `~/.gtf/cmcp/packs` by (game host, hash). The **first use of a pack asks** (a line in the output, a notice in the screen
-header; answer with `/cmcp pack allow|deny` or y/n in screen-key mode); the answer is remembered per (host, pack id) in
+status line; answer with F5 / F6 or `/cmcp pack allow|deny`; a question belongs to the ship that announced the pack and is dropped on a ship hop); the answer is remembered per (host, pack id) in
 `~/.gtf/cmcp/consent.json`, as are trust-on-first-use signature keys. A pack with an invalid signature is rejected, never offered.
 Any failure keeps the built-in screens and the session running.
 

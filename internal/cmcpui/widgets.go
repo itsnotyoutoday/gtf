@@ -664,3 +664,142 @@ func (d *drawer) buttonKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
 		return []Event{{Node: b.Node, Name: "click"}}, true
 	}
 }
+
+// navNode is the synthetic widget node of the screen menu, so the menu is a panel like any other.
+var navNode = &pack.BoundNode{Node: &pack.Node{Path: "~nav", Widget: "nav"}, Widget: "nav", Visible: true, Enabled: true}
+
+// navItem registers the screen menu (the left column) as a focusable panel: Up and Down move its
+// cursor, Enter shows the entry (an unavailable one reports why it is not shown).
+func (d *drawer) navItem(top, bottom, left int) {
+	if left == 0 || len(d.env.Nav) == 0 {
+		return
+	}
+	g := d.f.Grid
+	it := Item{Node: navNode, Rect: Rect{X: 0, Y: top, W: left, H: g.H - top - bottom}, Kind: "nav"}
+	ws := d.st.ws("~nav")
+	it.key = func(k Key) ([]Event, bool) {
+		n := len(d.env.Nav)
+		ws.cur = max(0, min(ws.cur, n-1))
+		switch k {
+		case "up":
+			ws.cur = (ws.cur - 1 + n) % n
+			return nil, true
+		case "down":
+			ws.cur = (ws.cur + 1) % n
+			return nil, true
+		case "home":
+			ws.cur = 0
+			return nil, true
+		case "end":
+			ws.cur = n - 1
+			return nil, true
+		case "pgup":
+			ws.cur = max(ws.cur-5, 0)
+			return nil, true
+		case "pgdn":
+			ws.cur = min(ws.cur+5, n-1)
+			return nil, true
+		case "enter", "space":
+			return []Event{{Nav: d.env.Nav[ws.cur].ID}}, true
+		}
+		return nil, false
+	}
+	d.f.Items = append(d.f.Items, it)
+}
+
+// navEntries is the menu for drawing: the cursor entry marked while the menu has the keyboard.
+func (d *drawer) navEntries() []NavEntry {
+	out := append([]NavEntry(nil), d.env.Nav...)
+	if d.st.Active && d.st.Focus == "~nav" && len(out) > 0 {
+		ws := d.st.ws("~nav")
+		out[max(0, min(ws.cur, len(out)-1))].Cursor = true
+	}
+	return out
+}
+
+// FocusHeader is the focus header of spec 6.12.2 (exact templates, three spaces between key
+// groups): it names the area and lists the keys valid there. label is the highlighted screen of
+// the menu, name the focused panel's title. The [ ] and digit aliases are not advertised here;
+// /cmcp keys lists them.
+func FocusHeader(name, kind, label string) string {
+	switch kind {
+	case "":
+		return "INPUT - Tab or F2: screen menu   Shift+Tab: last panel"
+	case "nav":
+		return "MENU " + label + " - Up/Down choose   Enter open   Home/End ends   Tab next area   Esc input line"
+	case "tabs":
+		return "PANEL " + name + " - Left/Right tab   Enter open   Tab next area   Shift+Tab back   Esc input line"
+	case "button", "toggle":
+		return "PANEL " + name + " - Left/Right button   Enter press   letter presses   Tab next area   Esc input line"
+	case "slider":
+		return "PANEL " + name + " - Left/Right adjust   Tab next area   Shift+Tab back   Esc input line"
+	}
+	return "PANEL " + name + " - Up/Down row   Enter select   Tab next area   Shift+Tab back   Esc input line"
+}
+
+// Header is the frame's focus header (INPUT when the screen has no focus).
+func (f *Frame) Header() string { return FocusHeader(f.FocusName, f.FocusKind, f.FocusLabel) }
+
+// focusName names an item for the "FOCUS:" line.
+func (d *drawer) focusName(it Item) string {
+	b := it.Node
+	switch it.Kind {
+	case "nav":
+		return "SCREEN MENU"
+	case "button", "toggle":
+		return strings.ToUpper(str(prop(b, "text")))
+	case "slider":
+		return strings.ToUpper(orStrC(str(prop(b, "label")), "SLIDER"))
+	case "radar", "scope":
+		return "RADAR (arrows: contact)"
+	case "viewscreen":
+		return "VIEWSCREEN"
+	case "contact-picker":
+		return "CONTACTS"
+	case "table":
+		return strings.ToUpper(orStrC(str(prop(b, "label")), "TABLE"))
+	case "team-assigner":
+		return "DAMAGE TEAMS"
+	case "helm-controls":
+		return "HELM CONTROLS"
+	}
+	return strings.ToUpper(orStrC(str(prop(b, "label")), strings.ReplaceAll(it.Kind, "-", " ")))
+}
+
+func orStrC(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
+}
+
+// markFocus makes the focused panel unmistakable in any terminal, 16 colours or mono included: its
+// first row (a picture's label row) is drawn in inverse bold with a marker and the panel's name, on
+// top of the widget's own highlight (cursor row, brighter pill).
+func (d *drawer) markFocus(it Item) {
+	g := d.f.Grid
+	r := it.Rect
+	if it.Kind == "nav" || r.W <= 0 || r.H <= 0 {
+		return // the menu marks its own cursor row
+	}
+	label := "▶ " + d.focusName(it)
+	row := r.Y
+	if it.Kind == "radar" || it.Kind == "scope" {
+		row = r.Y + r.H - 1
+	}
+	for x := r.X; x < r.X+r.W && x < g.W; x++ {
+		c := g.At(x, row)
+		c.A.Reverse, c.A.Bold = true, true
+		g.Set(x, row, c)
+	}
+	if it.Kind != "button" && it.Kind != "toggle" && it.Kind != "slider" {
+		for i, ch := range []rune(clean(label)) {
+			if i >= r.W-1 {
+				break
+			}
+			c := g.At(r.X+i, row)
+			c.R = ch
+			g.Set(r.X+i, row, c)
+		}
+	}
+}

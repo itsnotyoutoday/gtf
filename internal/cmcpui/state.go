@@ -21,6 +21,8 @@ type Event struct {
 	Node  *pack.Node
 	Name  string // click, select, change, release, assign
 	Value any
+	// Nav, when set, asks to show that screen of the menu (the left column).
+	Nav string
 }
 
 // Block is a ready cell picture (a rasterised sprite).
@@ -68,7 +70,9 @@ type Env struct {
 	TextRows int // the text pane's rows for this frame (the textport state, mid-animation too); 0 = balanced
 	// Nav is the screen menu (the core's UI.Screens): the left column's entries, the current one lit, the
 	// ones the console may not subscribe dimmed.
-	Nav      []NavEntry
+	Nav []NavEntry
+	// Consent is a pending pack or theme consent question, shown on its own prominent line until answered.
+	Consent  string
 	ScreenID string
 	Vars     map[string]any // the status strip: hull, shields, core, lock, alert
 	ASCII    bool           // draw with ASCII characters only
@@ -102,6 +106,7 @@ type wstate struct {
 // State is the screen-local UI state that outlives a frame: $ui, the focus and the per-widget
 // cursors. A ship change (UI.Generation) is the caller's cue to Reset it.
 type State struct {
+	Order []string // focus panel ids as last drawn, in reading order (set by the glue)
 	UI    map[string]any
 	Focus string // Path of the focused node ("" = none yet)
 	// Active says the screen has keyboard focus (the player toggled it): only then are keys taken.
@@ -147,8 +152,15 @@ type Frame struct {
 	// Dropped counts the widgets that did not fit and were not drawn (the frame says so; F3 and F4 are
 	// the way out).
 	Dropped int
-	Compact bool
-	Items   []Item
+	// FocusName names the focused panel for the header ("RADAR", "SRS", "SCREEN MENU"); empty when the
+	// screen does not have the keyboard.
+	FocusName string
+	// FocusKind is the kind of the focused item ("nav" for the screen menu), for the header's key list.
+	FocusKind string
+	// FocusLabel is the menu's highlighted screen (the header of the menu area names it).
+	FocusLabel string
+	Compact    bool
+	Items      []Item
 	// Boxes are the rectangles of every widget drawn (for the geometry tests: none overlaps another,
 	// the text pane or the frame).
 	Boxes []Rect
@@ -208,6 +220,7 @@ type NavEntry struct {
 	ID, Title string
 	Active    bool
 	Available bool
+	Cursor    bool // the keyboard cursor of the focused menu
 }
 
 // navWindow picks the entries that fit `capacity` rows of the column (two rows each), keeping the
@@ -222,7 +235,10 @@ func navWindow(n []NavEntry, capacity int) []NavEntry {
 	}
 	act := 0
 	for i, e := range n {
-		if e.Active {
+		if e.Active && act == 0 {
+			act = i
+		}
+		if e.Cursor {
 			act = i
 		}
 	}

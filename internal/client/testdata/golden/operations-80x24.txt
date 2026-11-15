@@ -1,20 +1,20 @@
 ▀▀▀▀▀▀▀▀▀▀OPERATIONS▀▀▀▀▀▀SS BOOTY KING▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀TAB: SCREEN KEYS▀▀
 ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-                                                  OPERATIONS  -  SS BOOTY KING
+
 
                                                   ◖ VESSEL ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
-                                                  Name: SS Booty King
-                                                  Class: Marauder
-                                                  Transponder: On  FCGR7043
-                                                  Hatch: CLOSED
-                                                  ◖ TRACTOR BEAM ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔
-                                                  Integrity ████████████ 100/100
-                                                  Lock: none
-                                                  Destination: not set
-                                                  ◖ LOCK ◗ ◖ ENGAGE ◗ ◖ RESET ◗
+                                                  Name: SS Booty King   Class: …
+                                                  Hatch: CLOSED   Doors: not_pr…
                                                   ◖ CONTACTS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
                                                     11  AST5716          258-89…
-                                                    3   Vulcan           333+22…
-                                                    15  UFPTRukh         337+26…
                                                   ◖ SRS ◗ ◖ LRS ◗ ◖ PASSIVE ◗
+                                                  ◖ POWER ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+                                                  Main 5.4 GW   Aux 1 GW   Batt…
+                                                  Groups                       ▼
+                                                  ◖ WHERE IT GOES ◗ ▔▔▔▔▔▔▔▔▔▔▔▔
+                                                  ◖ DAMAGE CONTROL TEAMS ◗ ▔▔▔▔▔
+                                                  Enter: choose a team
+                                                  ◖ ORDERS AND REQUESTS ◗ ▔▔▔▔▔▔
+                                                    # PRI FROM TEXT STATE
 ▀▀▀▀▀▀▀▀▀▀HULL 92%▀▀▀▀▀▀SHIELDS 95%▀▀▀▀▀▀CORE 60%▀▀▀▀▀▀LOCK -▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+ INPUT - Tab or F2: screen menu   Shift+Tab: last panel   F3 log   F4 screen off

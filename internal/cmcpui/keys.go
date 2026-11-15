@@ -15,7 +15,8 @@ var rawKeys = map[string]string{
 	"\x1b[A": "up", "\x1b[B": "down", "\x1b[C": "right", "\x1b[D": "left",
 	"\x1bOA": "up", "\x1bOB": "down", "\x1bOC": "right", "\x1bOD": "left",
 	"\x1b[H": "home", "\x1b[F": "end", "\x1bOH": "home", "\x1bOF": "end", "\x1b[5~": "pgup", "\x1b[6~": "pgdn",
-	"\x1bOP": "f1", "\x1bOQ": "f2", "\x1bOR": "f3", "\x1bOS": "f4", "\x1b[12~": "f2", "\x1b[1;2Q": "f2",
+	"\x1bOP": "f1", "\x1bOQ": "f2", "\x1bOR": "f3", "\x1bOS": "f4", "\x1b[12~": "f2", "\x1b[13~": "f3", "\x1b[14~": "f4", "\x1b[15~": "f5", "\x1b[17~": "f6",
+	"\x1b[[B": "f2", "\x1b[[C": "f3", "\x1b[[D": "f4", "\x1b[[E": "f5", "\x1b[1;2Q": "f2",
 	// modified arrows are named so the model can swallow them: they are never bound (spec 6.12.3)
 	"\x1b[1;2A": "shift_up", "\x1b[1;2B": "shift_down", "\x1b[1;2C": "shift_right", "\x1b[1;2D": "shift_left",
 	"\x1b[1;3A": "alt_up", "\x1b[1;3B": "alt_down", "\x1b[1;3C": "alt_right", "\x1b[1;3D": "alt_left",

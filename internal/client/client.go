@@ -149,6 +149,7 @@ func New(cfg Config) (*Client, error) {
 	c.ui.Ed = in.Input()
 	in.EnableHookEvents("GMCP", "GMCP_LOGIN", "MSDP", "SQUAT_CONNECT", "SQUAT_DISCONNECT", "SQUAT_PAIR")
 	c.install()
+	c.cmcpKeyDefs(in)
 	if cfg.Restore != nil {
 		if err := c.restore(cfg.Restore); err != nil {
 			return nil, fmt.Errorf("restoring after /restart: %w", err)

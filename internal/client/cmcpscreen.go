@@ -11,9 +11,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/itsnotyoutoday/cmcp/focus"
 	"github.com/itsnotyoutoday/cmcp/textport"
 	"github.com/itsnotyoutoday/cmcp/theme"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -48,6 +50,7 @@ type cmcpScr struct {
 	shipTheme    string // the one theme of this ship (theme_mode ship), until the next ship hop
 	shipThemeGen int
 	told         bool            // the one-line CMCP notice was shown
+	lockNote     string          // "MENU x - locked: hint", shown until the next key
 	reenter      bool            // a screen switch from the menu keeps the keyboard focus on the new screen
 	auto         map[string]bool // group pickers that already got their first group selected
 }
@@ -263,7 +266,12 @@ func (c *Client) cmcpSyncSurface() {
 		st := cmcpui.NewState()
 		cs.states[id], cs.st = st, st
 	}
+	c.cmcpDropStale(cs, u.Ship.ID)
 	w, h := c.ui.W, c.ui.OutRows()
+	fullH := h
+	if h >= 10 {
+		h-- // the bottom row is gtf's own key-hint line, the same in every theme
+	}
 	now := c.cfg.Now()
 	env := pack.EnvFromUI(u, cs.st.UI)
 	budget := 4096
@@ -313,10 +321,10 @@ func (c *Client) cmcpSyncSurface() {
 		tags = append(tags, "read-only")
 	}
 	var nav []cmcpui.NavEntry
-	for _, o := range u.Screens {
+	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -329,6 +337,8 @@ func (c *Client) cmcpSyncSurface() {
 		ce.Assets = &cmAssets{c: c, s: s, p: p, env: env, th: th}
 		f = cmcpui.Draw(tree, w, h, ce, cs.st)
 	}
+	c.cmcpOrderPanels(cs, f, plan)
+	f.Grid = c.cmcpWithHint(f, cs, notice, w, fullH)
 	cs.frame = f
 	c.ui.Surf = &ui.Surface{Grid: f.Grid, Text: layout.Rect{X: f.Text.X, Y: f.Text.Y, W: f.Text.W, H: f.Text.H}}
 }
@@ -346,6 +356,24 @@ func (c *Client) cmcpNotice(s *Session, text string) {
 // order, automatic mnemonics) and gives it to the screen's shared focus model.
 func (c *Client) cmcpPlan(cs *cmcpScr, tree *pack.BoundNode) cmcpui.Plan {
 	panels, mn, _ := tree.FocusPlan(nil)
+	if cs.st.Model != nil && len(cs.st.Order) > 0 {
+		// keep the order of the last draw and only the panels that were actually drawn (a clipped
+		// widget must not be a focus stop the player cannot see); the screen menu is a panel of
+		// its own and stays
+		byID := map[string]focus.Panel{}
+		for _, mp := range panels {
+			byID[mp.ID] = mp
+		}
+		var kept []focus.Panel
+		for _, id := range cs.st.Order {
+			if id == "~nav" {
+				kept = append(kept, focus.Panel{ID: id, Kind: focus.List})
+			} else if mp, ok := byID[id]; ok {
+				kept = append(kept, mp)
+			}
+		}
+		panels = kept
+	}
 	p := cmcpui.Plan{Panels: panels, Mnemonics: mn}
 	cs.st.SetupModel(p, cmcpui.FocusKeyName(c.in.Var("cmcp_key_focus")))
 	return p
@@ -366,6 +394,7 @@ func (c *Client) cmcpKeys(raw string) bool {
 	if !ok {
 		return false
 	}
+	s.cmScr().lockNote = "" // the locked-screen note lasts until the next key
 	// two screen-wide keys that work from the input line too: the log view (F3) and the screen off (F4)
 	if c.cmcpScreensOn() {
 		switch name {
@@ -382,6 +411,24 @@ func (c *Client) cmcpKeys(raw string) bool {
 	}
 	cs := s.cs
 	empty := c.in.Input().Text() == ""
+	// the consent question has its own keys, which do not collide with typing or the screen keys
+	if name == "f5" || name == "f6" {
+		if c.packDecide(s, "", name == "f5") {
+			c.cmcpNotice(s, "")
+			return true
+		}
+		return false
+	}
+	if name == "shift_tab" && !cs.st.Active {
+		if !empty || len(cs.frame.Items) == 0 {
+			return empty // never leak a recognised navigation key to the undefined-key error
+		}
+		// Shift+Tab enters the screen on the LAST panel: Tab to enter, Shift+Tab to wrap back to the end
+		cmcpui.Dispatch(cs.frame, cs.st, cmcpui.FocusKeyName(c.in.Var("cmcp_key_focus")), true, c.cfg.Now())
+		cmcpui.Dispatch(cs.frame, cs.st, "shift_tab", true, c.cfg.Now())
+		c.scheduleRender()
+		return true
+	}
 	if cs.st.Active && !empty {
 		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now()) // the player is typing
 		c.scheduleRender()
@@ -402,12 +449,25 @@ func (c *Client) cmcpKeys(raw string) bool {
 			}
 		}
 	}
-	if cs.st.Active && (raw == "y" || raw == "n") && c.packDecide(s, "", raw == "y") {
-		c.cmcpNotice(s, "")
-		return true
-	}
 	r := cmcpui.Dispatch(cs.frame, cs.st, name, empty, c.cfg.Now())
 	for _, ev := range r.Events {
+		if ev.Nav != "" {
+			err := s.cm.ShowScreen(c.cfg.Now(), ev.Nav)
+			var se *session.ScreenError
+			if errors.As(err, &se) {
+				title := ev.Nav
+				for _, o := range s.cm.UI().Screens {
+					if o.ID == ev.Nav {
+						title = o.Title
+					}
+				}
+				cs.lockNote = fmt.Sprintf("MENU %s - locked: %s to use", title, se.HintCmd)
+				c.cmcpPump(s)
+				continue
+			}
+			c.cmcpNavErr(s, err)
+			continue
+		}
 		c.cmcpPerform(s, ev)
 	}
 	if r.Hold != "" {
@@ -746,11 +806,11 @@ func (c *Client) cmcpNavStep(s *Session, d int) {
 
 // cmcpNavTo shows the n-th (0-based) screen of the menu; it reports whether there is one.
 func (c *Client) cmcpNavTo(s *Session, n int) bool {
-	u := s.cm.UI()
-	if n < 0 || n >= len(u.Screens) {
+	menu := session.MenuScreens(s.cm.UI().Screens)
+	if n < 0 || n >= len(menu) {
 		return false
 	}
-	c.cmcpNavErr(s, s.cm.ShowScreen(c.cfg.Now(), u.Screens[n].ID))
+	c.cmcpNavErr(s, s.cm.ShowScreen(c.cfg.Now(), menu[n].ID))
 	return true
 }
 
@@ -768,4 +828,116 @@ func (c *Client) cmcpNavErr(s *Session, err error) {
 	}
 	c.cmcpPump(s)
 	c.scheduleRender()
+}
+
+// cmcpConsentLine is the question of a pending pack or theme consent, on its own prominent line.
+func (c *Client) cmcpConsentLine(cs *cmcpScr) string {
+	for _, j := range cs.jobs {
+		if j.state == "asking" {
+			kind := "LAYOUT PACK"
+			if j.ref.Kind == "theme" {
+				kind = "THEME PACK"
+			}
+			return fmt.Sprintf("%s %s %s: F5 = ALLOW   F6 = REFUSE", kind, strings.ToUpper(j.ref.ID), j.ref.Version)
+		}
+	}
+	return ""
+}
+
+// cmcpOrderPanels puts the focus model's panels in reading order: the screen menu first, then
+// everything else top to bottom, left to right, by where it was drawn.
+func (c *Client) cmcpOrderPanels(cs *cmcpScr, f *cmcpui.Frame, plan cmcpui.Plan) {
+	if cs.st.Model == nil {
+		return
+	}
+	pos := map[string]cmcpui.Rect{}
+	for _, it := range f.Items {
+		pos[it.Node.Node.Path] = it.Rect
+	}
+	var ps []focus.Panel
+	if _, ok := pos["~nav"]; ok {
+		ps = append(ps, focus.Panel{ID: "~nav", Kind: focus.List})
+	}
+	var rest []focus.Panel
+	for _, p := range plan.Panels {
+		if p.ID != "~nav" {
+			rest = append(rest, p)
+		}
+	}
+	sort.SliceStable(rest, func(i, j int) bool {
+		a, b := pos[rest[i].ID], pos[rest[j].ID]
+		if a.Y != b.Y {
+			return a.Y < b.Y
+		}
+		return a.X < b.X
+	})
+	for _, p := range rest {
+		if _, ok := pos[p.ID]; ok {
+			ps = append(ps, p)
+		}
+	}
+	cs.st.Order = nil
+	for _, p := range ps {
+		cs.st.Order = append(cs.st.Order, p.ID)
+	}
+	cs.st.Model.SetPanels(ps, plan.Mnemonics)
+}
+
+// cmcpHintText is the key-hint line of a CMCP screen: gtf's own, so it shows in every theme. Not in
+// focus: the keys that start it; in focus: the area and the keys valid there; a pending pack consent
+// or a notice takes the line while it lasts.
+func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr, notice string) (string, string) {
+	switch {
+	case c.cmcpConsentLine(cs) != "":
+		return c.cmcpConsentLine(cs), "consent"
+	case cs.lockNote != "":
+		return cs.lockNote, "notice"
+	case notice != "":
+		return notice, "notice"
+	case cs.st.Active:
+		return f.Header(), "focus"
+	}
+	return f.Header() + "   F3 log   F4 screen off   /cmcp keys", "idle"
+}
+
+// cmcpWithHint returns the frame's grid with one more row at the bottom holding the hint line.
+func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, notice string, w, h int) *layout.Grid {
+	src := f.Grid
+	if src.H >= h {
+		return src
+	}
+	g := layout.NewGrid(w, h)
+	copy(g.Cells, src.Cells)
+	txt, kind := c.cmcpHintText(f, cs, notice)
+	a := layout.Attr{FG: layout.Color{R: 200, G: 200, B: 205, Kind: layout.RGB}, BG: layout.Color{R: 30, G: 30, B: 38, Kind: layout.RGB}}
+	switch kind {
+	case "focus":
+		a = layout.Attr{FG: layout.Color{R: 0, G: 0, B: 0, Kind: layout.RGB}, BG: layout.Color{R: 255, G: 255, B: 255, Kind: layout.RGB}, Bold: true}
+	case "consent":
+		a = layout.Attr{FG: layout.Color{R: 0, G: 0, B: 0, Kind: layout.RGB}, BG: layout.Color{R: 255, G: 200, B: 40, Kind: layout.RGB}, Bold: true}
+	case "notice":
+		a.Bold = true
+	}
+	y := h - 1
+	for x := 0; x < w; x++ {
+		g.Set(x, y, layout.Cell{R: ' ', A: a})
+	}
+	for i, r := range []rune(" " + txt) {
+		if i >= w {
+			break
+		}
+		g.Set(i, y, layout.Cell{R: r, A: a})
+	}
+	return g
+}
+
+// cmcpDropStale forgets pack and theme questions that belong to another ship: the consent question
+// is only ever about the current ship's packs (a question left from the previous ship must not
+// survive the hop). A dropped one is asked again if the new ship announces the pack.
+func (c *Client) cmcpDropStale(cs *cmcpScr, ship string) {
+	for k, j := range cs.jobs {
+		if j.state == "asking" && j.ship != "" && ship != "" && j.ship != ship {
+			delete(cs.jobs, k)
+		}
+	}
 }

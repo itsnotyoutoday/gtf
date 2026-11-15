@@ -5,6 +5,7 @@ package client
 
 import (
 	"github.com/itsnotyoutoday/cmcp/textport"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
-const cmcpUsage = `usage: /cmcp [status | packs | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]
+const cmcpUsage = `usage: /cmcp [status | keys | screens | packs | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]
   status        the CMCP state of the foreground world: handshake, ship, console, screen, subscriptions
   packs         layout packs known for this world and their consent state
   screen [id]   show the console screen (id: std.operations, <pack>/<screen>); no id: say which is shown
@@ -107,6 +108,20 @@ func cmcpThemeNames() []string {
 func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest string) bool {
 	echo := in.Host.Echo
 	switch sub {
+	case "screens":
+		u := s.cm.UI()
+		echo("% screens (the menu shows the ones marked *; the others need another console):")
+		for _, o := range u.Screens {
+			mark, tail := "*", ""
+			if !o.Available {
+				mark, tail = " ", "   "+o.HintCmd+" to use"
+			}
+			echo(fmt.Sprintf("%%  %s %-22s %s%s", mark, o.ID, o.Title, tail))
+		}
+	case "keys":
+		for _, l := range cmcpKeysHelp {
+			echo(l)
+		}
 	case "themes":
 		for _, l := range c.cmcpThemesList(s) {
 			echo(l)
@@ -201,4 +216,19 @@ func (c *Client) cmcpSend(in *gtfparser.Interp, s *Session, rest string) bool {
 	}
 	c.cmcpPump(s)
 	return true
+}
+
+// cmcpKeysHelp is the one key scheme of the screen (docs/CMCP.md "Keyboard").
+var cmcpKeysHelp = []string{
+	"CMCP screen keys. The areas, in reading order: SCREEN MENU, then the screen's panels; the input line is outside.",
+	"  Tab (empty input line) / F2     enter: Tab lands on the screen menu, Shift+Tab on the last panel",
+	"  Tab / Shift+Tab                 next / previous area or panel (wraps)",
+	"  Esc                             step out to the input line (from a panel or from the menu)",
+	"  In the MENU:  Up/Down           move the highlight (arrow + reverse video) through all screens; dim = not available",
+	"                Home/End/PgUp/PgDn jump",
+	"                Enter             open the highlighted screen and move into its first panel (an unavailable one says 'man <console>')",
+	"  In a PANEL:   Up/Down           move in lists, tables and tab rows (they never leave the panel: use Tab)",
+	"                Left/Right        move between tabs/buttons in a row, adjust sliders",
+	"                Enter             activate;   a button's letter presses it",
+	"  F3 log view, F4 screen off.   Quick aliases, from anywhere in focus mode: [ previous screen, ] next screen, 1-9 the nth screen.",
 }
