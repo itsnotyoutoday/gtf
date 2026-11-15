@@ -129,6 +129,7 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_alert_pulse` | theme | red alert pulses (the alert roles go dim for 500 ms of every second); `on`, `off`, or `theme` = the theme's `alert_pulse` field; steady when `%cmcp_motion off` |
 | `%cmcp_alert_ambient` | theme | the ship's alert edge shows on every screen aboard, rooms and away scenes included (spec 6.17.1): `on`, `off`, or the theme's `alert_ambient`; a `Cobra.Context` with `ambient:false` opts out. Only the edge is drawn (the `frame+hue` tint is not) |
 | `%cmcp_hit_shake` | theme | a hit on your own ship jitters the frame and widgets one cell along the hit axis in 100 ms steps (spec 6.18); the text pane, notice row and hint row never move; steady with `%cmcp_motion off` |
+| `%cmcp_text_width` | auto | the width of the game output in the side layout: `auto` (80 columns, the spec's cap) or a number. `/cmcp width <cols\|auto\|+N\|-N>` and Alt+, / Alt+. (`%cmcp_key_narrow`, `%cmcp_key_widen`) change it by 4 columns and remember it in `~/.gtf/cmcp/prefs.json`. Limits: 40 columns, and what leaves the widget column 40; the notice line says which limit was hit. TinyFugue's `/wrap` is untouched |
 | `%cmcp_origins` | | extra allowed pack origins (`https://host[:port]`, space separated); the game host is always allowed |
 | `%cmcp_debug` | | non-empty: show protocol diagnostics as `% cmcp:` lines |
 

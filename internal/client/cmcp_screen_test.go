@@ -1132,3 +1132,57 @@ func TestCmcpCloseKeyRefusesPackQuestionFirst(t *testing.T) {
 	f.keys("\x1b[17~") // F6: the question wins
 	cmEventually(t, "question refused", func() bool { f.render(); return !strings.Contains(f.text(), "F5 = ALLOW") })
 }
+
+// The output width: auto is the 80-column cap; `/cmcp width` and the narrow/widen keys set it, clamped
+// to 40 columns and to what leaves the widget column its minimum; the notice line says why at a limit;
+// it is remembered across sessions.
+func TestCmcpTextWidth(t *testing.T) {
+	home := t.TempDir()
+	width := func(f *screenFixture) int { r, _, _ := f.pane(); return r.W }
+	for _, w := range []int{140, 160, 200, 240} {
+		f := newScreenFixtureSetup(t, w, 50, home, nil, "/set cmcp_motion=off")
+		f.console("std.operations", "", nil)
+		f.c.Do(func(*gtfparser.Interp) { f.c.in.SetVar("cmcp_text_width", "auto") })
+		f.render()
+		if got := width(f); got > 80 {
+			t.Fatalf("%d columns, auto: %d wide", w, got)
+		}
+		exec(f.c, "/cmcp width 60")
+		f.render()
+		if got := width(f); got != 60 {
+			t.Fatalf("%d columns: /cmcp width 60 gave %d", w, got)
+		}
+		f.keys("\x1b.") // Alt+.: wider by 4
+		if got := width(f); got != 64 {
+			t.Fatalf("%d columns: widen gave %d", w, got)
+		}
+		f.keys("\x1b,", "\x1b,")
+		if got := width(f); got != 56 {
+			t.Fatalf("%d columns: narrow twice gave %d", w, got)
+		}
+		exec(f.c, "/cmcp width 10")
+		f.render()
+		if got := width(f); got != 40 {
+			t.Fatalf("%d columns: below the minimum gave %d", w, got)
+		}
+		f.contain(t, "narrowest")
+		exec(f.c, "/cmcp width 500")
+		f.render()
+		if got := width(f); got < 80 || got > w-40-3-12 { // what is left of the area less the frame
+			t.Fatalf("%d columns: above the maximum gave %d", w, got)
+		}
+		f.contain(t, "widest")
+		f.dump(fmt.Sprintf("width-%d", w))
+	}
+	// remembered: a fresh client with the same home starts at the width the last one left
+	f := newScreenFixtureSetup(t, 200, 50, home, nil, "/set cmcp_motion=off")
+	f.console("std.operations", "", nil)
+	if got := width(f); got < 80 {
+		t.Fatalf("the width was not remembered: %d", got)
+	}
+	exec(f.c, "/cmcp width auto")
+	f.render()
+	if got := width(f); got > 80 {
+		t.Fatalf("auto after a setting: %d", got)
+	}
+}

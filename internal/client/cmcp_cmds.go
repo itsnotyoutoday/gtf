@@ -13,7 +13,7 @@ import (
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
-const cmcpUsage = `usage: /cmcp [status | keys | screens | close | packs | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]
+const cmcpUsage = `usage: /cmcp [status | keys | screens | close | width <cols|auto|+N|-N> | packs | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]
   status        the CMCP state of the foreground world: handshake, ship, console, screen, subscriptions
   packs         layout packs known for this world and their consent state
   screen [id]   show the console screen (id: std.operations, <pack>/<screen>); no id: say which is shown
@@ -117,6 +117,10 @@ func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest stri
 				mark, tail = " ", "   "+o.HintCmd+" to use"
 			}
 			echo(fmt.Sprintf("%%  %s %-22s %s%s", mark, o.ID, o.Title, tail))
+		}
+	case "width":
+		if s != nil && s.cm != nil {
+			c.cmcpSetWidth(s, rest)
 		}
 	case "close":
 		c.cmcpClose(s)
@@ -234,5 +238,6 @@ var cmcpKeysHelp = []string{
 	"                Enter             activate;   a button's letter presses it",
 	"  F5 or Alt+A                      alert control: choose green/yellow/red (Left/Right), Enter sends, Esc cancels (F5/F6 answer a pack question while one is pending)",
 	"  F6 or /cmcp close                close the screen you are on: the game decides (a console is unmanned); gtf waits for its answer. While a pack question is pending F6 refuses it instead",
+	"  Alt+, / Alt+.  or /cmcp width    narrow / widen the game output by 4 columns (side layout), /cmcp width <cols|auto>; limits: 40 columns, and what leaves the widgets 40",
 	"  F3 log view, F4 screen off.   Quick aliases, from anywhere in focus mode: [ previous screen, ] next screen, 1-9 the nth screen.",
 }

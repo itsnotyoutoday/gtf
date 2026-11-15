@@ -4,6 +4,7 @@
 package cmcpui
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/itsnotyoutoday/cmcp/focus"
@@ -52,6 +53,8 @@ type Env struct {
 	Alert string
 	// AlertRecolour is full (the whole palette switches), edge (only the frame edge, the alert segment and
 	// the title accent) or off; empty is full.
+	// TextCols is the player's width for the game output in the side layout (0 = auto, the 80-column cap).
+	TextCols      int
 	AlertRecolour string
 	// PulseDim and PulseDepth: the alert is in the dim half of its pulse (0 depth = steady).
 	PulseDim   bool
@@ -166,7 +169,11 @@ type Frame struct {
 	// FocusLabel is the menu's highlighted screen (the header of the menu area names it).
 	FocusLabel string
 	Compact    bool
-	Items      []Item
+	// Side says the side layout is in use (the text width setting applies); Area is the width the
+	// layout had to share between the output and the widget column.
+	Side  bool
+	Area  int
+	Items []Item
 	// Boxes are the rectangles of every widget drawn (for the geometry tests: none overlaps another,
 	// the text pane or the frame).
 	Boxes []Rect
@@ -250,4 +257,27 @@ func navWindow(n []NavEntry, capacity int) []NavEntry {
 	}
 	from := max(0, min(act-per/2, len(n)-per))
 	return n[from : from+per]
+}
+
+// Limits of the output width (spec 6.13.1 1b): at least MinTextCols, and never so wide that the widget
+// column falls below MinWidgetCols.
+const (
+	MinTextCols   = 40
+	MinWidgetCols = 40
+)
+
+// ClampTextWidth keeps a wanted output width within the limits for an area innerW columns wide (the
+// width does not count the pane's border). The note says why it moved, "" when it did not.
+func ClampTextWidth(innerW, want int) (int, string) {
+	maxCols := innerW - MinWidgetCols - 3
+	if maxCols < MinTextCols {
+		maxCols = MinTextCols
+	}
+	switch {
+	case want > maxCols:
+		return maxCols, fmt.Sprintf("Text width is at its widest here (%d columns): the widgets need %d", maxCols, MinWidgetCols)
+	case want < MinTextCols:
+		return MinTextCols, fmt.Sprintf("Text width is at its narrowest (%d columns)", MinTextCols)
+	}
+	return want, ""
 }

@@ -126,11 +126,17 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		}
 	case mode == "side" && inner.W >= 80 && inner.H >= 14:
 		side := max(40, min(56, inner.W*4/10))
-		if cap := 80 + 2; inner.W-side-1 > cap {
+		if env.TextCols > 0 {
+			// the player's width for the output (%cmcp_text_width / /cmcp width), kept within what leaves
+			// the widget column its minimum
+			eff, _ := ClampTextWidth(inner.W, env.TextCols)
+			side = inner.W - (eff + 2) - 1
+		} else if cap := 80 + 2; inner.W-side-1 > cap {
 			// the output is formatted for about 80 columns (spec 6.13.1 1b, port.max_cols): the
 			// text pane stops there and the widget column takes the rest of the width
 			side = inner.W - cap - 1
 		}
+		f.Side, f.Area = true, inner.W
 		if rest := stripText(root); rest != nil {
 			rest = pictureFirst(rest)
 			a.orderPictures(rest, env.Theme, env.ScreenID)

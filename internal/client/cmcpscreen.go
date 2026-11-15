@@ -346,7 +346,7 @@ func (c *Client) cmcpSyncSurface() {
 	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpRoomVars(u, c.cmcpVars(u, id, title), title), Builtin: p != nil && p.Builtin, Title: title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpRoomVars(u, c.cmcpVars(u, id, title), title), Builtin: p != nil && p.Builtin, Title: title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, TextCols: c.cmcpTextWidth(), AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -454,6 +454,16 @@ func (c *Client) cmcpKeys(raw string) bool {
 	s.cmScr().lockNote = "" // the locked-screen note lasts until the next key
 	if c.cmcpScreensOn() && c.cmcpAlertKey(s, name, raw) {
 		return true
+	}
+	if c.cmcpScreensOn() && s.cs != nil {
+		switch name {
+		case cmcpui.FocusKeyName(orStr(c.in.Var("cmcp_key_narrow"), "^[,")):
+			c.cmcpSetWidth(s, fmt.Sprintf("%d", -widthStep))
+			return true
+		case cmcpui.FocusKeyName(orStr(c.in.Var("cmcp_key_widen"), "^[.")):
+			c.cmcpSetWidth(s, fmt.Sprintf("+%d", widthStep))
+			return true
+		}
 	}
 	if c.cmcpScreensOn() && name == cmcpui.FocusKeyName(orStr(c.in.Var("cmcp_key_close"), "F6")) && c.cmcpConsentLine(s.cmScr()) == "" {
 		c.cmcpClose(s) // while a pack question is pending F6 is its REFUSE key instead
