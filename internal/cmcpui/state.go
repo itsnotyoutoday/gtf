@@ -53,6 +53,9 @@ type Env struct {
 	// AlertRecolour is full (the whole palette switches), edge (only the frame edge, the alert segment and
 	// the title accent) or off; empty is full.
 	AlertRecolour string
+	// PulseDim and PulseDepth: the alert is in the dim half of its pulse (0 depth = steady).
+	PulseDim   bool
+	PulseDepth float64
 	// Effects are recent Cobra.Event happenings for the viewscreen.
 	Effects []Effect
 	// Mnemonics maps Node.Path to the mnemonic letter of a button or toggle (focus.AssignMnemonics

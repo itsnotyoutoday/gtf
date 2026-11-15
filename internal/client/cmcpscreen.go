@@ -21,6 +21,7 @@ import (
 
 	"github.com/itsnotyoutoday/cmcp/notice"
 	"github.com/itsnotyoutoday/cmcp/pack"
+	"github.com/itsnotyoutoday/cmcp/pulse"
 	"github.com/itsnotyoutoday/cmcp/raster"
 	"github.com/itsnotyoutoday/cmcp/session"
 	"github.com/itsnotyoutoday/gtf/internal/cmcpui"
@@ -48,9 +49,12 @@ type cmcpScr struct {
 	themeAsked   map[string]bool
 	shipTheme    string // the one theme of this ship (theme_mode ship), until the next ship hop
 	shipThemeGen int
-	told         bool            // the one-line CMCP notice was shown
-	lockNote     string          // "MENU x - locked: hint", shown until the next key
-	reenter      bool            // a screen switch from the menu keeps the keyboard focus on the new screen
+	told         bool   // the one-line CMCP notice was shown
+	lockNote     string // "MENU x - locked: hint", shown until the next key
+	reenter      bool   // a screen switch from the menu keeps the keyboard focus on the new screen
+	alertLevel   string // the alert level the pulse counts from
+	alertSince   time.Time
+	pulseAt      time.Time       // the flip a redraw is already scheduled for
 	reg          *theme.Registry // downloaded theme versions, the override rule and the dev force flag (spec 19.9)
 	auto         map[string]bool // group pickers that already got their first group selected
 }
@@ -301,6 +305,7 @@ func (c *Client) cmcpSyncSurface() {
 			hdr += " AI"
 		}
 	}
+	pulse := c.cmcpPulse(s, cs, th, u.Alert, now)
 	noteText, noteKind := "", cmcpui.NoticeInfo
 	if n := s.cm.Notice(now); n != nil {
 		noteText = n.Line()
@@ -326,7 +331,7 @@ func (c *Client) cmcpSyncSurface() {
 	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpAlertRecolour(th), Header: hdr, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpAlertRecolour(th), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -1039,4 +1044,33 @@ func (c *Client) cmcpDropStale(cs *cmcpScr, ship string) {
 			delete(cs.jobs, k)
 		}
 	}
+}
+
+// cmcpPulse is the red-alert pulse now (spec 19.3), from the core's pulse package: the phase counts
+// from when the alert level started and a redraw is scheduled only for the next flip, so nothing
+// repaints between flips. Steady when the alert is green, recolouring or motion is off, or the pulse is
+// switched off (%cmcp_alert_pulse theme|on|off; a theme's alert_pulse field decides under `theme`).
+func (c *Client) cmcpPulse(s *Session, cs *cmcpScr, th cmcpui.Theme, alert string, now time.Time) cmcpui.PulseSpec {
+	lvl := strings.ToLower(alert)
+	if lvl != cs.alertLevel {
+		cs.alertLevel, cs.alertSince, cs.pulseAt = lvl, now, time.Time{}
+	}
+	tuning := pulse.Default()
+	if th.Pack != nil {
+		tuning = th.Pack.AlertPulse
+	}
+	reduced := strings.TrimSpace(c.in.Var("cmcp_motion")) != "" && !onVar(c.in.Var("cmcp_motion"))
+	player := strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_alert_pulse")))
+	t := now.Sub(cs.alertSince)
+	st := pulse.Compute(lvl, float64(t/time.Millisecond), "cell", tuning, player, false, reduced, c.cmcpAlertRecolour(th))
+	if !st.Active {
+		return cmcpui.PulseSpec{}
+	}
+	half := time.Duration(st.PeriodMS) * time.Millisecond / 2
+	next := cs.alertSince.Add((t/half + 1) * half)
+	if !next.Equal(cs.pulseAt) {
+		cs.pulseAt = next
+		time.AfterFunc(next.Sub(now)+5*time.Millisecond, c.scheduleRender)
+	}
+	return cmcpui.PulseSpec{Dim: st.Phase == "dim", Depth: 1 - st.Level}
 }

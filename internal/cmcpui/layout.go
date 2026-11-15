@@ -51,11 +51,17 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	case "edge":
 		// only the frame edge, the alert segment and the title accent take the alert's colours
 		alt := env.Theme.withAlert(env.Alert)
+		if env.PulseDim && env.PulseDepth > 0 {
+			alt = alt.pulsed(env.PulseDepth)
+		}
 		if alt.Set != env.Theme.Set {
 			env.Theme.edge = &alt
 		}
 	default:
 		env.Theme = env.Theme.withAlert(env.Alert)
+		if env.PulseDim && env.PulseDepth > 0 {
+			env.Theme = env.Theme.pulsed(env.PulseDepth)
+		}
 	}
 	bl := env.Theme.blank()
 	for i := range g.Cells {

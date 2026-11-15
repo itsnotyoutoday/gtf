@@ -910,3 +910,52 @@ func TestCmcpEmpireSkinsDiffer(t *testing.T) {
 		}
 	}
 }
+
+// The red-alert pulse: the alert roles are bright for 500 ms and dim for 500 ms (1 s period); steady
+// with the pulse off or motion off; a redraw is not needed between flips.
+func TestCmcpAlertPulsePhases(t *testing.T) {
+	clock := fixedNow
+	nowFn = func() time.Time { return clock }
+	defer func() { nowFn = func() time.Time { return fixedNow } }()
+	// the total brightness of the red-ish cells of the top band
+	sample := func(f *screenFixture) (c layout.Color) {
+		var sum int
+		f.c.Do(func(*gtfparser.Interp) {
+			g := f.c.ui.Surf.Grid
+			for i := 0; i < 8*g.W; i++ {
+				x := g.Cells[i].A.BG
+				if x.Kind == layout.RGB && int(x.R) >= int(x.G)+40 {
+					sum += int(x.R) + int(x.G) + int(x.B)
+				}
+			}
+		})
+		return layout.Color{Kind: layout.RGB, R: uint8(sum / 4096), G: uint8(sum / 16), B: uint8(sum)}
+	}
+	run := func(setup ...string) (on, dim layout.Color, f *screenFixture) {
+		clock = fixedNow
+		f = newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, setup...)
+		f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
+		f.console("std.sensors", "science", nil)
+		f.render()
+		on = sample(f)
+		f.dump("pulse-on")
+		clock = clock.Add(600 * time.Millisecond)
+		f.render()
+		dim = sample(f)
+		f.dump("pulse-dim")
+		return
+	}
+	on, dim, _ := run("/set cmcp_alert_recolour=full")
+	if on == dim || int(dim.R) >= int(on.R) {
+		t.Fatalf("the dim phase should be darker: on %+v dim %+v", on, dim)
+	}
+	on, dim, f := run("/set cmcp_alert_recolour=full", "/set cmcp_alert_pulse=off")
+	if on != dim {
+		t.Fatalf("pulse off must be steady: %+v %+v", on, dim)
+	}
+	f.contain(t, "RED ALERT")
+	on, dim, _ = run("/set cmcp_alert_recolour=full", "/set cmcp_motion=off")
+	if on != dim {
+		t.Fatalf("reduced motion must be steady: %+v %+v", on, dim)
+	}
+}
