@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/itsnotyoutoday/cmcp/session"
 	"github.com/itsnotyoutoday/gtf/internal/client/data"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 	gnet "github.com/itsnotyoutoday/gtf/internal/net"
@@ -60,8 +61,9 @@ type Session struct {
 	restartEnd string
 	// resizeAfterRestore: the window changed size while the old and the new process swapped
 	resizeAfterRestore bool
-	squatID            string // this connection's id in the squatter ("" when it is off)
-	endReason          string // why the connection ended (a squatter end reason), for the squatter
+	cm                 *session.Client // the CMCP session of this connection (cmcp.go); nil until GMCP is on
+	squatID            string          // this connection's id in the squatter ("" when it is off)
+	endReason          string          // why the connection ended (a squatter end reason), for the squatter
 	endDetail          string
 }
 
@@ -309,6 +311,9 @@ func (c *Client) onNet(s *Session, ev gnet.Event) {
 	case gnet.Prompt:
 		s.promptEnd()
 	case gnet.OptionChange:
+		if e.Opt == telnet.OptGMCP && e.Side == telnet.Them {
+			c.cmcpOption(s, e.On)
+		}
 		if e.Opt == telnet.OptEcho && e.Side == telnet.Them {
 			// the server will echo: do not echo locally (password entry)
 			c.in.SetLocalEcho(s.World.Name, !e.On)

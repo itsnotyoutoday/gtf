@@ -22,7 +22,7 @@ type (
 func (c *Client) install() {
 	in := c.in
 	for n, f := range map[string]cmdf{"panel": c.cmdPanel, "layout": c.cmdLayout, "canvas": c.cmdCanvas, "sprite": c.cmdSprite, "update": c.cmdUpdate, "version": c.cmdVersion, "restart": c.cmdRestart,
-		"squatter": c.cmdSquatter, "pair": c.cmdPair} {
+		"cmcp": c.cmdCmcp, "squatter": c.cmdSquatter, "pair": c.cmdPair} {
 		in.RegisterCommand(n, f)
 	}
 	funcs := map[string]fnf{

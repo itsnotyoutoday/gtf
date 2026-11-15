@@ -39,8 +39,13 @@ func (h *H) OnNegotiate(s *telnet.Session, side telnet.Side, on bool) {
 		return
 	}
 	e := s.Env().Snapshot()
+	sup := h.Supports
+	if e.Extra["cmcp"] == "1" {
+		// CMCP (the CobraMUSH client protocol): the gate of its spec 1.5
+		sup = append(append([]string(nil), sup...), "Cobra 1")
+	}
 	h.Send(s, "Core.Hello", map[string]any{"client": e.ClientName, "version": e.ClientVer})
-	h.Send(s, "Core.Supports.Set", h.Supports)
+	h.Send(s, "Core.Supports.Set", sup)
 }
 
 // Split separates "Package.Name json" into its parts.

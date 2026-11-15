@@ -174,6 +174,7 @@ func layoutFloat(v any) (float64, bool) {
 func (c *Client) onMessage(s *Session, m gnet.Message) {
 	switch m.Proto {
 	case "gmcp":
+		c.cmcpReceive(s, m)
 		s.store.SetGMCP(m.Name, m.Value, m.Raw)
 		c.sq.gmcp(s, m.Name, m.Raw)
 		c.dataChanged(s, "gmcp:"+m.Name)

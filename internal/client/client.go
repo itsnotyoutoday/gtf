@@ -124,10 +124,10 @@ func New(cfg Config) (*Client, error) {
 	if cfg.HomeDir == "" {
 		cfg.HomeDir, _ = os.UserHomeDir()
 	}
-	if cfg.Dialer == nil {
-		cfg.Dialer = NetDialer{}
-	}
 	c := &Client{cfg: cfg, sessions: map[string]*Session{}, wscreens: map[string]*ui.Screen{}, done: make(chan struct{}), started: cfg.Now()}
+	if nd, ok := cfg.Dialer.(NetDialer); cfg.Dialer == nil || (ok && nd.Env == nil) {
+		c.cfg.Dialer = NetDialer{Env: c.cmcpEnv}
+	}
 	c.ui = ui.New(cfg.Term)
 	c.base = ui.NewScreen("", 20000)
 	c.ui.SetScreen(c.base)
@@ -336,7 +336,7 @@ func (c *Client) pollLoop() {
 		case <-c.done:
 			return
 		case <-t.C:
-			c.Post(func(*gtfparser.Interp) { c.pollPanels(); c.squatCheck() })
+			c.Post(func(*gtfparser.Interp) { c.pollPanels(); c.squatCheck(); c.cmcpClock() })
 		}
 	}
 }
