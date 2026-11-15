@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/frame"
-	"github.com/itsnotyoutoday/cmcp/msg"
-	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/cmcp/go/frame"
+	"github.com/itsnotyoutoday/cmcp/go/msg"
+	"github.com/itsnotyoutoday/cmcp/go/session"
 	gnet "github.com/itsnotyoutoday/gtf/internal/net"
 	"github.com/itsnotyoutoday/gtf/internal/ui/vt"
 	"github.com/itsnotyoutoday/gtfparser"

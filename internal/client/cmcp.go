@@ -3,7 +3,7 @@
 
 package client
 
-// cmcp.go attaches the shared CMCP core (github.com/itsnotyoutoday/cmcp/go) to gtf: one
+// cmcp.go attaches the shared CMCP core (github.com/itsnotyoutoday/cmcp/go/go) to gtf: one
 // session.Client per game connection, fed from the connection's GMCP messages, its output
 // written back through the gmcp handler. Protocol logic lives in the core; this file and
 // cmcpui.go only do platform glue (variables, commands, the terminal bell, drawing).
@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/frame"
-	"github.com/itsnotyoutoday/cmcp/msg"
-	"github.com/itsnotyoutoday/cmcp/pack"
-	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/cmcp/go/frame"
+	"github.com/itsnotyoutoday/cmcp/go/msg"
+	"github.com/itsnotyoutoday/cmcp/go/pack"
+	"github.com/itsnotyoutoday/cmcp/go/session"
 	"github.com/itsnotyoutoday/gtf/internal/net/telnet"
 	"github.com/itsnotyoutoday/gtfparser"
 )

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/itsnotyoutoday/cmcp/pack"
+	"github.com/itsnotyoutoday/cmcp/go/pack"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 )
 

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/pack"
+	"github.com/itsnotyoutoday/cmcp/go/pack"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite golden files")

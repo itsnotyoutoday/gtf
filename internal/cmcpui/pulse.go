@@ -6,7 +6,7 @@ package cmcpui
 import (
 	"fmt"
 
-	"github.com/itsnotyoutoday/cmcp/pulse"
+	"github.com/itsnotyoutoday/cmcp/go/pulse"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 )
 

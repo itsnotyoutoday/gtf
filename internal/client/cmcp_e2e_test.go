@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/cmcp/go/session"
 	"github.com/itsnotyoutoday/gtf/internal/ui/vt"
 	"github.com/itsnotyoutoday/gtfparser"
 )

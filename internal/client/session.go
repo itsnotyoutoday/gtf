@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/cmcp/go/session"
 	"github.com/itsnotyoutoday/gtf/internal/client/data"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 	gnet "github.com/itsnotyoutoday/gtf/internal/net"

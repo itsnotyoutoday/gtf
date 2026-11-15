@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/itsnotyoutoday/cmcp/raster"
+	"github.com/itsnotyoutoday/cmcp/go/raster"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 	"github.com/itsnotyoutoday/gtfparser"
 )

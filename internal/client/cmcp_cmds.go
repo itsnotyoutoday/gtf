@@ -5,11 +5,11 @@ package client
 
 import (
 	"fmt"
-	"github.com/itsnotyoutoday/cmcp/textport"
+	"github.com/itsnotyoutoday/cmcp/go/textport"
 	"strconv"
 	"strings"
 
-	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/cmcp/go/session"
 	"github.com/itsnotyoutoday/gtfparser"
 )
 

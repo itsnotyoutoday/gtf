@@ -18,12 +18,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/fetch"
-	"github.com/itsnotyoutoday/cmcp/frame"
-	"github.com/itsnotyoutoday/cmcp/msg"
-	"github.com/itsnotyoutoday/cmcp/pack"
-	"github.com/itsnotyoutoday/cmcp/session"
-	"github.com/itsnotyoutoday/cmcp/theme"
+	"github.com/itsnotyoutoday/cmcp/go/fetch"
+	"github.com/itsnotyoutoday/cmcp/go/frame"
+	"github.com/itsnotyoutoday/cmcp/go/msg"
+	"github.com/itsnotyoutoday/cmcp/go/pack"
+	"github.com/itsnotyoutoday/cmcp/go/session"
+	"github.com/itsnotyoutoday/cmcp/go/theme"
 	"github.com/itsnotyoutoday/gtf/internal/cmcpui"
 	"github.com/itsnotyoutoday/gtfparser"
 )

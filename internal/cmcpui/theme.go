@@ -9,7 +9,7 @@ package cmcpui
 import (
 	"strings"
 
-	"github.com/itsnotyoutoday/cmcp/theme"
+	"github.com/itsnotyoutoday/cmcp/go/theme"
 
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 )

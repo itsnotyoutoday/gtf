@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/itsnotyoutoday/cmcp/pack"
+	"github.com/itsnotyoutoday/cmcp/go/pack"
 )
 
 // The helm controls are what gtf shows where a pack asks for a joystick: gtf has no stick, the

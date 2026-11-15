@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itsnotyoutoday/cmcp/ambient"
-	"github.com/itsnotyoutoday/cmcp/session"
-	"github.com/itsnotyoutoday/cmcp/shake"
+	"github.com/itsnotyoutoday/cmcp/go/ambient"
+	"github.com/itsnotyoutoday/cmcp/go/session"
+	"github.com/itsnotyoutoday/cmcp/go/shake"
 	"github.com/itsnotyoutoday/gtf/internal/cmcpui"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 	"github.com/itsnotyoutoday/gtf/internal/ui"
