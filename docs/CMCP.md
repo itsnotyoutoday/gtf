@@ -125,6 +125,7 @@ AI, someone else took the console) nothing is offered.
 
 | `%cmcp_pack_consent` | always | `always`: packs and themes announced by the game's own origin are taken (hash, size caps, origin pinning and schema checks all stay; one quiet line says so); `ask`: the F5/F6 question once per pack; `never`: built-in screens only |
 | `%cmcp_alert_recolour` | theme | `full` (the whole palette goes red/yellow), `edge` (only the frame edge, the alert segment and the title accent), `off`; `theme` = the theme's own (edge for romulan and ferengi) |
+| `%cmcp_alert_pulse` | theme | red alert pulses (the alert roles go dim for 500 ms of every second); `on`, `off`, or `theme` = the theme's `alert_pulse` field; steady when `%cmcp_motion off` |
 | `%cmcp_origins` | | extra allowed pack origins (`https://host[:port]`, space separated); the game host is always allowed |
 | `%cmcp_debug` | | non-empty: show protocol diagnostics as `% cmcp:` lines |
 

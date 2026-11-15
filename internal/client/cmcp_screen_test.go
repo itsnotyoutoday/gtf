@@ -977,7 +977,9 @@ func TestCmcpAlertControl(t *testing.T) {
 	f.keys("\x1ba", "\x1b[C", kEnter) // Alt+A, red, confirm
 	// the test server's manned console is not allowed to run alert.set, so it answers with its own
 	// refusal; what matters here is that exactly the typed form was echoed and the command went out
-	cmEventually(t, "alert echoed and answered", func() bool { return strings.Contains(f.text(), "cmcp> alert red") && strings.Contains(f.text(), "alert.set") })
+	cmEventually(t, "alert echoed and answered", func() bool {
+		return strings.Contains(f.text(), "cmcp> alert red") && strings.Contains(f.text(), "alert.set")
+	})
 
 	g := newScreenFixture(t, 120, 40)
 	g.console("std.sensors", "science", nil)

@@ -33,4 +33,4 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀╰──────────────────────────────────────────────────────────────╯ ◖ ORDERS AND REQUESTS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀HULL 92%▀▀▀▀▀▀SHIELDS 95%▀▀▀▀▀▀CORE 60%▀▀▀▀▀▀LOCK -▀▀▀▀▀▀GREEN ALERT▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
- INPUT - Tab or F2: screen menu   Shift+Tab: last panel   F3 log   F4 screen off   /cmcp keys
+ INPUT - Tab or F2: screen menu   Shift+Tab: last panel   F3 log   F4 screen off   F5 alert   /cmcp keys
