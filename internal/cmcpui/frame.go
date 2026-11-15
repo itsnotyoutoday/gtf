@@ -302,17 +302,38 @@ func (d *drawer) textBorder(o Rect) {
 	a := layout.Attr{FG: layout.Lerp(col, rgbC(0, 0, 0), 0.25), BG: bg}
 	d.c.clip = Rect{W: d.f.Grid.W, H: d.f.Grid.H}
 	g := d.f.Grid
-	g.Set(o.X, o.Y, layout.Cell{R: '╭', A: a})
-	g.Set(o.X+o.W-1, o.Y, layout.Cell{R: '╮', A: a})
-	g.Set(o.X, o.Y+o.H-1, layout.Cell{R: '╰', A: a})
-	g.Set(o.X+o.W-1, o.Y+o.H-1, layout.Cell{R: '╯', A: a})
+	// the border's character set: the theme's own (cell.port.border: round, heavy, double, ornate ...)
+	tl, tr, bl, br, hz, vt := '╭', '╮', '╰', '╯', '─', '│'
+	pc := jmap(cellDoc(th), "port")
+	if r := th.edgeTheme().role(jstr(pc, "role")); jstr(pc, "role") != "" {
+		a.FG = layout.Lerp(r, rgbC(0, 0, 0), 0.1)
+		col = r
+	}
+	switch jstr(pc, "border") {
+	case "heavy":
+		tl, tr, bl, br, hz, vt = '┏', '┓', '┗', '┛', '━', '┃'
+	case "double":
+		tl, tr, bl, br, hz, vt = '╔', '╗', '╚', '╝', '═', '║'
+	case "ornate":
+		tl, tr, bl, br, hz, vt = '◆', '◆', '◆', '◆', '═', '║'
+	case "square":
+		tl, tr, bl, br, hz, vt = '┌', '┐', '└', '┘', '─', '│'
+	}
+	g.Set(o.X, o.Y, layout.Cell{R: tl, A: a})
+	g.Set(o.X+o.W-1, o.Y, layout.Cell{R: tr, A: a})
+	g.Set(o.X, o.Y+o.H-1, layout.Cell{R: bl, A: a})
+	g.Set(o.X+o.W-1, o.Y+o.H-1, layout.Cell{R: br, A: a})
 	for x := o.X + 1; x < o.X+o.W-1; x++ {
-		g.Set(x, o.Y, layout.Cell{R: '─', A: a})
-		g.Set(x, o.Y+o.H-1, layout.Cell{R: '─', A: a})
+		hr := hz
+		if jstr(pc, "border") == "ornate" && x%4 == o.X%4+2 {
+			hr = '◇'
+		}
+		g.Set(x, o.Y, layout.Cell{R: hr, A: a})
+		g.Set(x, o.Y+o.H-1, layout.Cell{R: hr, A: a})
 	}
 	for y := o.Y + 1; y < o.Y+o.H-1; y++ {
-		g.Set(o.X, y, layout.Cell{R: '│', A: a})
-		g.Set(o.X+o.W-1, y, layout.Cell{R: '│', A: a})
+		g.Set(o.X, y, layout.Cell{R: vt, A: a})
+		g.Set(o.X+o.W-1, y, layout.Cell{R: vt, A: a})
 	}
 	lab := " GAME OUTPUT "
 	if d.env.Expanded {

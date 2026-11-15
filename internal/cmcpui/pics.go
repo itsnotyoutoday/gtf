@@ -5,6 +5,7 @@ package cmcpui
 
 import (
 	"fmt"
+	"github.com/itsnotyoutoday/cmcp/cellglyph"
 	"math"
 	"strings"
 
@@ -82,8 +83,13 @@ func (d *drawer) radar(b *pack.BoundNode, r Rect, foc bool) {
 		cs = append(cs, layout.RadarContact{ID: "", Bearing: x.az, Range: rf * 100, Kind: kindOf(x.iff), Mark: mark,
 			Bold: x.cid == sel || (foc && ws.cur == i)})
 	}
-	blk := layout.RenderRadar(layout.RadarOpts{W: dw, H: dh, Sweep: math.Mod(float64(d.env.Now.UnixMilli())/6000, 1) * 360,
-		Contacts: cs, BG: th.blank().BG, Palette: d.radarPalette()})
+	var blk *layout.CellBlock
+	if kind := d.radarKind(); kind != "dish" && cellglyph.Lib().HasRadar(kind) {
+		blk = d.charRadar(kind, dw, dh, cs)
+	} else {
+		blk = layout.RenderRadar(layout.RadarOpts{W: dw, H: dh, Sweep: math.Mod(float64(d.env.Now.UnixMilli())/6000, 1) * 360,
+			Contacts: cs, BG: th.blank().BG, Palette: d.radarPalette()})
+	}
 	d.blit(blk, ox, r.Y)
 	if dw >= 20 && dmax > 0 {
 		// range labels on the rings, along the right-hand radius: what each ring is worth
@@ -392,4 +398,100 @@ func iffRGB(iff string) layout.Color {
 		return rgbC(90, 180, 255)
 	}
 	return rgbC(255, 210, 90)
+}
+
+// radarKind is the theme's radar style (cell.widgets.radar.kind: dish, hex, rings, wing).
+func (d *drawer) radarKind() string {
+	if k := jstr(jmap(jmap(cellDoc(d.env.Theme), "widgets"), "radar"), "kind"); k != "" {
+		return k
+	}
+	return "dish"
+}
+
+// charRadar draws a radar from the glyph library's character sets (cellglyph, spec 19.8): a hexagon
+// of ring characters for the klingon plot, concentric rings for the romulan one. Every colour is a
+// role, so an alert recolours it like everything else.
+func (d *drawer) charRadar(kind string, w, h int, cs []layout.RadarContact) *layout.CellBlock {
+	lib := cellglyph.Lib().Radars[kind]
+	th := d.env.Theme
+	role := jstr(jmap(jmap(cellDoc(th), "widgets"), "radar"), "role")
+	ring := th.role(orStrC(role, "x"))
+	dim := layout.Lerp(ring, th.blank().BG, 0.55)
+	blk := &layout.CellBlock{W: w, H: h, Cells: make([]layout.Cell, w*h)}
+	for i := range blk.Cells {
+		blk.Cells[i] = layout.Cell{R: ' ', A: layout.Attr{BG: th.blank().BG}}
+	}
+	put := func(x, y int, r rune, fg layout.Color, bold bool) {
+		if x >= 0 && x < w && y >= 0 && y < h {
+			blk.Cells[y*w+x] = layout.Cell{R: r, A: layout.Attr{FG: fg, BG: th.blank().BG, Bold: bold}}
+		}
+	}
+	cx, cy := float64(w-1)/2, float64(h-1)/2
+	rx, ry := cx, cy
+	chars := []rune(lib.RingChars)
+	axis := []rune(lib.Axis + "┼")[0]
+	for x := 0; x < w; x++ {
+		put(x, int(cy), '─', dim, false)
+	}
+	for y := 0; y < h; y++ {
+		put(int(cx), y, '│', dim, false)
+	}
+	put(int(cx), int(cy), axis, ring, false)
+	rings := max(lib.Rings, 2)
+	for k := 1; k <= rings; k++ {
+		f := float64(k) / float64(rings)
+		for deg := 0; deg < 360; deg += 3 {
+			a := float64(deg) * math.Pi / 180
+			var px, py float64
+			ch := chars[(k-1)%len(chars)]
+			if lib.Shape == "hexagon" {
+				// the hexagon's boundary at angle a: radius of a regular hexagon with a flat top
+				sec := math.Mod(a+math.Pi/6, math.Pi/3) - math.Pi/6
+				rr := math.Cos(math.Pi/6) / math.Cos(sec)
+				px, py = math.Cos(a)*rr*f*rx, math.Sin(a)*rr*f*ry
+				switch d := deg % 360; {
+				case d >= 330 || d < 30 || (d >= 150 && d < 210):
+					ch = '│'
+				case (d >= 30 && d < 90) || (d >= 210 && d < 270):
+					ch = '╲'
+				default:
+					ch = '╱'
+				}
+				if k < rings {
+					ch = '·'
+				}
+			} else {
+				px, py = math.Cos(a)*f*rx, math.Sin(a)*f*ry
+			}
+			col := dim
+			if k == rings {
+				col = ring
+			}
+			put(int(math.Round(cx+px)), int(math.Round(cy+py)), ch, col, k == rings)
+		}
+	}
+	for _, c := range cs {
+		a := (c.Bearing - 90) * math.Pi / 180
+		f := math.Min(c.Range/100, 1)
+		m := []rune(lib.Contacts[c.Kind])
+		mark := '●'
+		if len(m) > 0 {
+			mark = m[0]
+		}
+		put(int(math.Round(cx+math.Cos(a)*f*rx)), int(math.Round(cy+math.Sin(a)*f*ry)), mark, d.iffColor(c.Kind), true)
+	}
+	return blk
+}
+
+// iffColor tints a contact by its standing: friend, hostile, neutral, unknown.
+func (d *drawer) iffColor(k string) layout.Color {
+	switch k {
+	case "F":
+		return rgbC(110, 220, 130)
+	case "H":
+		return rgbC(255, 80, 70)
+	case "N":
+		return rgbC(240, 200, 90)
+	}
+	return rgbC(190, 190, 200)
 }

@@ -884,3 +884,29 @@ func TestCmcpTextWidthCap(t *testing.T) {
 		t.Fatalf("text pane is %d columns wide at 200 columns", r.W)
 	}
 }
+
+// Each empire's frame is its own (strips, corners, band, border, radar style), drawn from the theme
+// pack's cell rendition: dumps for the eye, and a check that no two empires draw the same top rows.
+func TestCmcpEmpireSkinsDiffer(t *testing.T) {
+	top := map[string]string{}
+	for _, th := range []string{"klingon", "romulan", "ferengi", "tos"} {
+		f := newScreenFixtureSetup(t, 160, 48, t.TempDir(), nil, "/set cmcp_layout=stacked")
+		f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = th })
+		f.dump("empire-" + th)
+		f.c.Do(func(*gtfparser.Interp) {
+			g := f.c.ui.Surf.Grid
+			var b strings.Builder
+			for y := 1; y < 5; y++ {
+				b.WriteString(g.Row(y))
+			}
+			top[th] = b.String()
+		})
+	}
+	for a := range top {
+		for b := range top {
+			if a < b && top[a] == top[b] {
+				t.Errorf("%s and %s draw the same frame", a, b)
+			}
+		}
+	}
+}

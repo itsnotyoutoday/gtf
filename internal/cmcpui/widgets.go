@@ -492,7 +492,7 @@ func (d *drawer) pill(b *pack.BoundNode, r Rect, txt string, foc, dis bool) {
 		body = " " + string([]rune(clean(txt))[:max(r.W-4, 0)]) + " "
 	}
 	x := r.X
-	d.c.put(x, r.Y, '◖', layout.Attr{FG: col, BG: bg})
+	d.c.put(x, r.Y, d.capL(), layout.Attr{FG: col, BG: bg})
 	m := rune(0)
 	if i := d.f.index(b.Node.Path); i >= 0 {
 		m = d.f.Items[i].Mnemonic
@@ -505,7 +505,7 @@ func (d *drawer) pill(b *pack.BoundNode, r Rect, txt string, foc, dis bool) {
 		}
 		d.c.put(x+1+k, r.Y, ch, a)
 	}
-	d.c.put(x+1+runeLen(body), r.Y, '◗', layout.Attr{FG: col, BG: bg})
+	d.c.put(x+1+runeLen(body), r.Y, d.capR(), layout.Attr{FG: col, BG: bg})
 }
 
 func (d *drawer) toggle(b *pack.BoundNode, r Rect, foc bool) {
@@ -624,11 +624,11 @@ func (d *drawer) tab(txt string, r Rect) {
 	d.pillN++
 	bg := th.blank().BG
 	n := runeLen(txt) + 2
-	d.c.put(r.X, r.Y, '◖', layout.Attr{FG: col, BG: bg})
+	d.c.put(r.X, r.Y, d.capL(), layout.Attr{FG: col, BG: bg})
 	for k, ch := range []rune(clean(" " + txt + " ")) {
 		d.c.put(r.X+1+k, r.Y, ch, layout.Attr{FG: dark, BG: col, Bold: true})
 	}
-	d.c.put(r.X+1+n, r.Y, '◗', layout.Attr{FG: col, BG: bg})
+	d.c.put(r.X+1+n, r.Y, d.capR(), layout.Attr{FG: col, BG: bg})
 	for x := r.X + n + 3; x < r.X+r.W; x++ {
 		d.c.put(x, r.Y, '▔', layout.Attr{FG: layout.Lerp(col, rgbC(0, 0, 0), 0.55), BG: bg})
 	}
@@ -802,4 +802,19 @@ func (d *drawer) markFocus(it Item) {
 			g.Set(r.X+i, row, c)
 		}
 	}
+}
+
+// capL and capR are the end caps of pill-shaped controls: the pill's own half circles, or the theme's
+// button glyphs (cell.widgets.button left/right, e.g. the klingon blades) when it asks for brackets.
+func (d *drawer) capL() rune { return d.cap("left", '◖') }
+func (d *drawer) capR() rune { return d.cap("right", '◗') }
+
+func (d *drawer) cap(side string, def rune) rune {
+	b := jmap(jmap(cellDoc(d.env.Theme), "widgets"), "button")
+	if jstr(b, "style") == "bracket" {
+		if rs := []rune(jstr(b, side)); len(rs) > 0 {
+			return rs[0]
+		}
+	}
+	return def
 }

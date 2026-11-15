@@ -4,6 +4,7 @@
 package cmcpui
 
 import (
+	"github.com/itsnotyoutoday/cmcp/cellglyph"
 	"math"
 	"strings"
 
@@ -82,16 +83,22 @@ func (d *drawer) cellFrame() {
 	put := func(x, y int, r rune, fg, b layout.Color) {
 		g.Set(x, y, layout.Cell{R: r, A: layout.Attr{FG: fg, BG: b}})
 	}
+	used := map[string]int{} // rows already taken on each edge: ops stack inward from the edge
 	for _, op := range jlist(cell, "frame") {
 		o, _ := op.(map[string]any)
 		switch jstr(o, "op") {
 		case "strip":
 			chars := []rune(jstr(o, "chars"))
-			if len(chars) == 0 {
-				continue
-			}
+			pat := jstr(o, "pattern")
 			size := int(jnum(o, "size", 1))
 			edge := jstr(o, "edge")
+			lo, hi := int(jnum(o, "from", 0)*float64(w)), w
+			if _, ok := o["to"]; ok {
+				hi = int(jnum(o, "to", 1) * float64(w))
+			}
+			if len(chars) == 0 && pat == "" {
+				continue
+			}
 			col := func(i, n int) layout.Color {
 				if gr := jlist(o, "gradient"); len(gr) > 0 {
 					return th.edgeTheme().gradientAt(gr, float64(i)/float64(max(n-1, 1)))
@@ -101,38 +108,81 @@ func (d *drawer) cellFrame() {
 			switch edge {
 			case "top", "bottom":
 				for r := 0; r < size; r++ {
-					y := r
+					y := r + used[edge]
 					if edge == "bottom" {
-						y = h - 1 - r
+						y = h - 1 - r - used[edge]
 					}
-					for x := 0; x < w; x++ {
-						put(x, y, chars[(x+r)%len(chars)], col(x, w), bg)
+					var row []rune
+					if pat != "" {
+						if s, err := cellglyph.Lib().EdgeRow(pat, edge, w); err == nil {
+							row = []rune(s)
+						}
+					}
+					for x := lo; x < hi && x < w; x++ {
+						ch := ' '
+						switch {
+						case len(row) > x:
+							ch = row[x]
+						case len(chars) > 0:
+							ch = chars[(x+r)%len(chars)]
+						}
+						put(x, y, ch, col(x, w), bg)
 					}
 				}
 			default:
 				for r := 0; r < size; r++ {
-					x := r
+					x := r + used[edge]
 					if edge == "right" {
 						x = w - 1 - r
 					}
-					for y := 0; y < h; y++ {
+					for y := 0; y < h && len(chars) > 0; y++ {
 						put(x, y, chars[y%len(chars)], col(y, h), bg)
 					}
 				}
 			}
+			used[edge] += size
 		case "corner":
-			set := map[string][4]rune{"square": {'┌', '┐', '└', '┘'}, "round": {'╭', '╮', '╰', '╯'}, "chamfer": {'◢', '◣', '◥', '◤'},
-				"double": {'╔', '╗', '╚', '╝'}, "heavy": {'┏', '┓', '┗', '┛'}}[jstr(o, "style")]
-			idx := map[string]int{"tl": 0, "tr": 1, "bl": 2, "br": 3}[jstr(o, "corner")]
-			x, y := 0, 0
-			if idx == 1 || idx == 3 {
-				x = w - 1
+			rows, err := cellglyph.Lib().CornerPattern(jstr(o, "style"), jstr(o, "corner"))
+			if err != nil {
+				continue
 			}
-			if idx >= 2 {
-				y = h - 1
+			c := jstr(o, "corner")
+			for j, row := range rows {
+				rs := []rune(row)
+				for i, r := range rs {
+					if r == ' ' {
+						continue
+					}
+					x, y := i, j
+					if c == "tr" || c == "br" {
+						x = w - len(rs) + i
+					}
+					if c == "bl" || c == "br" {
+						y = h - len(rows) + j
+					}
+					if x >= 0 && x < w && y >= 0 && y < h {
+						put(x, y, r, th.edgeTheme().role(jstr(o, "role")), bg)
+					}
+				}
 			}
-			if set[idx] != 0 {
-				put(x, y, set[idx], th.edgeTheme().role(jstr(o, "role")), bg)
+		case "band":
+			d.cellBand(o, used[jstr(o, "edge")])
+			used[jstr(o, "edge")] += int(jnum(o, "rows", 1))
+		case "elbow":
+			rows := cellglyph.Lib().ElbowGrid(jstr(o, "corner"), int(jnum(o, "w", 8)), int(jnum(o, "h", 3)), int(jnum(o, "bar", 1)), int(jnum(o, "side", 3)), int(jnum(o, "ro", 1)), int(jnum(o, "ri", 1)))
+			x0, y0 := 0, 0
+			if c := jstr(o, "corner"); c == "tr" || c == "br" {
+				x0 = w - int(jnum(o, "w", 8))
+			}
+			if c := jstr(o, "corner"); c == "bl" || c == "br" {
+				y0 = h - int(jnum(o, "h", 3))
+			}
+			for j, row := range rows {
+				for i, r := range []rune(row) {
+					if r != ' ' && x0+i >= 0 && x0+i < w && y0+j >= 0 && y0+j < h {
+						put(x0+i, y0+j, r, th.edgeTheme().role(jstr(o, "role")), bg)
+					}
+				}
 			}
 		case "rule":
 			chars := []rune(jstr(o, "chars"))
@@ -514,5 +564,65 @@ func (d *drawer) cellFocusLine(top, bottom int) {
 			break
 		}
 		g.Set(1+i, y, layout.Cell{R: r, A: a})
+	}
+}
+
+// cellBand draws a band op: coloured segments with templated text across a run of rows on one edge.
+func (d *drawer) cellBand(o map[string]any, skip int) {
+	th := d.env.Theme
+	g := d.f.Grid
+	w, h := g.W, g.H
+	rows := int(jnum(o, "rows", 1))
+	lo, hi := int(jnum(o, "from", 0)*float64(w)), w
+	if _, ok := o["to"]; ok {
+		hi = int(jnum(o, "to", 1) * float64(w))
+	}
+	segs := jlist(o, "segments")
+	fixed, fills := 0, 0
+	for _, sg := range segs {
+		m, _ := sg.(map[string]any)
+		if v, ok := m["w"].(float64); ok {
+			fixed += int(v)
+		} else {
+			fills++
+		}
+	}
+	free := max(hi-lo-fixed, 0)
+	x := lo
+	for _, sg := range segs {
+		m, _ := sg.(map[string]any)
+		sw := free
+		if fills > 1 {
+			sw = free / fills
+		}
+		if v, ok := m["w"].(float64); ok {
+			sw = int(v)
+		}
+		col := th.edgeTheme().role(jstr(m, "role"))
+		txt, _ := theme.Render(m["text"], d.themeVars())
+		rs := []rune(clean(txt))
+		for r := 0; r < rows; r++ {
+			y := r + skip
+			if jstr(o, "edge") == "bottom" {
+				y = h - 1 - r - skip
+			}
+			for k := 0; k < sw && x+k < w; k++ {
+				ch := ' '
+				if r == 0 && len(rs) > 0 {
+					off := 1
+					switch jstr(m, "align") {
+					case "center":
+						off = (sw - len(rs)) / 2
+					case "right":
+						off = sw - len(rs) - 1
+					}
+					if i := k - off; i >= 0 && i < len(rs) {
+						ch = rs[i]
+					}
+				}
+				g.Set(x+k, y, layout.Cell{R: ch, A: layout.Attr{FG: dark, BG: col, Bold: true}})
+			}
+		}
+		x += sw
 	}
 }
