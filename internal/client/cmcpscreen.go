@@ -245,6 +245,11 @@ func layoutColorC(t raster.TermColor) layout.Color {
 
 // cmcpSyncSurface draws the screen for the foreground world into the UI (called from syncUI).
 func (c *Client) cmcpSyncSurface() {
+	c.cmcpSyncSurfaceInner()
+	c.setMouse(c.ui.Surf != nil)
+}
+
+func (c *Client) cmcpSyncSurfaceInner() {
 	c.ui.Surf = nil
 	s := c.fg
 	if s == nil || s.cm == nil || !c.cmcpScreensOn() || !c.ui.Visual {
@@ -960,6 +965,14 @@ func (c *Client) cmcpOrderPanels(cs *cmcpScr, f *cmcpui.Frame, plan cmcpui.Plan)
 // focus: the keys that start it; in focus: the area and the keys valid there; a pending pack consent
 // or a notice takes the line while it lasts.
 func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr) (string, string) {
+	t, k := c.cmcpHintBase(f, cs)
+	if n := c.scrolledBack(); n > 0 {
+		t = fmt.Sprintf("SCROLLED BACK %d lines (wheel down, PgDn or End: live)   ", n) + t
+	}
+	return t, k
+}
+
+func (c *Client) cmcpHintBase(f *cmcpui.Frame, cs *cmcpScr) (string, string) {
 	switch {
 	case cs.alertPick != "":
 		return c.cmcpAlertLine(cs, cs.alertLevel), "consent"

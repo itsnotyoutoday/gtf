@@ -72,6 +72,7 @@ the same in every theme and layout) always names the area and the keys valid the
 | PANEL | an **underlined letter** | press that button or toggle |
 | anywhere in focus | `[` `]` `1`-`9` | quick aliases: previous / next / n-th screen (not advertised in the header) |
 | anywhere | F3 / F4 | log view / screen off (work from the input line too) |
+| scroll the history | wheel, **PageUp / PageDown** | scrolls the game-output history (with the keyboard on the input line); the frame, strips, notice and hint rows never move; the hint row says `SCROLLED BACK n lines`; new output does not drag the view, scrolling down or typing returns to live |
 | alert control | **F5** or **Alt+A** | open the alert chooser on the next level (green > yellow > red); Left/Right choose, Enter sends `alert.set` and echoes `alert red`, Esc cancels. A console that may not set the alert gets `man <console>` as a hint |
 | close the screen | **F6** (`%cmcp_key_close`) or `/cmcp close` | tells the game (`Cobra.Context.Close`) and waits for its answer: a console is unmanned, a special room or the generic ship room is hidden for the visit; gtf never hides the screen itself, a refusal or silence shows an error notice. While a pack question is pending F6 refuses it instead |
 | pack question | **F5 / F6** | only while a pack question is pending (`%cmcp_pack_consent ask`): allow / refuse; also `/cmcp pack allow|deny` |
@@ -130,6 +131,7 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_alert_ambient` | theme | the ship's alert edge shows on every screen aboard, rooms and away scenes included (spec 6.17.1): `on`, `off`, or the theme's `alert_ambient`; a `Cobra.Context` with `ambient:false` opts out. Only the edge is drawn (the `frame+hue` tint is not) |
 | `%cmcp_hit_shake` | theme | a hit on your own ship jitters the frame and widgets one cell along the hit axis in 100 ms steps (spec 6.18); the text pane, notice row and hint row never move; steady with `%cmcp_motion off` |
 | `%cmcp_text_width` | auto | the width of the game output in the side layout: `auto` (80 columns, the spec's cap) or a number. `/cmcp width <cols\|auto\|+N\|-N>` and Alt+, / Alt+. (`%cmcp_key_narrow`, `%cmcp_key_widen`) change it by 4 columns and remember it in `~/.gtf/cmcp/prefs.json`. Limits: 40 columns, and what leaves the widget column 40; the notice line says which limit was hit. TinyFugue's `/wrap` is untouched |
+| `%cmcp_mouse` | on | while a CMCP screen is up, ask the terminal for mouse reports (xterm 1000 with SGR 1006) so the wheel and trackpad scroll: over the game-output pane (and a room's text area) the scrollback by 3 lines a notch, over a list, table or log that widget. **Trade-off:** while mouse reporting is on the terminal's own text selection needs Shift (Option in iTerm and Terminal.app). Reporting is switched off again when the screen goes, on quit and when suspending; a terminal that sends no mouse events changes nothing |
 | `%cmcp_origins` | | extra allowed pack origins (`https://host[:port]`, space separated); the game host is always allowed |
 | `%cmcp_debug` | | non-empty: show protocol diagnostics as `% cmcp:` lines |
 

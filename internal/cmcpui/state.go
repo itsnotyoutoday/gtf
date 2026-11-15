@@ -281,3 +281,56 @@ func ClampTextWidth(innerW, want int) (int, string) {
 	}
 	return want, ""
 }
+
+// Hit says what a screen cell belongs to: the text pane, a widget (Item is its index in Frame.Items)
+// or nothing (the frame, the strips, the notice and hint rows).
+type Hit struct {
+	Text bool
+	Item int // -1 when none
+}
+
+// HitTest finds what the cell x, y (0-based, in the screen's grid) belongs to.
+func (f *Frame) HitTest(x, y int) Hit {
+	t := f.Text
+	if x >= t.X && x < t.X+t.W && y >= t.Y && y < t.Y+t.H {
+		return Hit{Text: true, Item: -1}
+	}
+	best := -1
+	for i, it := range f.Items {
+		r := it.Rect
+		if it.Kind == "nav" {
+			continue // the screen menu is not scrolled by the wheel
+		}
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			if best < 0 || r.W*r.H < f.Items[best].Rect.W*f.Items[best].Rect.H {
+				best = i // the smallest widget under the pointer
+			}
+		}
+	}
+	return Hit{Item: best}
+}
+
+// Wheel scrolls the widget under the pointer by n rows (negative up): lists and tables move their
+// cursor row, which moves the visible window. It reports whether anything moved.
+func (f *Frame) Wheel(item, n int) bool {
+	if item < 0 || item >= len(f.Items) {
+		return false
+	}
+	it := f.Items[item]
+	switch it.Kind {
+	case "list", "table", "bar-list", "contact-picker", "group-picker", "team-assigner", "log":
+	default:
+		return false
+	}
+	key := Key("down")
+	if n < 0 {
+		key, n = "up", -n
+	}
+	moved := false
+	for i := 0; i < n; i++ {
+		if _, ok := f.Press(it.Node.Node.Path, key); ok {
+			moved = true
+		}
+	}
+	return moved
+}

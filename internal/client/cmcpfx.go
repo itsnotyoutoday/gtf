@@ -122,6 +122,14 @@ func (c *Client) cmcpAmbientFrame(s *Session, u *session.UI, cs *cmcpScr, now ti
 		}
 		time.AfterFunc(250*time.Millisecond, c.scheduleRender)
 	}
+	if n := c.scrolledBack(); n > 0 {
+		for i, r := range []rune(fmt.Sprintf(" SCROLLED BACK %d lines (wheel down, PgDn or End: live)", n)) {
+			if i < w {
+				g.Set(i, h-1, layout.Cell{R: r, A: layout.Attr{FG: layout.Color{Kind: layout.RGB}, BG: layout.Color{Kind: layout.RGB, R: 200, G: 200, B: 205}, Bold: true}})
+			}
+		}
+	}
+	cs.frame = &cmcpui.Frame{Grid: g, Text: cmcpui.Rect{X: text.X, Y: text.Y, W: text.W, H: text.H}}
 	c.ui.Surf = &ui.Surface{Grid: g, Text: text}
 	return true
 }

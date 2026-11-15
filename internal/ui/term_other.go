@@ -26,6 +26,7 @@ func OpenTTY() (*TTY, error) { return nil, errNoTTY }
 func OpenTTYFrom([]byte) (*TTY, error) { return nil, errNoTTY }
 
 func (*TTY) State() []byte               { return nil }
+func (*TTY) SetMouse(bool)               {}
 func (*TTY) Write(p []byte) (int, error) { return len(p), nil }
 func (*TTY) Size() (int, int)            { return 80, 24 }
 func (*TTY) Input() io.Reader            { return nil }

@@ -367,7 +367,7 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 			ext[i] = ih
 		case k.Layout.HasSize:
 			if horiz {
-				ext[i] = cellsX(k.Layout.Size)
+				ext[i] = max(cellsX(k.Layout.Size), minWidth(k))
 			} else {
 				ext[i] = cellsY(k.Layout.Size)
 			}
@@ -588,7 +588,7 @@ func minWidth(b *pack.BoundNode) int {
 		for i, k := range kids {
 			kw := minWidth(k)
 			if k.Layout.HasSize && b.Layout.Dir == "row" {
-				kw = cellsX(k.Layout.Size)
+				kw = max(cellsX(k.Layout.Size), kw) // a size is a hint: never narrower than the content's minimum
 			}
 			if b.Layout.Dir == "row" {
 				w += kw

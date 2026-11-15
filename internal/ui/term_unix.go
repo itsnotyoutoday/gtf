@@ -25,6 +25,7 @@ type TTY struct {
 	in, out *os.File
 	orig    *unix.Termios // the settings to restore (not the raw ones)
 	keys    *keyReader
+	mouse   bool
 	winch   chan os.Signal
 	Resized chan struct{}
 }
@@ -102,13 +103,38 @@ func (t *TTY) Input() io.Reader { return t.keys }
 // Suspend restores the terminal, stops the process (SIGTSTP) and re-enters
 // raw mode when it continues.
 func (t *TTY) Suspend() {
+	t.out.Write([]byte(mouseOff)) // never leave the shell in mouse mode
 	unix.IoctlSetTermios(int(t.in.Fd()), ioctlWriteTermios, t.orig)
 	syscall.Kill(syscall.Getpid(), syscall.SIGSTOP)
 	term.MakeRaw(int(t.in.Fd()))
+	if t.mouse {
+		t.out.Write([]byte(mouseOn))
+	}
+}
+
+// Mouse reporting: button events and the wheel with SGR (1006) coordinates.
+const (
+	mouseOn  = "\x1b[?1000h\x1b[?1006h"
+	mouseOff = "\x1b[?1006l\x1b[?1000l"
+)
+
+// SetMouse turns mouse reporting on or off (a CMCP screen is up). It is always switched off again on
+// Close and Suspend.
+func (t *TTY) SetMouse(on bool) {
+	if on == t.mouse {
+		return
+	}
+	t.mouse = on
+	if on {
+		t.out.Write([]byte(mouseOn))
+	} else {
+		t.out.Write([]byte(mouseOff))
+	}
 }
 
 // Close restores the terminal.
 func (t *TTY) Close() error {
+	t.out.Write([]byte(mouseOff)) // whatever happened, the terminal is left out of mouse mode
 	signal.Stop(t.winch)
 	return unix.IoctlSetTermios(int(t.in.Fd()), ioctlWriteTermios, t.orig)
 }

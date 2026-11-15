@@ -19,6 +19,18 @@ func (c *Client) onKeys(s string) {
 		c.keyTimer.Stop()
 		c.keyTimer = nil
 	}
+	if rest, took := c.mouseEvents(s); took {
+		if rest == "" {
+			return
+		}
+		s = rest
+	}
+	if c.cmcpPageKeys(s) {
+		return
+	}
+	if c.wheelHold {
+		c.wheelHold = false // typing returns to the live bottom, as it does today
+	}
 	if c.cmcpKeys(s) {
 		return
 	}

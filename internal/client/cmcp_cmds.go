@@ -239,5 +239,6 @@ var cmcpKeysHelp = []string{
 	"  F5 or Alt+A                      alert control: choose green/yellow/red (Left/Right), Enter sends, Esc cancels (F5/F6 answer a pack question while one is pending)",
 	"  F6 or /cmcp close                close the screen you are on: the game decides (a console is unmanned); gtf waits for its answer. While a pack question is pending F6 refuses it instead",
 	"  Alt+, / Alt+.  or /cmcp width    narrow / widen the game output by 4 columns (side layout), /cmcp width <cols|auto>; limits: 40 columns, and what leaves the widgets 40",
+	"  wheel / PageUp / PageDown        scroll the game-output history (%cmcp_mouse off disables mouse reports; Shift selects text while they are on)",
 	"  F3 log view, F4 screen off.   Quick aliases, from anywhere in focus mode: [ previous screen, ] next screen, 1-9 the nth screen.",
 }

@@ -94,6 +94,8 @@ type Client struct {
 	cmcpWanted    atomic.Bool // %cmcp as of the last connect (read by the dialer goroutine)
 	cmWidthPref   int         // the remembered text width (prefs.json)
 	cmWidthLoaded bool
+	wheelHold     bool       // the player scrolled back with the wheel or PgUp: keep it there even with `more` off
+	mouseOn       bool       // terminal mouse reporting is on (a CMCP screen is up)
 	cmPacks       *cmcpPacks // CMCP layout packs: cache, consent (cmcppacks.go)
 	// squatter plumbing (squatter.go): command output capture for tf.exec, what kind of line is
 	// being added to a world screen, and remote sends in progress
@@ -478,8 +480,11 @@ func (c *Client) syncUI() {
 	u.Wrap.Punct = ts.WrapPunct
 	for _, s := range c.screens() {
 		s.More = ts.More
-		if !ts.More && s.Paused {
+		if !ts.More && s.Paused && !(c.wheelHold && s == c.ui.Scr) {
 			s.Flush(u.Winlines())
+		}
+		if c.wheelHold && s == c.ui.Scr && !s.Paused {
+			c.wheelHold = false // back at the live bottom
 		}
 	}
 	if c.fg != nil {

@@ -1186,3 +1186,141 @@ func TestCmcpTextWidth(t *testing.T) {
 		t.Fatalf("auto after a setting: %d", got)
 	}
 }
+
+// The wheel scrolls the game-output history; the strips, frame and rows around it never move. In a
+// ship room under yellow alert the edge strips stay fixed, a "scrolled back" indicator shows on the hint
+// row, new output does not drag the view while scrolled back, and PgDn-style scrolling returns to live.
+func TestCmcpWheelScrollsHistoryInRoom(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "yellow"
+	f.console("std.operations", "", nil)
+	f.unman()
+	f.pushRoom(200, "Main Corridor")
+	cmEventually(t, "shiproom", func() bool { id, _ := f.screenState(); return id == "std.shiproom" })
+	for i := 0; i < 120; i++ {
+		exec(f.c, fmt.Sprintf("/echo history line %03d", i))
+	}
+	f.render()
+	edge := func() (rows [3][]layout.Cell) {
+		f.c.Do(func(*gtfparser.Interp) {
+			g := f.c.ui.Surf.Grid
+			for i, y := range []int{0, 1, g.H - 1} {
+				rows[i] = append([]layout.Cell(nil), g.Cells[y*g.W:(y+1)*g.W]...)
+			}
+		})
+		return
+	}
+	var tx layout.Rect
+	f.c.Do(func(*gtfparser.Interp) { tx = f.c.ui.Surf.Text })
+	before := edge()
+	f.keys("\x1b[<64;40;" + fmt.Sprint(tx.Y+tx.H/2+1) + "M") // wheel up over the text
+	f.keys("\x1b[<64;40;" + fmt.Sprint(tx.Y+tx.H/2+1) + "M")
+	back := 0
+	f.c.Do(func(*gtfparser.Interp) { back = f.c.scrolledBack() })
+	if back != 2*wheelLines {
+		t.Fatalf("two wheel notches should scroll back %d lines, got %d", 2*wheelLines, back)
+	}
+	f.render()
+	f.contain(t, "SCROLLED BACK")
+	// the text rows show older lines: the newest line is no longer there
+	f.lack(t, "history line 119")
+	after := edge()
+	for _, i := range []int{0, 1} { // the notice row and the top strip do not move or redraw
+		for x := range before[i] {
+			if before[i][x] != after[i][x] {
+				t.Fatalf("row %d changed at column %d while scrolling", i, x)
+			}
+		}
+	}
+	// new output while scrolled back does not jump the view
+	exec(f.c, "/echo fresh output")
+	f.c.Do(func(*gtfparser.Interp) { back = f.c.scrolledBack() })
+	if back == 0 {
+		t.Fatal("new output dragged the view to the live bottom")
+	}
+	f.keys("\x1b[<65;40;"+fmt.Sprint(tx.Y+tx.H/2+1)+"M", "\x1b[<65;40;"+fmt.Sprint(tx.Y+tx.H/2+1)+"M", "\x1b[<65;40;"+fmt.Sprint(tx.Y+tx.H/2+1)+"M")
+	f.c.Do(func(*gtfparser.Interp) { back = f.c.scrolledBack() })
+	if back != 0 {
+		t.Fatalf("wheel down should return to live, %d lines still back", back)
+	}
+	f.render()
+	f.lack(t, "SCROLLED BACK")
+}
+
+// PageUp / PageDown scroll the history while a CMCP screen is up and the keyboard is on the input line.
+func TestCmcpPageKeysScrollHistory(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	for i := 0; i < 120; i++ {
+		exec(f.c, fmt.Sprintf("/echo history line %03d", i))
+	}
+	f.render()
+	f.keys("\x1b[5~")
+	back := 0
+	f.c.Do(func(*gtfparser.Interp) { back = f.c.scrolledBack() })
+	if back < 10 {
+		t.Fatalf("PageUp scrolled back %d lines", back)
+	}
+	f.contain(t, "SCROLLED BACK")
+	f.keys("\x1b[6~")
+	f.c.Do(func(*gtfparser.Interp) { back = f.c.scrolledBack() })
+	if back != 0 {
+		t.Fatalf("PageDown left %d lines back", back)
+	}
+}
+
+// A stray mouse report is never typed as text, with reporting on or off.
+func TestCmcpMouseReportsAreNotTyped(t *testing.T) {
+	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_mouse=off")
+	f.console("std.operations", "", nil)
+	f.keys("\x1b[<0;40;20M", "\x1b[<0;40;20m")
+	if got := f.inputText(); got != "" {
+		t.Fatalf("a mouse report was typed: %q", got)
+	}
+}
+
+// Mouse reporting is on only while a screen is shown, and %cmcp_mouse off keeps it off.
+func TestCmcpMouseReportingFollowsTheScreen(t *testing.T) {
+	has := func(f *screenFixture, s string) (ok bool) {
+		f.term.mu.Lock()
+		defer f.term.mu.Unlock()
+		return strings.Contains(string(f.term.buf), s)
+	}
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	if !has(f, "\x1b[?1000h") || !has(f, "\x1b[?1006h") {
+		t.Fatal("a CMCP screen did not turn mouse reporting on")
+	}
+	exec(f.c, "/cmcp hide")
+	f.render()
+	if !has(f, "\x1b[?1000l") {
+		t.Fatal("hiding the screen did not turn mouse reporting off")
+	}
+	g := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_mouse=off")
+	g.console("std.operations", "", nil)
+	if has(g, "\x1b[?1000h") {
+		t.Fatal("cmcp_mouse off still turned reporting on")
+	}
+}
+
+// The orders panel keeps its table and buttons readable in the side column: a fixed size in the pack is
+// a hint, never narrower than the content's minimum, so the table keeps its columns and the tab its
+// whole label, and the buttons wrap instead of stacking one per row.
+func TestCmcpOrdersPanelReadableInSideColumn(t *testing.T) {
+	for _, w := range []int{160, 200} {
+		for _, scr := range []struct{ id, con string }{{"std.tactical", "tactical"}, {"std.operations", "operations"}, {"std.command", "command"}} {
+			f := newScreenFixtureSetup(t, w, 50, t.TempDir(), nil, "/set cmcp_motion=off")
+			f.console(scr.id, scr.con, nil)
+			txt := f.text()
+			if strings.Contains(txt, "ORDERS AND R ") || strings.Contains(txt, "ORDERS AND R\n") {
+				t.Errorf("%dx50 %s: the orders tab is clipped", w, scr.id)
+			}
+			if strings.Contains(txt, "# PRI FROM") && !strings.Contains(txt, "TEXT STATE") {
+				t.Errorf("%dx50 %s: the orders table lost its columns", w, scr.id)
+			}
+			if strings.Contains(txt, "( ACK )") && strings.Contains(txt, "( ACK )\n") && strings.Contains(txt, "( DONE )\n") && strings.Contains(txt, "( REJECT )\n") {
+				t.Errorf("%dx50 %s: the order buttons are stacked one per row", w, scr.id)
+			}
+		}
+	}
+}

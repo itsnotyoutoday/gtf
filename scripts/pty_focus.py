@@ -32,7 +32,7 @@ def hint():
     rows = subprocess.run([vtdump, "-w", str(COLS), "-h", str(ROWS), p], capture_output=True, text=True).stdout.splitlines()
     for r in rows:
         r = r.split("|", 1)[-1].strip()
-        if r.startswith(("INPUT -", "MENU ", "PANEL ")): return r
+        if r.startswith(("INPUT -", "MENU ", "PANEL ", "SCROLLED BACK")): return r
     return ""
 drain(2)
 for line in ["connect bob cobalt-fern-52", "board resolute", "man science"]: send(line + "\r", 2.0)
@@ -54,6 +54,16 @@ step("\x1b[Z", "Shift+Tab", "PANEL ")
 step("\x1b", "Esc", "INPUT - Tab or F2")
 step("\x1b[Z", "Shift+Tab", "PANEL ")
 step("\x1b", "Esc", "INPUT - Tab or F2")
+# synthetic SGR mouse wheel reports (64 up, 65 down) over the game-output pane: the history scrolls back
+# and returns, the hint row says so
+for _ in range(60): send("/echo wheel history line\r", 0.05)
+drain(1)
+for _ in range(4): send("\x1b[<64;40;15M", 0.2)
+h = hint(); ok = h.startswith("SCROLLED BACK"); print(("ok   " if ok else "FAIL ") + f"{'wheel up':10}: {h[:80]}")
+if not ok: bad.append("wheel up")
+for _ in range(30): send("\x1b[<65;40;15M", 0.1)
+h = hint(); ok = not h.startswith("SCROLLED BACK"); print(("ok   " if ok else "FAIL ") + f"{'wheel down':10}: {h[:80]}")
+if not ok: bad.append("wheel down")
 os.write(fd, b"/quit\r"); drain(1)
 screen_text = buf.decode("utf-8", "replace")
 if "key_shift_tab" in screen_text or "no such command or macro" in screen_text:
