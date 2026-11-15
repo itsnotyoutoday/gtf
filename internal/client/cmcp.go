@@ -137,6 +137,12 @@ func (c *Client) cmcpNote(s *Session, n session.Note) {
 	switch n.Kind {
 	case session.NoteReply, session.NoteCmdTimeout:
 		c.cmcpReply(s, n)
+	case session.NoteReady:
+		// one quiet line, so the player knows the keys; everything else lives behind /cmcp status
+		if !s.cmScr().told && c.cmcpScreensOn() {
+			s.cmScr().told = true
+			c.echoTo(s.scr, "", "% CMCP: interface available. Tab: screen keys, F3: log view, F4: screen off, /cmcp status.")
+		}
 	case session.NotePackWanted:
 		if n.PackRef != nil {
 			c.cmcpPackWanted(s, *n.PackRef)

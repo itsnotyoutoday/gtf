@@ -61,7 +61,20 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	top, bottom := env.Theme.margins(h)
 	left := env.Theme.leftCols(w)
 	inner := Rect{X: left, Y: top, W: w - left, H: h - top - bottom}
+	// %cmcp_layout: stacked (a band of pictures over the output, data on the right), side-left (the
+	// output on the left, every widget in a column on the right, pictures first) or side-right (mirrored).
+	// Unset: side-left for the hand-built tng and plain themes on a terminal of 120 columns or more,
+	// the theme's own arrangement for the other reference themes, stacked on narrower terminals.
 	mode := env.Layout
+	mirror := false
+	switch mode {
+	case "stacked":
+		mode = "console"
+	case "side-left", "side":
+		mode = "side"
+	case "side-right":
+		mode, mirror = "side", true
+	}
 	if env.Expanded {
 		// the log view: the output takes about 80% of the height; every other panel is one summary line
 		mode = "expanded"
@@ -69,8 +82,11 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		mode = "tree"
 		if env.Builtin && inner.W >= 70 && inner.H >= 14 {
 			mode = "console" // the built-in screens are arranged by the theme (docs/CMCP-THEMES.md)
-			if env.Theme.isCellTheme() && jmap(jmap(cellDoc(env.Theme), "arrange"), env.ScreenID) != nil {
+			switch {
+			case env.Theme.isCellTheme() && jmap(jmap(cellDoc(env.Theme), "arrange"), env.ScreenID) != nil:
 				mode = "cell" // the theme's own fractions (spec 19.8)
+			case !env.Theme.isCellTheme() && w >= 120:
+				mode = "side"
 			}
 		}
 	}
@@ -90,12 +106,16 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 			a.console(rest, inner)
 		}
 	case mode == "side" && inner.W >= 80 && inner.H >= 14:
-		side := max(40, min(56, w*4/10))
+		side := max(40, min(56, inner.W*4/10))
 		if rest := stripText(root); rest != nil {
 			rest = pictureFirst(rest)
 			a.sidebar = true
-			a.arrange(rest, Rect{X: w - side, Y: inner.Y, W: side, H: inner.H}, true)
-			a.text, a.hasTxt = Rect{X: 0, Y: inner.Y, W: w - side - 1, H: inner.H}, true
+			colX, textX := w-side, inner.X
+			if mirror {
+				colX, textX = inner.X, inner.X+side+1
+			}
+			a.arrange(rest, Rect{X: colX, Y: inner.Y, W: side, H: inner.H}, true)
+			a.text, a.hasTxt = Rect{X: textX, Y: inner.Y, W: w - inner.X - side - 1, H: inner.H}, true
 		}
 	}
 	if !a.hasTxt {

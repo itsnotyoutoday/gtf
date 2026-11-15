@@ -43,6 +43,7 @@ type cmcpScr struct {
 	jobs      map[string]*packJob
 	view      *textport.View  // the shared LOG / screen-off / textport_default state machine (cmcp/go/textport)
 	tween     tweenState      // the F3 animation in progress
+	told      bool            // the one-line CMCP notice was shown
 	reenter   bool            // a screen switch from the menu keeps the keyboard focus on the new screen
 	auto      map[string]bool // group pickers that already got their first group selected
 }

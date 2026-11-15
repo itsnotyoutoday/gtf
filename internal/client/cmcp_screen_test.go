@@ -684,7 +684,7 @@ func TestCmcpLogToggleAnimates(t *testing.T) {
 	clock := fixedNow
 	nowFn = func() time.Time { return clock }
 	defer func() { nowFn = func() time.Time { return fixedNow } }()
-	f := newScreenFixture(t, 120, 40)
+	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_layout=stacked")
 	f.console("std.sensors", "science", nil)
 	r0, _, h := f.pane()
 	f.keys("\x1bOR") // F3
