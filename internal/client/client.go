@@ -15,7 +15,7 @@ package client
 
 import (
 	"fmt"
-	"github.com/itsnotyoutoday/gtf/internal/raster"
+	"github.com/itsnotyoutoday/cmcp/raster"
 	"io"
 	"os"
 	"path/filepath"

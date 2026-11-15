@@ -43,8 +43,9 @@ type fakeGame struct {
 	epoch int
 }
 
-func (g *fakeGame) ShipEpoch() (int, bool, bool)  { return g.epoch, true, false }
-func (g *fakeGame) ConsoleFor() (string, bool)    { return "operations", false }
+func (g *fakeGame) Player() session.Player {
+	return session.Player{Epoch: g.epoch, Aboard: true, Held: []string{"operations", "room:transporter"}}
+}
 func (g *fakeGame) Permitted(string) bool         { return true }
 func (g *fakeGame) CanSubscribe(string) bool      { return true }
 func (g *fakeGame) Snapshot(p string) (any, bool) { d, ok := g.docs[p]; return d, ok }

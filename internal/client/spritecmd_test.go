@@ -28,7 +28,7 @@ func (t *teeTerm) Write(p []byte) (int, error) {
 	return t.Screen.Write(p)
 }
 
-const spriteDir = "../raster/testdata/"
+const spriteDir = "testdata/sprites/"
 
 func spriteClient(t *testing.T) (*Client, *teeTerm) {
 	t.Helper()

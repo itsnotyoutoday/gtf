@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/itsnotyoutoday/cmcp/raster"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
-	"github.com/itsnotyoutoday/gtf/internal/raster"
 	"github.com/itsnotyoutoday/gtfparser"
 )
 

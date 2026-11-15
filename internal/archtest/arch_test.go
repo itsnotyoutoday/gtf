@@ -31,14 +31,13 @@ var rules = []rule{
 	{prefix: ".", allow: nil}, // version.go: the VERSION file, nothing else
 	{prefix: "cmd/gtf", allow: []string{"internal/client", "gtflib"}},
 	{prefix: "cmd/vtdump", allow: []string{"internal/ui/vt"}},
-	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "internal/cmcpui", "internal/raster", "internal/update", "internal/handoff", "internal/squatter", "gtflib"}, engine: true},
+	{prefix: "internal/client", allow: []string{"internal/ui", "internal/net", "internal/layout", "internal/cmcpui", "internal/update", "internal/handoff", "internal/squatter", "gtflib"}, engine: true},
 	{prefix: "internal/handoff", allow: nil},
 	{prefix: "internal/squatter", allow: nil}, // the squatter daemon: no gtf package, no engine; only internal/client imports it
 	{prefix: "internal/ui", allow: []string{"internal/layout"}},
 	{prefix: "internal/net", allow: []string{"internal/net"}},
 	{prefix: "internal/layout", allow: nil},
 	{prefix: "internal/cmcpui", allow: []string{"internal/layout"}}, // CMCP cell renderer: bound screen tree -> cells (the core module is external)
-	{prefix: "internal/raster", allow: nil},                         // vector sprite rasteriser: standard library only
 	{prefix: "internal/update", allow: nil},                         // releases, checksums, replacing the binary and library; no gtf imports
 	{prefix: "gtflib", allow: nil},
 }

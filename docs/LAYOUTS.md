@@ -123,11 +123,11 @@ Reacting from scripts: `/def -hGMCP -t'Char.Vitals *' ~lowhp = /if (gmcp_get("Ch
 
 ## Sprites (experimental)
 
-`internal/raster` rasterises vector art (layers of paths, polygons, ellipses, rects, strokes with caps and joins,
+The shared core package `github.com/itsnotyoutoday/cmcp/go/raster` (formerly `internal/raster`) rasterises vector art (layers of paths, polygons, ellipses, rects, strokes with caps and joins,
 solid/linear/radial fills, opacity, transforms, clips, named tint zones and glow anchors in a viewBox) into an
 anti-aliased RGBA buffer at any size and converts it to terminal cells. It knows nothing about the CMCP wire
 format; the JSON form documented on `raster.Sprite` is a stand-in that is easy to map to the final spec. Samples
-are in `internal/raster/testdata/`.
+are in the core's `raster/testdata/`.
 
 ```
 /sprite FILE [W H] [-m half|quad|sext|braille|ascii] [-c tc|256|16|mono] [-b #rrggbb] [-z id=v,..] [-g id=v,..] [-p NAME]

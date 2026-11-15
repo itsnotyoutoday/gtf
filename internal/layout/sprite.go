@@ -4,7 +4,7 @@
 package layout
 
 // EXPERIMENTAL: the sprite entry points ({sprite NAME} and Canvas.BlitRGBA)
-// are the hook for the vector sprite rasteriser (internal/raster). Their
+// are the hook for the vector sprite rasteriser (the core's raster package). Their
 // shape may change when the CMCP sprite format is final.
 
 // CellBlock is a ready-made grid of styled cells, row-major, that a panel can
