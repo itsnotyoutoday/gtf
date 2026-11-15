@@ -2149,7 +2149,12 @@
   }
  },
  "alert_recolour": "full",
- "alert_pulse": true,
+ "alert_pulse": {
+  "enabled": true,
+  "period_ms": 800,
+  "depth": 0.5,
+  "yellow": "gentle"
+ },
  "alert_control": {
   "x": 30,
   "y": 790,
