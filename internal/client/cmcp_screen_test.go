@@ -736,9 +736,9 @@ func TestCmcpScreenMenuKeys(t *testing.T) {
 	if back, _ := shown(); back == second {
 		t.Fatalf("[ did not move the screen (still %s)", back) // (the core's wrap order is its own; see the report)
 	}
-	f.keys("3")
+	f.keys("5")
 	if third, _ := shown(); third == first {
-		t.Fatalf("digit 3 did not pick a screen")
+		t.Fatalf("digit 5 did not pick a screen")
 	}
-	f.contain(t, "SENSORS") // the menu's names are in the left column
+	f.contain(t, "DAMAGE") // the menu entries are in the left column
 }

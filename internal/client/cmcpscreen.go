@@ -43,6 +43,7 @@ type cmcpScr struct {
 	jobs      map[string]*packJob
 	view      *textport.View  // the shared LOG / screen-off / textport_default state machine (cmcp/go/textport)
 	tween     tweenState      // the F3 animation in progress
+	reenter   bool            // a screen switch from the menu keeps the keyboard focus on the new screen
 	auto      map[string]bool // group pickers that already got their first group selected
 }
 
@@ -249,6 +250,12 @@ func (c *Client) cmcpSyncSurface() {
 	env.Budget = &budget
 	tree := scr.Bind(env, cmcpCaps)
 	plan := c.cmcpPlan(cs, tree)
+	if cs.reenter {
+		cs.reenter = false
+		if cs.st.Model != nil {
+			cmcpui.Dispatch(&cmcpui.Frame{}, cs.st, cmcpui.FocusKeyName(c.in.Var("cmcp_key_focus")), true, now)
+		}
+	}
 	th := cmcpui.ThemeByName(c.cmcpThemeFor(u, scr.SuggestTheme))
 	hdr := scr.Title
 	if hdr == "" {
@@ -728,6 +735,9 @@ func (c *Client) cmcpNavTo(s *Session, n int) bool {
 }
 
 func (c *Client) cmcpNavErr(s *Session, err error) {
+	if err == nil {
+		s.cmScr().reenter = true
+	}
 	var se *session.ScreenError
 	switch {
 	case err == nil:
