@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/itsnotyoutoday/cmcp/ambient"
 	"github.com/itsnotyoutoday/cmcp/focus"
 	"github.com/itsnotyoutoday/cmcp/textport"
 	"github.com/itsnotyoutoday/cmcp/theme"
@@ -53,6 +54,7 @@ type cmcpScr struct {
 	lockNote     string // "MENU x - locked: hint", shown until the next key
 	reenter      bool   // a screen switch from the menu keeps the keyboard focus on the new screen
 	alertPick    string // the level the alert chooser has highlighted; empty when it is closed
+	fxKey        string // the ambience/shake settings last given to the core
 	alertLevel   string // the alert level the pulse counts from
 	alertSince   time.Time
 	pulseAt      time.Time       // the flip a redraw is already scheduled for
@@ -260,6 +262,11 @@ func (c *Client) cmcpSyncSurface() {
 	}
 	scr, p, id := c.cmcpScreenFor(s, u)
 	if scr == nil {
+		// a room, a dock or an away scene: no console screen, but the ship's alert still shows (6.17.1)
+		now := c.cfg.Now()
+		th := c.cmcpResolveTheme(s, u, c.cmcpThemeFor(s, u, ""))
+		c.cmcpFxConfig(s, cs, th)
+		c.cmcpAmbientFrame(s, u, cs, now)
 		return
 	}
 	if cs.states == nil {
@@ -290,6 +297,8 @@ func (c *Client) cmcpSyncSurface() {
 		}
 	}
 	th := c.cmcpResolveTheme(s, u, c.cmcpThemeFor(s, u, scr.SuggestTheme))
+	c.cmcpFxConfig(s, cs, th)
+	look := s.cm.Ambient(now)
 	hdr := scr.Title
 	if hdr == "" {
 		hdr = id
@@ -332,7 +341,7 @@ func (c *Client) cmcpSyncSurface() {
 	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpAlertRecolour(th), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -347,6 +356,9 @@ func (c *Client) cmcpSyncSurface() {
 	}
 	c.cmcpOrderPanels(cs, f, plan)
 	f.Grid = c.cmcpWithHint(f, cs, noteText, noteKind, u.Alert, w, fullH)
+	if dx, dy := c.cmcpShake(s, now); dx != 0 || dy != 0 {
+		f.Grid = shiftGrid(f.Grid, f.Text, dx, dy)
+	}
 	cs.frame = f
 	c.ui.Surf = &ui.Surface{Grid: f.Grid, Text: layout.Rect{X: f.Text.X, Y: f.Text.Y, W: f.Text.W, H: f.Text.H}}
 }
@@ -1148,4 +1160,14 @@ func (c *Client) cmcpAlertLine(cs *cmcpScr, current string) string {
 	}
 	b.WriteString("  Left/Right choose   Enter confirm   Esc cancel")
 	return b.String()
+}
+
+// cmcpRecolourWith is the recolour mode for this frame: the ambience draws the alert edge as in edge
+// mode whatever alert_recolour says (spec 6.17.1), so a theme that does not recolour still shows it.
+func (c *Client) cmcpRecolourWith(th cmcpui.Theme, look ambient.Look) string {
+	mode := c.cmcpAlertRecolour(th)
+	if mode == "off" && look.Edge != "" {
+		return "edge"
+	}
+	return mode
 }

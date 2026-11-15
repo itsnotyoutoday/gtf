@@ -856,7 +856,7 @@ func TestCmcpAlertRecolourModes(t *testing.T) {
 	}
 	count := map[string]int{}
 	for _, mode := range []string{"full", "edge", "off"} {
-		f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_alert_recolour="+mode)
+		f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_alert_recolour="+mode, "/set cmcp_alert_ambient=off") // the ambience would draw the edge under `off`
 		f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
 		f.console("std.sensors", "science", nil)
 		f.contain(t, "RED ALERT")
@@ -986,4 +986,85 @@ func TestCmcpAlertControl(t *testing.T) {
 	g.keys("\x1b[15~")
 	g.lack(t, "Enter confirm")
 	g.contain(t, "Alert control not available")
+}
+
+// The ship-wide ambience (spec 6.17.1): the alert edge shows even where the theme does not recolour
+// (`off`), and %cmcp_alert_ambient off takes it away again.
+func TestCmcpAlertAmbientUnderRecolourOff(t *testing.T) {
+	red := func(setup ...string) (n int) {
+		f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, append([]string{"/set cmcp_alert_recolour=off", "/set cmcp_alert_pulse=off"}, setup...)...)
+		f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
+		f.console("std.sensors", "science", nil)
+		f.c.Do(func(*gtfparser.Interp) {
+			g := f.c.ui.Surf.Grid
+			for i := 0; i < 8*g.W; i++ {
+				x := g.Cells[i].A.BG
+				if x.Kind == layout.RGB && int(x.R) >= int(x.G)+60 {
+					n++
+				}
+			}
+		})
+		return
+	}
+	if on, off := red(), red("/set cmcp_alert_ambient=off"); on <= off {
+		t.Fatalf("the ambience should draw the alert edge under recolour off: %d vs %d red cells", on, off)
+	}
+}
+
+// The hit shake (spec 6.18, cell): a hit on the player's own ship moves the frame and the widgets one
+// cell along the hit axis for 100 ms steps; the text pane and the hint row never move; it settles.
+func TestCmcpHitShake(t *testing.T) {
+	clock := fixedNow
+	nowFn = func() time.Time { return clock }
+	defer func() { nowFn = func() time.Time { return fixedNow } }()
+	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_layout=stacked")
+	f.console("std.damage", "operations", nil)
+	grab := func() (cells []layout.Cell, text layout.Rect, W int) {
+		f.c.Do(func(*gtfparser.Interp) {
+			g := f.c.ui.Surf.Grid
+			cells, text, W = append([]layout.Cell(nil), g.Cells...), f.c.ui.Surf.Text, g.W
+		})
+		return
+	}
+	rest, text, W := grab()
+	b, _ := frame.Encode("Cobra.Event", msg.Event{Type: "hit", Data: map[string]any{"cid": "self", "facing": "port", "strength": 0.9}})
+	f.d.gm().write(b)
+	moved := false
+	cmEventually(t, "shaking", func() bool {
+		clock = clock.Add(10 * time.Millisecond)
+		f.render()
+		cur, _, _ := grab()
+		for i := range cur {
+			if cur[i] != rest[i] {
+				moved = true
+				// nothing inside the text pane or on the hint row (last row) may differ
+				x, y := i%W, i/W
+				if x >= text.X && x < text.X+text.W && y >= text.Y && y < text.Y+text.H {
+					t.Fatalf("the text pane moved at %d,%d", x, y)
+				}
+			}
+		}
+		return moved
+	})
+	clock = clock.Add(2 * time.Second)
+	f.render()
+	active := true
+	f.c.Do(func(*gtfparser.Interp) { active = f.c.fg.cm.Shake(clock).Active })
+	if active {
+		t.Fatal("the shake did not end")
+	}
+	// settled: two renders in a row are the same picture (no offset left over)
+	a1, _, _ := grab()
+	clock = clock.Add(time.Millisecond)
+	f.render()
+	a2, _, _ := grab()
+	same := 0
+	for i := range a1 {
+		if a1[i] == a2[i] {
+			same++
+		}
+	}
+	if same*100 < len(a1)*95 {
+		t.Fatalf("the picture is still moving after the shake: %d of %d cells equal", same, len(a1))
+	}
 }
