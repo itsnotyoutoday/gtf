@@ -45,11 +45,11 @@ func leafSize(b *pack.BoundNode, w int) (int, int) {
 	case "graph":
 		return 24, 3
 	case "bar-list":
-		return 30, len(asMap(prop(b, "rows"))) + labelRow(b)
+		return 30, min(len(asMap(prop(b, "rows"))), maxListRows) + labelRow(b)
 	case "list", "log":
-		return 30, len(asMap(prop(b, "rows"))) + labelRow(b)
+		return 30, min(len(asMap(prop(b, "rows"))), maxListRows) + labelRow(b)
 	case "table":
-		return 30, len(asMap(prop(b, "rows"))) + 1
+		return 30, min(len(asMap(prop(b, "rows"))), maxListRows) + 1
 	case "button":
 		return runeLen(str(prop(b, "text"))) + 4, 1
 	case "toggle":
@@ -59,15 +59,18 @@ func leafSize(b *pack.BoundNode, w int) (int, int) {
 	case "helm-controls":
 		return 40, 8
 	case "radar":
+		if w > 0 && w < 31 {
+			return w, max(5, w/2)
+		}
 		return 31, 15
 	case "viewscreen":
 		return 40, 12
 	case "schematic":
 		return 36, 14
 	case "contact-picker":
-		return 34, len(asMap(prop(b, "contacts"))) + 1
+		return 34, min(len(asMap(prop(b, "contacts"))), maxListRows) + 1
 	case "group-picker":
-		return 24, len(asMap(prop(b, "groups"))) + 1
+		return 24, min(len(asMap(prop(b, "groups"))), maxListRows) + 1
 	case "team-assigner":
 		n := max(len(asMap(prop(b, "teams"))), len(asList(prop(b, "systems"))))
 		return 44, n + 3
@@ -80,6 +83,9 @@ func leafSize(b *pack.BoundNode, w int) (int, int) {
 	}
 	return 10, 1
 }
+
+// maxListRows caps how tall a list asks to be: longer ones scroll inside their region (spec 6.13).
+const maxListRows = 12
 
 func labelRow(b *pack.BoundNode) int {
 	if str(prop(b, "label")) != "" {

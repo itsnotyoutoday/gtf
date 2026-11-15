@@ -51,6 +51,7 @@ type Env struct {
 	// through pack FocusPlan); the renderer underlines it.
 	Mnemonics map[string]string
 	// Header is the title shown on row 0; Notice replaces the key hint there for a while.
+	Layout string // "auto" (default), "side" or "top"
 	Header string
 	Notice string
 }

@@ -22,10 +22,11 @@ type placed struct {
 }
 
 type arranger struct {
-	leaves []placed
-	text   Rect
-	hasTxt bool
-	need   int // rows the text pane must keep: 8 or a quarter of the height (spec 6.13)
+	leaves  []placed
+	text    Rect
+	hasTxt  bool
+	sidebar bool // widgets stacked in a right-hand column; every child is as tall as its content
+	need    int  // rows the text pane must keep: 8 or a quarter of the height (spec 6.13)
 }
 
 // Draw lays the bound tree out in a w x h cell area, draws it and returns the frame. The text
@@ -48,7 +49,19 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		return f
 	}
 	a := &arranger{need: max(8, h/4)}
-	a.arrange(root, Rect{X: 0, Y: 1, W: w, H: h - 1}, true) // row 0 is the header
+	if side := sidebarWidth(env.Layout, w, h); side > 0 {
+		// Wide terminal: the game's output gets the whole left side at full height and every widget
+		// is stacked in a column on the right (spec 6.13: the cell class reflows the screen).
+		if rest := stripText(root); rest != nil && (env.Layout == "side" || contentFits(rest, side, h-1)) {
+			a.sidebar = true
+			a.arrange(rest, Rect{X: w - side, Y: 1, W: side, H: h - 1}, true)
+			a.text, a.hasTxt = Rect{X: 0, Y: 1, W: w - side - 1, H: h - 1}, true
+		}
+	}
+	if !a.hasTxt {
+		a.leaves = nil
+		a.arrange(root, Rect{X: 0, Y: 1, W: w, H: h - 1}, true) // row 0 is the header
+	}
 	if !a.hasTxt {
 		a.text = Rect{} // a screen must have a textport; without one, drop the screen
 	}
@@ -132,7 +145,25 @@ func (a *arranger) arrange(b *pack.BoundNode, r Rect, top bool) {
 	kids := visibleKids(b)
 	switch b.Layout.Dir {
 	case "row":
-		a.flow(kids, r, true, gapX(b.Layout.Gap))
+		// spec 6.13 reflow: a row whose children's minimum widths do not fit is stacked as a column
+		need, g := 0, gapX(b.Layout.Gap)
+		for i, k := range kids {
+			w := 0
+			if k.Layout.HasSize {
+				w = cellsX(k.Layout.Size)
+			} else {
+				w = minWidth(k)
+			}
+			need += w
+			if i > 0 {
+				need += g
+			}
+		}
+		if need > r.W && len(kids) > 1 {
+			a.flow(kids, r, false, gapY(b.Layout.Gap))
+		} else {
+			a.flow(kids, r, true, g)
+		}
 	case "stack":
 		for _, k := range kids {
 			a.arrange(k, r, false)
@@ -180,6 +211,10 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 	for i, k := range kids {
 		w := k.Layout.Weight
 		switch {
+		case k.Layout.HasSize && !horiz && isContainer(k) && k.Layout.Dir == "row" && minWidth(k) > r.W:
+			// a fixed-height row that had to be stacked is as tall as its children together
+			_, ih := intrinsic(k, r.W)
+			ext[i] = ih
 		case k.Layout.HasSize:
 			if horiz {
 				ext[i] = cellsX(k.Layout.Size)
@@ -245,13 +280,18 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 	if avail < 0 {
 		// over-full: shrink the fixed extents that are not the text pane first, last child first
 		need := -avail
-		for i := len(kids) - 1; i >= 0 && need > 0; i-- {
-			if i == prot || wt[i] > 0 {
-				continue
+		for need > 0 {
+			big := -1
+			for i := range kids {
+				if i != prot && wt[i] <= 0 && ext[i] > 1 && (big < 0 || ext[i] > ext[big]) {
+					big = i
+				}
 			}
-			cut := min(ext[i], need)
-			ext[i] -= cut
-			need -= cut
+			if big < 0 {
+				break
+			}
+			ext[big]--
+			need--
 		}
 		if need > 0 && prot >= 0 {
 			cut := min(max(ext[prot]-1, 0), need)
@@ -317,7 +357,11 @@ func intrinsic(b *pack.BoundNode, w int) (int, int) {
 		kids := visibleKids(b)
 		px, py := cellsX(b.Layout.Pad), cellsY(b.Layout.Pad)
 		var iw, ih int
-		switch b.Layout.Dir {
+		dir := b.Layout.Dir
+		if dir == "row" && w > 0 && len(kids) > 1 && minWidth(b) > w {
+			dir = "col" // the row is stacked (spec 6.13), so it is as tall as its children together
+		}
+		switch dir {
 		case "row":
 			g := gapX(b.Layout.Gap)
 			for i, k := range kids {
@@ -353,4 +397,81 @@ func intrinsic(b *pack.BoundNode, w int) (int, int) {
 		return iw + 2*px, ih + 2*py
 	}
 	return leafSize(b, w)
+}
+
+// minWidth is the least width a node needs to be usable (spec 6.13: minimum sizes are the
+// client's business): a bar a dozen cells, a table or picker a couple of columns, a button its
+// label; containers add up their children (rows) or take the widest (columns).
+func minWidth(b *pack.BoundNode) int {
+	if isContainer(b) {
+		kids := visibleKids(b)
+		w := 0
+		for i, k := range kids {
+			kw := minWidth(k)
+			if k.Layout.HasSize && b.Layout.Dir == "row" {
+				kw = cellsX(k.Layout.Size)
+			}
+			if b.Layout.Dir == "row" {
+				w += kw
+				if i > 0 {
+					w += gapX(b.Layout.Gap)
+				}
+			} else {
+				w = max(w, kw)
+			}
+		}
+		return w + 2*cellsX(b.Layout.Pad)
+	}
+	iw, _ := leafSize(b, 0)
+	switch b.Widget {
+	case "button", "toggle", "label":
+		return iw
+	case "textport":
+		return 8
+	case "table", "list", "bar-list", "contact-picker", "team-assigner", "log", "pad-diagram":
+		return min(iw, 26)
+	}
+	return min(iw, 14)
+}
+
+// sidebarWidth is the width of the widget column of the optional side layout (%cmcp_layout side:
+// the output on the whole left, every widget stacked on the right), 0 for the default top layout:
+// a compact band of widgets (viewscreen, radar, controls as the pack arranges them) over a text
+// pane that takes all the remaining area.
+func sidebarWidth(mode string, w, h int) int {
+	if mode != "side" || w < 80 || h < 16 {
+		return 0
+	}
+	return max(36, min(52, w*4/10))
+}
+
+// stripText returns a copy of the tree without its textport (nil if nothing is left).
+func stripText(b *pack.BoundNode) *pack.BoundNode {
+	if !b.Visible {
+		return nil
+	}
+	if !isContainer(b) {
+		if b.Widget == "textport" {
+			return nil
+		}
+		return b
+	}
+	c := *b
+	c.Children = nil
+	for _, k := range b.Children {
+		if s := stripText(k); s != nil {
+			c.Children = append(c.Children, s)
+		}
+	}
+	if len(c.Children) == 0 {
+		return nil
+	}
+	return &c
+}
+
+// contentFits says whether the widgets, as tall as their content, fit in a column of the given
+// size once the big pictures shrink to a minimum: otherwise the top layout is better.
+func contentFits(rest *pack.BoundNode, w, h int) bool {
+	_, ih := intrinsic(rest, w)
+	return ih <= h
 }
