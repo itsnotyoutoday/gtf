@@ -55,7 +55,8 @@ func (c *Client) cmcpConfig(s *Session) session.Config {
 		Render:         &msg.Render{Kind: "cell", FPS: 4},
 		Themes:         cmcpThemeNames(),
 		Theme:          c.cmcpTheme(),
-		MaxBody:        65536,               // the Welcome with the whole catalogue is about 20 KiB
+		MaxBody:        65536, // the Welcome with the whole catalogue is about 20 KiB
+		PackConsent:    c.consentMode(),
 		ScreenCatalog:  pack.SessionCatalog, // the screen menu: the 14 built-in screens and the packages each needs
 		LayerSendsGate: true,                // the gmcp handler sends Core.Hello and Core.Supports.Set
 		Packs:          &msg.HelloPacks{Formats: []int{1}, Inline: true, HTTPS: true, Cache: c.cachedPacks(s.World.Host)},

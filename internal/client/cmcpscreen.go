@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/itsnotyoutoday/cmcp/notice"
 	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/cmcp/raster"
 	"github.com/itsnotyoutoday/cmcp/session"
@@ -36,7 +37,6 @@ type cmcpScr struct {
 	frame        *cmcpui.Frame
 	override     string // a client-local {"show":...} screen, until the server names another
 	lastSrv      string
-	notes        cmcpui.Notices // the notice line at the top of the screen
 	effects      []cmcpui.Effect
 	sprites      *raster.Cache
 	packs        map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
@@ -268,8 +268,8 @@ func (c *Client) cmcpSyncSurface() {
 	c.cmcpDropStale(cs, u.Ship.ID)
 	w, h := c.ui.W, c.ui.OutRows()
 	fullH := h
-	if h >= 10 {
-		h-- // the bottom row is gtf's own key-hint line, the same in every theme
+	if h >= 12 {
+		h -= 2 // the top row is the notice line (theme.NoticeRows) and the bottom row gtf's own key-hint line
 	}
 	now := c.cfg.Now()
 	env := pack.EnvFromUI(u, cs.st.UI)
@@ -300,9 +300,11 @@ func (c *Client) cmcpSyncSurface() {
 			hdr += " AI"
 		}
 	}
-	noteText, noteKind := cs.notes.Current(now)
-	if at := cs.notes.NextChange(now); !at.IsZero() {
-		time.AfterFunc(at.Sub(now)+20*time.Millisecond, c.scheduleRender)
+	noteText, noteKind := "", cmcpui.NoticeInfo
+	if n := s.cm.Notice(now); n != nil {
+		noteText = n.Line()
+		noteKind = noteKindOf(n)
+		time.AfterFunc(250*time.Millisecond, c.scheduleRender) // the line lingers, fades and expires on the clock
 	}
 	var live []cmcpui.Effect
 	for _, e := range cs.effects {
@@ -351,8 +353,33 @@ func (c *Client) cmcpNotice(s *Session, text string) {
 
 // cmcpNoteKey posts to the notice line; a notice with the key of a visible one replaces it in place.
 func (c *Client) cmcpNoteKey(s *Session, key, text string, kind cmcpui.NoticeKind) {
-	s.cmScr().notes.Post(c.cfg.Now(), key, text, kind)
+	n := notice.Notice{ID: key, Kind: notice.Info, Text: text}
+	switch kind {
+	case cmcpui.NoticeProgress:
+		n.Kind, n.State = notice.Download, notice.Active
+	case cmcpui.NoticeDone:
+		n.Kind, n.State = notice.Download, notice.Done
+	case cmcpui.NoticeFail:
+		n.Kind, n.State = notice.Download, notice.Failed
+	}
+	if n.ID == "" {
+		n.ID = fmt.Sprintf("n%d", c.cfg.Now().UnixNano())
+	}
+	s.cm.Notify(c.cfg.Now(), n)
 	c.scheduleRender()
+}
+
+// noteKindOf maps a core notice to the look of its line.
+func noteKindOf(n *notice.Notice) cmcpui.NoticeKind {
+	switch {
+	case n.State == notice.Active:
+		return cmcpui.NoticeProgress
+	case n.State == notice.Done:
+		return cmcpui.NoticeDone
+	case n.State == notice.Failed || n.Kind == notice.Error || n.Kind == notice.Warning:
+		return cmcpui.NoticeFail
+	}
+	return cmcpui.NoticeInfo
 }
 
 // ---- keys ----
@@ -909,8 +936,22 @@ func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, note string, nk cmcp
 	if src.H >= h {
 		return src
 	}
+	// the screen is drawn one row down: row 0 belongs to the notice line (theme.NoticeRows = 1)
+	dy := 0
+	if h-src.H >= 2 {
+		dy = 1
+	}
 	g := layout.NewGrid(w, h)
-	copy(g.Cells, src.Cells)
+	copy(g.Cells[dy*w:], src.Cells)
+	if dy > 0 {
+		f.Text.Y += dy
+		for i := range f.Items {
+			f.Items[i].Rect.Y += dy
+		}
+		for i := range f.Boxes {
+			f.Boxes[i].Y += dy
+		}
+	}
 	txt, kind := c.cmcpHintText(f, cs)
 	a := layout.Attr{FG: layout.Color{R: 200, G: 200, B: 205, Kind: layout.RGB}, BG: layout.Color{R: 30, G: 30, B: 38, Kind: layout.RGB}}
 	switch kind {
@@ -921,7 +962,7 @@ func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, note string, nk cmcp
 	case "notice":
 		a.Bold = true
 	}
-	if note != "" && f.Text.Y > 0 {
+	if note != "" {
 		// the notice line: the top row of the screen, the same in every theme
 		na := layout.Attr{FG: layout.Color{R: 0, G: 0, B: 0, Kind: layout.RGB}, BG: layout.Color{R: 170, G: 200, B: 235, Kind: layout.RGB}, Bold: true}
 		switch nk {

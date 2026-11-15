@@ -154,7 +154,6 @@ func (c *Client) packStart(s *Session, j *packJob) {
 				kind = "interface theme"
 			}
 			c.echoTo(s.scr, "", fmt.Sprintf("%% Accepted %s %s %s from %s", kind, j.ref.ID, j.ref.Version, host))
-			c.cmcpNoteKey(s, "acc:"+j.ref.SHA256, fmt.Sprintf("Accepted %s %s %s from %s", kind, j.ref.ID, j.ref.Version, host), cmcpui.NoticeInfo)
 		}
 		c.packFetch(s, j)
 		return
@@ -195,7 +194,7 @@ func (c *Client) packDecide(s *Session, id string, allow bool) bool {
 
 func (c *Client) packFailed(s *Session, j *packJob, why string) {
 	j.state, j.why = "failed", why
-	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Could not get "+packLabel(j.ref)+": "+why, cmcpui.NoticeFail)
+	s.cm.PackFailed(c.cfg.Now(), j.ref, why)
 	c.cmcpDebug("pack %s: %s (staying on the built-in screens)", j.ref.ID, why)
 	if s.cm != nil {
 		s.cm.PackAvailable(j.ref.ID, j.ref.SHA256, false)
@@ -211,7 +210,7 @@ func (c *Client) packFetch(s *Session, j *packJob) {
 		return
 	}
 	j.state = "fetching"
-	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Downloading "+packLabel(j.ref)+"...", cmcpui.NoticeProgress)
+	s.cm.PackProgress(c.cfg.Now(), j.ref, 0, int64(j.ref.Size))
 	u := s.cm.UI()
 	switch {
 	case j.ref.Inline && s.conn != nil:
@@ -313,7 +312,7 @@ func (c *Client) packInstall(s *Session, j *packJob, raw []byte, store bool) {
 	ps.save()
 	s.cmScr().packs[j.ref.ID] = p
 	j.state = "ready"
-	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Downloaded "+packLabel(j.ref), cmcpui.NoticeDone)
+	s.cm.PackDownloaded(c.cfg.Now(), j.ref)
 	s.cm.PackAvailable(j.ref.ID, j.ref.SHA256, true)
 	c.cmcpPump(s)
 	c.scheduleRender()
@@ -379,20 +378,8 @@ func (c *Client) themeInstall(s *Session, j *packJob, raw []byte, store bool) {
 		cs.themes[tp.ID] = tp
 	}
 	j.state = "ready"
-	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Downloaded "+packLabel(j.ref), cmcpui.NoticeDone)
+	s.cm.PackDownloaded(c.cfg.Now(), j.ref)
 	c.scheduleRender()
-}
-
-// packLabel names an announced pack for the notice line: "Romulan theme pack", "fspace-std interface pack".
-func packLabel(r msg.PackRef) string {
-	if r.Kind == "theme" {
-		id := r.ID
-		if id != "" {
-			id = strings.ToUpper(id[:1]) + id[1:]
-		}
-		return id + " theme pack"
-	}
-	return r.ID + " interface pack"
 }
 
 // semverParts splits "1.10.0-rc.1" into numbers and the pre-release identifiers.

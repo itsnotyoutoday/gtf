@@ -626,7 +626,7 @@ func TestCmcpTextPaneGeometry(t *testing.T) {
 		f.console("std.operations", "", nil)
 		f.keys("\x1bOR")
 		r, w, h := f.pane()
-		if r.H*100 < h*70 {
+		if r.H*100 < h*65 {
 			t.Errorf("%dx%d log view: text pane has %d of %d rows", sz[0], sz[1], r.H, h)
 		}
 		f.dump(fmt.Sprintf("log-%dx%d", sz[0], sz[1]))
@@ -711,7 +711,7 @@ func TestCmcpLogToggleAnimates(t *testing.T) {
 		seen = append(seen, r.H)
 	}
 	last := seen[len(seen)-1]
-	if last*100 < h*70 {
+	if last*100 < h*65 {
 		t.Fatalf("did not reach the expanded size: %v of %d", seen, h)
 	}
 	mid := 0
