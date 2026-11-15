@@ -1,0 +1,338 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Rick Bird
+
+package client
+
+import (
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/itsnotyoutoday/cmcp/msg"
+	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/gtf/internal/layout"
+	"github.com/itsnotyoutoday/gtf/internal/ui/vt"
+	"github.com/itsnotyoutoday/gtfparser"
+)
+
+// recTerm is a terminal that keeps the byte stream (for vtdump -png) besides the vt model.
+type recTerm struct {
+	*vt.Screen
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (r *recTerm) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	r.buf = append(r.buf, p...)
+	r.mu.Unlock()
+	return r.Screen.Write(p)
+}
+
+// fakeGame executes commands and records them.
+type fakeGame struct {
+	mu    sync.Mutex
+	ran   []string
+	docs  map[string]any
+	epoch int
+}
+
+func (g *fakeGame) ShipEpoch() (int, bool, bool)  { return g.epoch, true, false }
+func (g *fakeGame) ConsoleFor() (string, bool)    { return "operations", false }
+func (g *fakeGame) Permitted(string) bool         { return true }
+func (g *fakeGame) CanSubscribe(string) bool      { return true }
+func (g *fakeGame) Snapshot(p string) (any, bool) { d, ok := g.docs[p]; return d, ok }
+func (g *fakeGame) Execute(c *msg.Cmd) msg.Reply {
+	b, _ := json.Marshal(c.Args)
+	g.mu.Lock()
+	g.ran = append(g.ran, c.Cmd+" "+string(b))
+	g.mu.Unlock()
+	return msg.Reply{ID: c.ID, OK: true}
+}
+func (g *fakeGame) commands() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.ran...)
+}
+
+func readJSON(t testing.TB, name string, v any) {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", "cmcp", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+}
+
+// loadDocs reads every Space.*--full.json example: package -> state document.
+func loadDocs(t testing.TB) map[string]any {
+	docs := map[string]any{}
+	files, _ := filepath.Glob(filepath.Join("testdata", "cmcp", "Space.*--full.json"))
+	for _, f := range files {
+		var m struct {
+			Package string `json:"package"`
+			Payload struct {
+				D any `json:"d"`
+			} `json:"payload"`
+		}
+		readJSON(t, filepath.Base(f), &m)
+		docs[m.Package] = m.Payload.D
+	}
+	return docs
+}
+
+type screenFixture struct {
+	t    *testing.T
+	c    *Client
+	term *recTerm
+	d    *cmcpDialer
+	game *fakeGame
+	docs map[string]any
+}
+
+func newScreenFixture(t *testing.T, w, h int) *screenFixture {
+	t.Helper()
+	var cat []msg.CommandSpec
+	readJSON(t, "commands.catalogue.json", &cat)
+	g := &fakeGame{docs: loadDocs(t), epoch: 1}
+	cfg := session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536, Commands: cat, Backend: g,
+		Packages: []string{"Space.Power", "Space.Ship.Status"}}
+	term := &recTerm{Screen: vt.New(w, h)}
+	d := &cmcpDialer{t: t, cfg: cfg}
+	var c *Client
+	d.c = &c
+	var err error
+	c, err = New(Config{Term: term, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true, Now: func() time.Time { return fixedNow }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.Close)
+	f := &screenFixture{t: t, c: c, term: term, d: d, game: g, docs: g.docs}
+	exec(c, "/connect localhost 4101")
+	cmEventually(t, "ready", func() bool { return d.game != nil && d.game.srv.State() == session.SrvReady })
+	cmEventually(t, "client ready", f.clientReady)
+	return f
+}
+
+func (f *screenFixture) clientReady() (ok bool) {
+	f.c.Do(func(*gtfparser.Interp) {
+		ok = f.c.fg != nil && f.c.fg.cm != nil && f.c.fg.cm.UI().State == session.StateReady
+	})
+	return
+}
+
+// console sends the manned-operations Cobra.Console with another screen and console id, then the
+// full document of every package in its implicit set.
+func (f *screenFixture) console(screen, console string, mutate func(*msg.Console)) {
+	var m struct {
+		Payload msg.Console `json:"payload"`
+	}
+	readJSON(f.t, "Cobra.Console--manned-operations.json", &m)
+	c := m.Payload
+	c.Screen = screen
+	if console != "" {
+		c.Console.ID = console
+	}
+	c.Subscribe = nil
+	for _, pkg := range sortedDocKeys(f.docs) {
+		c.Subscribe = append(c.Subscribe, msg.SubSpec{Pkg: pkg})
+	}
+	if mutate != nil {
+		mutate(&c)
+	}
+	f.d.game.with(func(s *session.Server) {
+		s.SetConsole(c)
+		for _, sub := range c.Subscribe {
+			if doc, ok := f.docs[sub.Pkg]; ok {
+				s.Push(sub.Pkg, true, doc)
+			}
+		}
+	})
+	want := screen
+	cmEventually(f.t, "screen "+want, func() (ok bool) {
+		f.c.Do(func(*gtfparser.Interp) {
+			u := f.c.fg.cm.UI()
+			ok = u.Screen.ID == want && len(u.Docs) >= 3
+		})
+		return
+	})
+	f.render()
+}
+
+var fixedNow = time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+
+func sortedDocKeys(m map[string]any) []string {
+	var k []string
+	for x := range m {
+		k = append(k, x)
+	}
+	sort.Strings(k)
+	return k
+}
+
+func (f *screenFixture) render() {
+	f.c.Flush()
+	time.Sleep(20 * time.Millisecond)
+	f.c.Flush()
+}
+
+func (f *screenFixture) text() string { return f.term.Text() }
+
+// dump writes the byte stream when GTF_DUMP_DIR is set (for vtdump -png).
+func (f *screenFixture) dump(name string) {
+	dir := os.Getenv("GTF_DUMP_DIR")
+	if dir == "" {
+		return
+	}
+	f.term.mu.Lock()
+	defer f.term.mu.Unlock()
+	os.WriteFile(filepath.Join(dir, name+".bytes"), f.term.buf, 0o644)
+}
+
+func TestCmcpScreensDraw(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	for _, id := range []string{"operations", "power", "damage", "sensors", "tactical", "helm"} {
+		cons := map[string]string{"sensors": "science", "tactical": "tactical", "helm": "navigation"}[id]
+		f.console("std."+id, cons, nil)
+		txt := f.text()
+		t.Logf("== %s\n%s", id, f.term.Dump())
+		if !strings.Contains(txt, strings.ToUpper(strings.Split(id, ".")[0])) {
+			t.Errorf("%s: header missing:\n%s", id, txt)
+		}
+		f.dump(id)
+	}
+}
+
+func (f *screenFixture) keys(seq ...string) {
+	for _, k := range seq {
+		f.c.Do(func(*gtfparser.Interp) { f.c.onKeys(k) })
+	}
+	f.render()
+}
+
+const (
+	kF2    = "\x1bOQ"
+	kEnter = "\r"
+	kDown  = "\x1b[B"
+	kUp    = "\x1b[A"
+	kRight = "\x1b[C"
+	kTab   = "\t"
+)
+
+// E4 in the cell client: damage control, team 1 to Port_Nacelle by keyboard; the command is
+// echoed as typed text, sent with the epoch, and the game ran it.
+func TestCmcpDamageAssignByKeyboard(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.damage", "operations", nil)
+	f.keys(kF2, kEnter, kDown, kEnter) // focus on; pick team 1; move to Port_Nacelle; assign
+	cmEventually(t, "command ran", func() bool { return len(f.game.commands()) == 1 })
+	if got := f.game.commands()[0]; got != `dmg.assign {"system":"Port_Nacelle","team":1}` {
+		t.Fatalf("ran %q", got)
+	}
+	f.render()
+	mustContain(t, f.term.Screen, "cmcp> dmg assign 1=Port_Nacelle")
+}
+
+// The real input line always works: with focus on, a typed line is not taken by the screen.
+func TestCmcpInputLineStillWorks(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	f.keys(kF2)
+	f.keys("l", "o", "o", "k")
+	f.render()
+	if got := f.inputText(); got != "look" {
+		t.Fatalf("input line %q", got)
+	}
+	// with text in the line, Enter submits it: the screen must not act
+	f.keys(kEnter)
+	if n := len(f.game.commands()); n != 0 {
+		t.Fatalf("screen acted on a typed line: %v", f.game.commands())
+	}
+}
+
+func (f *screenFixture) inputText() (s string) {
+	f.c.Do(func(in *gtfparser.Interp) { s = in.Input().Text() })
+	return
+}
+
+// A read-only console (AI flies the ship): the screen stays, no command is offered or sent.
+func TestCmcpReadOnlyOffersNoCommands(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", func(c *msg.Console) { c.Readonly = true; c.Reason = "ai_on"; c.Commands = nil; c.Ship.AI = true })
+	f.keys(kF2, kEnter) // would click HATCH
+	time.Sleep(100 * time.Millisecond)
+	if n := len(f.game.commands()); n != 0 {
+		t.Fatalf("sent while read-only: %v", f.game.commands())
+	}
+	mustContain(t, f.term.Screen, "read-only")
+}
+
+var updateGolden = flag.Bool("update", false, "rewrite the golden screens")
+
+// surface is the drawn screen (widgets only; the text pane is blank in it) as text.
+func (f *screenFixture) surface() string {
+	var out string
+	f.c.Do(func(*gtfparser.Interp) {
+		if f.c.ui.Surf != nil {
+			out = f.c.ui.Surf.Grid.Text()
+		}
+	})
+	return out
+}
+
+func golden(t *testing.T, name, got string) {
+	t.Helper()
+	p := filepath.Join("testdata", "golden", name+".txt")
+	if *updateGolden {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("no golden %s (run with -update): %v", p, err)
+	}
+	if string(want) != got {
+		t.Errorf("%s differs from golden:\n--- got\n%s\n--- want\n%s", name, got, want)
+	}
+}
+
+// Golden screens: every built-in screen on the example data of the spec.
+func TestCmcpGoldenScreens(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	for _, id := range []string{"operations", "power", "damage", "sensors", "tactical", "helm"} {
+		cons := map[string]string{"sensors": "science", "tactical": "tactical", "helm": "navigation"}[id]
+		f.console("std."+id, cons, nil)
+		golden(t, id, f.surface())
+	}
+}
+
+// The same screens on a narrow terminal: still drawn, the text pane keeps its minimum.
+func TestCmcpGoldenNarrow(t *testing.T) {
+	f := newScreenFixture(t, 80, 24)
+	for _, id := range []string{"operations", "damage"} {
+		f.console("std."+id, "", nil)
+		golden(t, id+"-80x24", f.surface())
+	}
+}
+
+// A tiny terminal: whatever the screen draws, the text pane keeps a usable size.
+func TestCmcpTinyTerminalKeepsText(t *testing.T) {
+	f := newScreenFixture(t, 40, 10)
+	f.console("std.operations", "", nil)
+	var r layout.Rect
+	f.c.Do(func(*gtfparser.Interp) { r = f.c.ui.MainRect() })
+	if r.H < 4 || r.W < 30 {
+		t.Fatalf("text pane %+v", r)
+	}
+}

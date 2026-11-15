@@ -32,6 +32,8 @@ internal/squatter/   squatter daemon + tf bridge built into gtf (SquatClient pai
                      package plus copies of the reference wire/auth/tlsutil/proto/scrollback packages
                      as subdirectories; imports nothing from gtf; only internal/client imports it
                      (docs/SQUATTER.md)
+internal/cmcpui/     CMCP cell renderer: a bound screen tree (cmcp core `pack`) -> a grid of truecolor cells, keyboard
+                     operation of the widgets, themes (plain + empire accents); no protocol logic (docs/CMCP.md)
 internal/layout/     panel/layout system: templates, bindings, widgets, layout engine -> cell grids
 internal/raster/     (experimental) vector sprite rasteriser: JSON/path-data art -> anti-aliased RGBA -> terminal cells
                      (half block, quadrants, sextants, Braille, ASCII; 24-bit/256/16/mono); standard library only,
@@ -50,13 +52,14 @@ in gtf and is loaded on top of it.
 
 ```
 cmd/gtf          -> internal/client, gtflib
-internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/raster, internal/update, internal/handoff, gtflib, the engine module
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/cmcpui, internal/raster, internal/update, internal/handoff, gtflib, the engine module
 internal/handoff -> nothing internal
 internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/squatter(/...), gtflib, the engine module
 internal/squatter -> itself only (no gtf package, no engine)
 internal/ui      -> internal/layout
 internal/net     -> internal/net/... only
 internal/layout  -> nothing internal
+internal/cmcpui  -> internal/layout
 internal/raster  -> nothing internal
 internal/update  -> nothing internal
 gtflib           -> nothing internal

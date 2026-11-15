@@ -1,0 +1,10 @@
+{
+  "package": "Cobra.Event",
+  "payload": {
+    "type": "destroyed",
+    "data": {
+      "cid": 17
+    },
+    "t": 1794674009000
+  }
+}

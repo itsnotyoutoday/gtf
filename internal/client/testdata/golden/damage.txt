@@ -1,0 +1,35 @@
+ Damage Control  -  SS Booty King                                                                              F2: keys
+DAMAGE CONTROL  -  hull 806.16 / 875.00
+TEAMS                                                                                     Damage statistics
+  T1  crew 10  Hull                                                                         Port_Nacelle    ██████████▎░
+  T2  crew 10  Hull                                                                         Starboard_Nacel ██████████▎░
+  T3  crew 10  Hull
+  T4  crew 10  Hull
+  T5  crew 10  Hull                              ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄
+ASSIGN TO                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  Hull                                       ▄▄▄▀▀▄▄▄▄▄▄▄▀▀▀▀▄▄▄▄
+  Port_Nacelle                           ▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄
+  Starboard_Nacelle                 ▄▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄
+                                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                         ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                             ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                 ▄▄▄▄▄▄▄▄▀▀▀▀▄▄▄▄▄▄▄▄
+                                                 ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄
+
+
+
+
+
+Enter: choose a team          zone: hull
+Hull integrity
+                                                                                                                       ▆
+                                                                                                                       █
+                                                                                                                       █
+
+
+
+
+
+
+
+

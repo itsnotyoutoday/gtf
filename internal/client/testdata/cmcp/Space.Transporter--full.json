@@ -1,0 +1,101 @@
+{
+  "package": "Space.Transporter",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "state": "ready",
+      "mode": null,
+      "pads": {
+        "1": {
+          "label": "Pad 1",
+          "occupants": {
+            "a1": {
+              "name": "Lt. Okonkwo",
+              "role": "engineering"
+            },
+            "a2": {
+              "name": "Ens. Pell",
+              "role": "operations"
+            }
+          }
+        },
+        "2": {
+          "label": "Pad 2",
+          "occupants": {}
+        },
+        "3": {
+          "label": "Pad 3",
+          "occupants": {}
+        },
+        "4": {
+          "label": "Pad 4",
+          "occupants": {}
+        }
+      },
+      "destinations": {
+        "11": {
+          "cid": 11,
+          "name": "AST5716",
+          "distance_m": 797.8,
+          "in_range": true,
+          "status": "ready",
+          "reasons": [],
+          "lock_quality": 0.82
+        },
+        "15": {
+          "cid": 15,
+          "name": "UFPTRukh",
+          "distance_m": 775968000.0,
+          "in_range": false,
+          "status": "blocked",
+          "reasons": [
+            "range",
+            "shields"
+          ],
+          "lock_quality": 0.0
+        },
+        "17": {
+          "cid": 17,
+          "name": "UFP40EA1",
+          "distance_m": 163000000000.0,
+          "in_range": false,
+          "status": "blocked",
+          "reasons": [
+            "range"
+          ],
+          "lock_quality": 0.0
+        }
+      },
+      "selected": {
+        "cid": 11
+      },
+      "lock": {
+        "state": "held",
+        "quality": 0.82
+      },
+      "buffer": {
+        "level": 0.7,
+        "integrity": 0.96
+      },
+      "power": {
+        "draw_w": 2400000.0,
+        "available_w": 6000000.0,
+        "allocated_pct": 40
+      },
+      "tune": {
+        "power_pct": 40,
+        "pattern_pct": 65
+      },
+      "progress": {
+        "pct": 0,
+        "phase": "idle",
+        "eta_s": 0
+      },
+      "range_m": 40000.0,
+      "cooldown_s": 0.0
+    }
+  }
+}

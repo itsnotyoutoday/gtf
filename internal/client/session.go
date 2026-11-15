@@ -61,6 +61,7 @@ type Session struct {
 	restartEnd string
 	// resizeAfterRestore: the window changed size while the old and the new process swapped
 	resizeAfterRestore bool
+	cs                 *cmcpScr        // the screen state of cm (cmcpscreen.go)
 	cm                 *session.Client // the CMCP session of this connection (cmcp.go); nil until GMCP is on
 	squatID            string          // this connection's id in the squatter ("" when it is off)
 	endReason          string          // why the connection ended (a squatter end reason), for the squatter

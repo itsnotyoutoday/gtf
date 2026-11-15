@@ -1,0 +1,41 @@
+{
+  "package": "Space.Weapons",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "mounts": {
+        "Fore_Phaser_1": {
+          "type": "phaser",
+          "state": "ready",
+          "charge_pct": 100,
+          "arc": "fore",
+          "range_m": 500000.0
+        },
+        "Aft_Phaser_1": {
+          "type": "phaser",
+          "state": "charging",
+          "charge_pct": 42,
+          "arc": "aft",
+          "range_m": 500000.0
+        }
+      },
+      "tubes": {
+        "1": {
+          "state": "loaded",
+          "loaded": "Photon"
+        },
+        "2": {
+          "state": "empty",
+          "loaded": null
+        }
+      },
+      "stock": {
+        "Photon": 12
+      },
+      "target": null
+    }
+  }
+}

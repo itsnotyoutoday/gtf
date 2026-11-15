@@ -1,0 +1,38 @@
+{
+  "package": "Space.Damage.Teams",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "teams": {
+        "1": {
+          "crew": 10,
+          "assign": "Hull"
+        },
+        "2": {
+          "crew": 10,
+          "assign": "Hull"
+        },
+        "3": {
+          "crew": 10,
+          "assign": "Hull"
+        },
+        "4": {
+          "crew": 10,
+          "assign": "Hull"
+        },
+        "5": {
+          "crew": 10,
+          "assign": "Hull"
+        }
+      },
+      "assignable": [
+        "Hull",
+        "Port_Nacelle",
+        "Starboard_Nacelle"
+      ]
+    }
+  }
+}

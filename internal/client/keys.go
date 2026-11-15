@@ -19,6 +19,9 @@ func (c *Client) onKeys(s string) {
 		c.keyTimer.Stop()
 		c.keyTimer = nil
 	}
+	if c.cmcpKeys(s) {
+		return
+	}
 	for len(s) > 0 {
 		// split after each Enter so we can see the line that was submitted
 		n := len(s)

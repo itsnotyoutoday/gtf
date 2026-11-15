@@ -40,7 +40,11 @@ type UI struct {
 
 	Layout   *layout.Layout
 	Resolver layout.Resolver
-	frame    layout.Frame
+	// Surf, when set (and sized for the current output area), is a drawn screen (a CMCP console)
+	// that replaces the docked panels: its grid is painted first and the scrollback is drawn on
+	// top inside Surf.Text, so the text pane is never covered.
+	Surf  *Surface
+	frame layout.Frame
 
 	shadow   []layout.Cell
 	shW      int
@@ -56,6 +60,19 @@ type UI struct {
 	nvQueue   []nvItem // lines entered in non-visual mode, printed in order with the output
 	// Cursor position after the last render (for tests).
 	CursorX, CursorY int
+}
+
+// Surface is a drawn screen around the text pane (see UI.Surf).
+type Surface struct {
+	Grid *layout.Grid // OutRows rows, full width; the Text rectangle is blank in it
+	Text layout.Rect  // where the scrollback goes
+}
+
+func (u *UI) surface() *Surface {
+	if u.Surf != nil && u.Visual && u.Surf.Grid != nil && u.Surf.Grid.W == u.W && u.Surf.Grid.H == u.OutRows() && u.Surf.Text.W > 0 {
+		return u.Surf
+	}
+	return nil
 }
 
 // Editor is the input line the UI displays.
@@ -103,6 +120,9 @@ func (u *UI) MainRect() layout.Rect {
 func (u *UI) Winlines() int { return u.MainRect().H }
 
 func (u *UI) computeFrame() layout.Frame {
+	if sf := u.surface(); sf != nil {
+		return layout.Frame{W: u.W, H: u.OutRows(), Main: sf.Text}
+	}
 	if u.Layout == nil || !u.Visual || len(u.Layout.Panels()) == 0 {
 		return layout.Frame{W: u.W, H: u.OutRows(), Main: layout.Rect{W: u.W, H: u.OutRows()}}
 	}
@@ -293,6 +313,13 @@ func (u *UI) compose() (*grid, int, int) {
 	if f.Main.W == 0 {
 		main = layout.Rect{W: u.W, H: outRows}
 	}
+	if sf := u.surface(); sf != nil {
+		for y := 0; y < sf.Grid.H; y++ {
+			for x := 0; x < sf.Grid.W; x++ {
+				g.put(x, y, sf.Grid.At(x, y))
+			}
+		}
+	}
 	s := u.Scr
 	s.rewrap(main.W, u.Wrap)
 	// output window: bottom-aligned physical lines [vis-n, vis)
@@ -312,7 +339,7 @@ func (u *UI) compose() (*grid, int, int) {
 		}
 	}
 	// panels
-	for _, p := range f.Panels {
+	for _, p := range f.Panels { // (none while a Surface is shown)
 		pg := u.Layout.Render(p.P, p.W, p.H, u.Resolver)
 		for y := 0; y < pg.H; y++ {
 			for x := 0; x < pg.W; x++ {

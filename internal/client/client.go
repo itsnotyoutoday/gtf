@@ -458,6 +458,7 @@ func (c *Client) Flush() { c.Do(func(*gtfparser.Interp) { c.checkLayoutDeps(); c
 
 // syncUI copies interpreter state that affects the display into the UI.
 func (c *Client) syncUI() {
+	c.cmcpSyncSurface()
 	in := c.in
 	u := c.ui
 	ts := in.TermSettings()

@@ -1,0 +1,99 @@
+{
+  "package": "Space.Contacts",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "contacts": {
+        "3": {
+          "cid": 3,
+          "name": "Vulcan",
+          "bearing": {
+            "az": 333,
+            "mark": 22
+          },
+          "rel": {
+            "az": 271,
+            "mark": -27
+          },
+          "distance_m": 394044000.0,
+          "distance_text": "394044km",
+          "facing": "lP:la",
+          "type": "Planet",
+          "class": "M"
+        },
+        "5": {
+          "cid": 5,
+          "name": "40 Eridani A",
+          "bearing": {
+            "az": 94,
+            "mark": 33
+          },
+          "rel": {
+            "az": 166,
+            "mark": -4
+          },
+          "distance_m": 130150147509.0,
+          "distance_text": "0.87AU",
+          "facing": "-A:LP"
+        },
+        "17": {
+          "cid": 17,
+          "name": "UFP40EA1",
+          "bearing": {
+            "az": 108,
+            "mark": 22
+          },
+          "rel": {
+            "az": 152,
+            "mark": 3
+          },
+          "distance_m": 163061679063.0,
+          "distance_text": "1.09AU",
+          "facing": "-a:hP",
+          "type": "Ship",
+          "class": "Marauder",
+          "iff": "friend",
+          "size_m": 120,
+          "heading": {
+            "az": 20,
+            "mark": 0,
+            "roll": 0
+          }
+        },
+        "15": {
+          "cid": 15,
+          "name": "UFPTRukh",
+          "bearing": {
+            "az": 337,
+            "mark": 26
+          },
+          "rel": {
+            "az": 265,
+            "mark": -28
+          },
+          "distance_m": 775968000.0,
+          "distance_text": "775968km",
+          "facing": "lP:LA"
+        },
+        "11": {
+          "cid": 11,
+          "name": "AST5716",
+          "bearing": {
+            "az": 258,
+            "mark": -89
+          },
+          "rel": {
+            "az": 0,
+            "mark": 60
+          },
+          "distance_m": 797.8,
+          "distance_text": "797.8m",
+          "facing": "AF:AS"
+        }
+      }
+    }
+  }
+}

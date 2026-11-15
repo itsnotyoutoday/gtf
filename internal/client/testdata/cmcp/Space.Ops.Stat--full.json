@@ -1,0 +1,28 @@
+{
+  "package": "Space.Ops.Stat",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "transponder": {
+        "on": true,
+        "code": "FCGR7043"
+      },
+      "vessel": {
+        "name": "SS Booty King",
+        "class": "Marauder",
+        "mass": {
+          "value": 0.02,
+          "unit": "gt"
+        },
+        "visibility_m": 6404092.62
+      },
+      "hatch": "closed",
+      "can_land": true,
+      "can_launch": true,
+      "docking_doors": "not_present"
+    }
+  }
+}

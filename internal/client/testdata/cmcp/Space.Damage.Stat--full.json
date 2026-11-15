@@ -1,0 +1,27 @@
+{
+  "package": "Space.Damage.Stat",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "hull": {
+        "cur": 806.16,
+        "max": 875.0
+      },
+      "systems": {
+        "Port_Nacelle": {
+          "cur": 86.4,
+          "max": 100.0
+        },
+        "Starboard_Nacelle": {
+          "cur": 86.4,
+          "max": 100.0
+        }
+      }
+    },
+    "t": 1794674001000,
+    "tick": 4412
+  }
+}

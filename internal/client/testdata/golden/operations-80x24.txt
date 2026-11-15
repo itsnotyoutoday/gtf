@@ -1,0 +1,19 @@
+ Operations  -  SS Booty King                                          F2: keys
+OPERATIONS  -  SS BOOTY KING
+
+VESSEL                     TRACTOR BEAM               CONTACTS
+Name: SS Booty King        Integri ██████████ 100/100   11  AST5716          258
+Class: Marauder            Lock: none                   3   Vulcan           333
+Transponder: On  FCGR7043  Destination: not set         15  UFPTRukh         337
+Hatch: CLOSED              [ LOCK ] [ ENGAGE ] [RESET   5   40 Eridani A     094
+Docking doors: not_present                              17  UFP40EA1         108
+[ HATCH ]                                             [ SRS ] [ LRS ] [PASSIVE]
+
+
+
+
+
+
+
+
+

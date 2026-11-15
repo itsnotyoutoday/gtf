@@ -1,0 +1,87 @@
+{
+  "package": "Space.Power",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "pools": {
+        "main_w": 5400000000.0,
+        "aux_w": 1000000000.0,
+        "battery_w": 4000000.0,
+        "total_w": 6400000000.0
+      },
+      "components": {
+        "w": 3855000000.0,
+        "pct": 60
+      },
+      "repair": {
+        "w": 0,
+        "pct": 0
+      },
+      "battery_charge": {
+        "w": 150,
+        "pct": 0
+      },
+      "generators": {
+        "Warp_Core": {
+          "kind": "main",
+          "setting_pct": 100,
+          "output_w": 5400000000.0,
+          "max_w": 5400000000.0,
+          "status": "running"
+        },
+        "Impulse_Engine": {
+          "kind": "aux",
+          "setting_pct": 100,
+          "output_w": 1000000000.0,
+          "max_w": 1000000000.0,
+          "status": "running"
+        },
+        "Battery": {
+          "kind": "emergency",
+          "setting_pct": 100,
+          "status": "standing by"
+        }
+      },
+      "groups": {
+        "1": {
+          "name": "Arrays",
+          "pct": 5,
+          "w": 350000000.0
+        },
+        "2": {
+          "name": "Cloak",
+          "pct": 0,
+          "w": 0
+        },
+        "3": {
+          "name": "Fuel",
+          "pct": 0,
+          "w": 0
+        },
+        "4": {
+          "name": "Operations",
+          "pct": 0,
+          "w": 4500000.0
+        },
+        "5": {
+          "name": "Shields",
+          "pct": 0,
+          "w": 0
+        },
+        "6": {
+          "name": "Warp",
+          "pct": 55,
+          "w": 3500000000.0
+        },
+        "7": {
+          "name": "Weapons",
+          "pct": 0,
+          "w": 0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "package": "Cobra.Console",
+  "payload": {
+    "rev": 3,
+    "ship": {
+      "id": "ss-booty-king",
+      "name": "SS Booty King",
+      "class": "Marauder",
+      "empire": "federation",
+      "epoch": 1,
+      "ai": false,
+      "theme": "tng",
+      "pack": {
+        "id": "fspace-std",
+        "version": "1.0.0",
+        "sha256": "d762163c9c2b1c9b2c162b9c85e67f634c848a723099c25f9fea87e080ff9b56"
+      }
+    },
+    "console": {
+      "id": "operations",
+      "name": "Operations Console",
+      "manned_by": "Nveid"
+    },
+    "reason": "manned",
+    "screen": "fspace-std/operations",
+    "title": "Operations",
+    "subscribe": [
+      {
+        "pkg": "Space.Damage.Stat",
+        "rate_ms": 1000
+      },
+      {
+        "pkg": "Space.Damage.Teams"
+      },
+      {
+        "pkg": "Space.Power",
+        "rate_ms": 1000
+      },
+      {
+        "pkg": "Space.Power.Group",
+        "rate_ms": 1000
+      },
+      {
+        "pkg": "Space.Ops.Stat"
+      },
+      {
+        "pkg": "Space.Tractor"
+      },
+      {
+        "pkg": "Space.Contacts",
+        "rate_ms": 1000
+      },
+      {
+        "pkg": "Space.Ship.Status",
+        "rate_ms": 1000
+      }
+    ],
+    "commands": [
+      "dmg.assign",
+      "power.set",
+      "eng.main",
+      "eng.aux",
+      "hatch.toggle",
+      "dock.doors",
+      "tractor.lock",
+      "tractor.engage",
+      "tractor.reset",
+      "scan.srs",
+      "scan.lrs",
+      "scan.passive",
+      "scan.internal",
+      "scan.dock"
+    ]
+  }
+}

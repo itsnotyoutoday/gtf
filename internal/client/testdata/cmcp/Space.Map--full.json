@@ -1,0 +1,73 @@
+{
+  "package": "Space.Map",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "sector": {
+        "id": "40-eridani",
+        "name": "40 Eridani",
+        "size_m": 2000000000.0
+      },
+      "bodies": {
+        "star-a": {
+          "id": "star-a",
+          "kind": "star",
+          "name": "40 Eridani A",
+          "pos_m": [
+            1100000000.0,
+            900000000.0,
+            1000000000.0
+          ],
+          "radius_m": 700000000.0
+        },
+        "vulcan": {
+          "id": "vulcan",
+          "kind": "planet",
+          "name": "Vulcan",
+          "pos_m": [
+            300000000.0,
+            1200000000.0,
+            1000000000.0
+          ],
+          "radius_m": 6500000.0
+        },
+        "ast5716": {
+          "id": "ast5716",
+          "kind": "asteroids",
+          "name": "AST5716",
+          "pos_m": [
+            1000000000.0,
+            1000000000.0,
+            1000000000.0
+          ],
+          "radius_m": 400
+        }
+      },
+      "waypoints": {
+        "wp1": {
+          "id": "wp1",
+          "name": "Beacon site",
+          "pos_m": [
+            1000000000.0,
+            1000000000.0,
+            1000000000.0
+          ],
+          "by": "science"
+        }
+      },
+      "course": {
+        "legs": [
+          "wp1"
+        ],
+        "leg": 0,
+        "eta_s": 540,
+        "dist_m": 82000000.0,
+        "mode": "impulse",
+        "engaged": true
+      }
+    }
+  }
+}

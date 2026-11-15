@@ -1,0 +1,38 @@
+{
+  "package": "Space.Nav",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "speed_mps": 0.0,
+      "bearing": {
+        "az": 258.52,
+        "mark": -30.0
+      },
+      "heading": {
+        "az": 0.0,
+        "mark": 0.0,
+        "roll": 1.7
+      },
+      "warp": {
+        "factor": 0.0,
+        "max": 9.0
+      },
+      "position": {
+        "quadrant": "Beta+",
+        "sector": [
+          1300,
+          0,
+          2
+        ],
+        "system": [
+          1187,
+          482,
+          1500
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "package": "Cobra.Event",
+  "payload": {
+    "type": "hit",
+    "data": {
+      "cid": "self",
+      "shield": true,
+      "facing": "port",
+      "strength": 0.7
+    },
+    "t": 1794674004100
+  }
+}

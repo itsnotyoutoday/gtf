@@ -1,0 +1,19 @@
+{
+  "package": "Space.Comms",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "channels": {
+        "1": {
+          "name": "Hailing",
+          "freq": 1.2,
+          "active": true
+        }
+      },
+      "transmitting": false
+    }
+  }
+}

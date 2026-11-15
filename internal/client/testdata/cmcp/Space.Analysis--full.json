@@ -1,0 +1,36 @@
+{
+  "package": "Space.Analysis",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "analyses": {
+        "17": {
+          "cid": 17,
+          "kind": "shields",
+          "state": "done",
+          "progress": 100,
+          "by": "science",
+          "findings": {
+            "class": "Marauder",
+            "hull_pct": 100,
+            "shield_freq": 412.5,
+            "weak_facing": "port",
+            "weaknesses": {
+              "w1": {
+                "system": "port_shield_emitter",
+                "effect": "Shield drops 30% faster on the port facing",
+                "bonus": 0.3
+              }
+            },
+            "crew": 18,
+            "cargo": "mining equipment",
+            "threat": 3.5
+          }
+        }
+      }
+    }
+  }
+}

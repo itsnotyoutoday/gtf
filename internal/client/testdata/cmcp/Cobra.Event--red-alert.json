@@ -1,0 +1,9 @@
+{
+  "package": "Cobra.Event",
+  "payload": {
+    "type": "alert",
+    "level": "red",
+    "text": "Red alert!",
+    "t": 1794674000000
+  }
+}

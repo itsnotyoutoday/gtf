@@ -1,0 +1,22 @@
+{
+  "package": "Space.Ship.Status",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "name": "SS Booty King",
+      "class": "Marauder",
+      "alert": "green",
+      "hull": {
+        "cur": 806.16,
+        "max": 875.0
+      },
+      "shields_pct": 0,
+      "core_pct": 60,
+      "power_pct": 100,
+      "lock": null
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "package": "Space.Tractor",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "power_pct": 100,
+      "integrity_pct": 100,
+      "destination": null,
+      "lock": null,
+      "engaged": false
+    }
+  }
+}

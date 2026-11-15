@@ -50,7 +50,8 @@ func (c *Client) cmcpConfig(s *Session) session.Config {
 		Render:         &msg.Render{Kind: "cell", FPS: 4},
 		Themes:         cmcpThemeNames(),
 		Theme:          c.cmcpTheme(),
-		LayerSendsGate: true, // the gmcp handler sends Core.Hello and Core.Supports.Set
+		MaxBody:        65536, // the Welcome with the whole catalogue is about 20 KiB
+		LayerSendsGate: true,  // the gmcp handler sends Core.Hello and Core.Supports.Set
 		Packs:          &msg.HelloPacks{Formats: []int{1}},
 		Logf: func(f string, a ...any) {
 			if c.in.Var("cmcp_debug") != "" {

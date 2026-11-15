@@ -1,0 +1,23 @@
+{
+  "package": "Space.Fuel",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "tanks": {
+        "Deuterium": {
+          "cur": 498814,
+          "max": 500000,
+          "unit": "kg"
+        },
+        "Antimatter": {
+          "cur": 299334,
+          "max": 300000,
+          "unit": "kg"
+        }
+      }
+    }
+  }
+}

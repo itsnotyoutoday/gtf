@@ -1,0 +1,13 @@
+{
+  "package": "Cobra.Event",
+  "payload": {
+    "type": "fire",
+    "data": {
+      "kind": "phaser",
+      "from": "self",
+      "to": 17,
+      "mount": "Fore_Phaser_1"
+    },
+    "t": 1794674004000
+  }
+}
