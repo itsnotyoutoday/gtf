@@ -9,6 +9,8 @@ package cmcpui
 import (
 	"strings"
 
+	"github.com/itsnotyoutoday/cmcp/theme"
+
 	"github.com/itsnotyoutoday/gtf/internal/layout"
 )
 
@@ -26,6 +28,11 @@ type Theme struct {
 	Cycle []string
 	// Radar is the sensor picture: dish, hex or rings.
 	Radar string
+	// Pack is the core's reference theme pack this theme was built from (nil for plain); Roles are the
+	// palette roles p s t q x r k bg of the active set, Set which set that is (normal, red, yellow).
+	Pack  *theme.Pack
+	Roles map[string]string
+	Set   string
 }
 
 var themes = map[string]Theme{
@@ -80,12 +87,65 @@ func ThemeNames() []string {
 	return []string{"plain", "tng", "klingon", "romulan", "ferengi", "tos", "soft", "ops"}
 }
 
-// ThemeByName returns a theme (plain for an unknown name).
+// ThemeByName returns a theme: one of the core's embedded reference theme packs read through its
+// `cell` rendition (tng, klingon, romulan, ferengi, tos, soft, ops), or plain for anything else.
 func ThemeByName(name string) Theme {
-	if t, ok := themes[strings.ToLower(name)]; ok {
-		return t
+	id := strings.ToLower(name)
+	if p := theme.Builtin(id); p != nil {
+		return themeFromPack(p, "normal")
 	}
 	return themes["plain"]
+}
+
+// themeFromPack builds a Theme from a theme pack and one of its palette sets (spec 19.3: the token
+// mapping color.accent = p, accent2 = k, text = s, dim = t, bg = bg, ok = x, warn = r, alert = the
+// red set's r).
+func themeFromPack(p *theme.Pack, set string) Theme {
+	pal := p.Pal[set]
+	if pal == nil {
+		set, pal = "normal", p.Pal["normal"]
+	}
+	red := p.Pal["red"]
+	alert := pal["r"]
+	if red != nil {
+		alert = red["r"]
+	}
+	t := Theme{Name: p.ID, PaintBG: true, Style: p.ID, Radar: "dish", Pack: p, Roles: pal, Set: set,
+		Tokens: map[string]string{"color.bg": pal["bg"], "color.panel": pal["bg"], "color.text": pal["s"], "color.dim": pal["t"],
+			"color.accent": pal["p"], "color.accent2": pal["k"], "color.ok": pal["x"], "color.warn": pal["r"], "color.alert": alert}}
+	for _, r := range []string{"p", "s", "t", "q", "x", "r", "k"} {
+		t.Cycle = append(t.Cycle, pal[r])
+	}
+	switch p.ID {
+	case "klingon":
+		t.Radar = "hex"
+	case "romulan":
+		t.Radar = "rings"
+	}
+	return t
+}
+
+// withAlert returns the theme in the palette set an alert shows (the red set on red alert, the
+// yellow one on yellow when the theme has it): shapes recolour for free because every colour is a role.
+func (t Theme) withAlert(alert string) Theme {
+	if t.Pack == nil {
+		return t
+	}
+	set, _ := t.Pack.Recolour(alert, false, true)
+	if set == t.Set {
+		return t
+	}
+	return themeFromPack(t.Pack, set)
+}
+
+// role resolves a palette role (p s t q x r k bg) of the active set; unknown roles are the text colour.
+func (t Theme) role(r string) layout.Color {
+	if c, ok := t.Roles[r]; ok {
+		if col, err := layout.ParseColor(c); err == nil {
+			return col
+		}
+	}
+	return t.Token("color.text")
 }
 
 // Token resolves a token name such as "color.accent" to a colour.

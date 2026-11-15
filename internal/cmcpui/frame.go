@@ -11,7 +11,15 @@ import (
 
 // margins returns the rows the theme's frame takes at the top and the bottom of the screen area.
 // The text pane and every widget live between them; the frame never enters that area.
+// Margins exports the frame's top and bottom rows.
+func (t Theme) Margins(h int) (top, bottom int) { return t.margins(h) }
+
 func (t Theme) margins(h int) (top, bottom int) {
+	if t.isCellTheme() {
+		c := cellDoc(t)
+		m := jmap(c, "margin")
+		return int(jnum(m, "top", 1)), int(jnum(m, "bottom", 1))
+	}
 	switch t.Style {
 	case "tng":
 		if h < 28 {
@@ -25,6 +33,13 @@ func (t Theme) margins(h int) (top, bottom int) {
 // leftCols is the width of the console-switch column the frame carries on a wide terminal (a
 // decoration: the screens follow manning and rooms, the column shows which console this is).
 func (t Theme) leftCols(w int) int {
+	if t.isCellTheme() {
+		n := jmap(cellDoc(t), "nav")
+		if n != nil && len(jlist(n, "items")) > 0 && w >= int(jnum(n, "min_cols", 100)) {
+			return int(jnum(n, "width", 12))
+		}
+		return 0
+	}
 	if t.Style == "tng" && w >= 110 {
 		return 13
 	}
@@ -51,9 +66,11 @@ func consoleTab(title string) int {
 
 // frameTop draws the top of the frame (or the plain header row).
 func (d *drawer) frameTop() {
-	switch d.env.Theme.Style {
-	case "tng":
+	switch {
+	case d.env.Theme.Style == "tng":
 		d.tngBands()
+	case d.env.Theme.isCellTheme():
+		d.cellFrame()
 	default:
 		d.header()
 	}
@@ -62,13 +79,9 @@ func (d *drawer) frameTop() {
 // frameBottom draws the bottom strip once the focused widget's hint is known.
 func (d *drawer) frameBottom() {}
 
-// alertPalette gives the band colours: the theme's rainbow, or the red of a red alert.
-func (d *drawer) bandColor(i int) layout.Color {
-	if d.env.Alert == "red" {
-		return [3]layout.Color{{Kind: layout.RGB, R: 204, G: 40, B: 40}, {Kind: layout.RGB, R: 255, G: 90, B: 60}, {Kind: layout.RGB, R: 150, G: 30, B: 30}}[i%3]
-	}
-	return d.env.Theme.cycle(i)
-}
+// bandColor is the i-th colour of the theme's rainbow in the active palette set: the reference
+// theme's own palette, red when a red alert switched the set.
+func (d *drawer) bandColor(i int) layout.Color { return d.env.Theme.cycle(i) }
 
 // seg is one coloured segment of a band: its label and width in cells (0 = takes the rest).
 type seg struct {

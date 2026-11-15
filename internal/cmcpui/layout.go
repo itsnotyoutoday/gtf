@@ -43,6 +43,7 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	if env.Theme.Name == "" {
 		env.Theme = ThemeByName("plain")
 	}
+	env.Theme = env.Theme.withAlert(env.Alert)
 	bl := env.Theme.blank()
 	for i := range g.Cells {
 		g.Cells[i].A = bl
@@ -52,7 +53,11 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		f.Compact = true
 		return f
 	}
-	a := &arranger{need: max(8, h*45/100)} // the output stays big: 45% of the height (spec, owner rule)
+	need := env.TextRows
+	if need <= 0 {
+		need = max(8, h*35/100) // the output stays big: balanced is 35% of the height
+	}
+	a := &arranger{need: need}
 	top, bottom := env.Theme.margins(h)
 	left := env.Theme.leftCols(w)
 	inner := Rect{X: left, Y: top, W: w - left, H: h - top - bottom}
@@ -64,12 +69,22 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		mode = "tree"
 		if env.Builtin && inner.W >= 70 && inner.H >= 14 {
 			mode = "console" // the built-in screens are arranged by the theme (docs/CMCP-THEMES.md)
+			if env.Theme.isCellTheme() && jmap(jmap(cellDoc(env.Theme), "arrange"), env.ScreenID) != nil {
+				mode = "cell" // the theme's own fractions (spec 19.8)
+			}
 		}
 	}
 	switch {
 	case mode == "expanded":
 		a.text, a.hasTxt = Rect{X: inner.X, Y: inner.Y + 1, W: inner.W, H: inner.H - 1}, true
 		a.summary = Rect{X: 0, Y: inner.Y, W: w, H: 1}
+	case mode == "cell":
+		rows := min(max(need, 6), inner.H-2)
+		if rest := stripText(root); rest != nil {
+			panels := Rect{X: inner.X, Y: inner.Y, W: inner.W, H: inner.H - rows}
+			a.text, a.hasTxt = Rect{X: inner.X, Y: inner.Y + panels.H, W: inner.W, H: rows}, true
+			a.cellArrange(rest, panels, env.Theme, env.ScreenID)
+		}
 	case mode == "console":
 		if rest := stripText(root); rest != nil {
 			a.console(rest, inner)
@@ -112,7 +127,6 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		}
 	}
 	d := &drawer{f: f, env: env, st: st, c: &canvas{g: g, clip: Rect{W: w, H: h}}}
-	d.frameTop()
 	for _, p := range a.leaves {
 		d.collect(p)
 		f.Boxes = append(f.Boxes, p.r)
@@ -130,6 +144,19 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	if outer != f.Text {
 		d.textBorder(outer)
 	}
+	if rest := stripText(root); rest != nil && mode != "expanded" {
+		total := 0
+		rest.Walk(func(b *pack.BoundNode) {
+			if b.Visible && !isContainer(b) && b.Widget != "" {
+				total++
+			}
+		})
+		if dropped := total - len(a.leaves); dropped > 0 {
+			f.Dropped = dropped
+			d.env.Tags = append(append([]string(nil), d.env.Tags...), fmt.Sprintf("%d hidden: F3 log, F4 off", dropped))
+		}
+	}
+	d.frameTop()
 	d.frameBottom()
 	if env.ASCII {
 		asciify(g)
@@ -673,7 +700,7 @@ func (a *arranger) console(rest *pack.BoundNode, in Rect) {
 	if len(main) > 0 {
 		bandH = min(max(11, in.H*36/100), 18)
 		bandH = min(bandH, in.H-a.need)
-		if bandH < 8 {
+		if bandH < 4 {
 			bandH = 0
 		}
 	}

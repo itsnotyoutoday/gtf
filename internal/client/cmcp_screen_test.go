@@ -149,7 +149,7 @@ func newScreenFixtureSetup(t *testing.T, w, h int, home string, packs map[string
 	var c *Client
 	d.c = &c
 	var err error
-	c, err = New(Config{Term: term, HomeDir: home, NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true, Now: func() time.Time { return fixedNow }})
+	c, err = New(Config{Term: term, HomeDir: home, NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true, Now: func() time.Time { return nowFn() }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,6 +226,9 @@ func (f *screenFixture) console(screen, console string, mutate func(*msg.Console
 }
 
 var fixedNow = time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+
+// nowFn is the clients' clock in these tests: fixed, unless a test moves it.
+var nowFn = func() time.Time { return fixedNow }
 
 func sortedDocKeys(m map[string]any) []string {
 	var k []string
@@ -584,8 +587,9 @@ func (f *screenFixture) pane() (r layout.Rect, w, h int) {
 }
 
 func TestCmcpTextPaneGeometry(t *testing.T) {
+	nowFn = func() time.Time { return fixedNow }
 	for _, sz := range [][2]int{{80, 24}, {120, 40}, {200, 50}} {
-		f := newScreenFixture(t, sz[0], sz[1])
+		f := newScreenFixtureSetup(t, sz[0], sz[1], t.TempDir(), nil, "/set cmcp_motion=off")
 		for _, id := range []string{"operations", "sensors", "tactical", "damage", "power", "helm"} {
 			cons := map[string]string{"sensors": "science", "tactical": "tactical", "helm": "navigation"}[id]
 			f.console("std."+id, cons, nil)
@@ -663,7 +667,7 @@ func TestCmcpRedAlertRecolours(t *testing.T) {
 		g := f.c.ui.Surf.Grid
 		for _, p := range [][2]int{{20, 1}, {40, 1}, {80, 1}} { // title, ship and tag segments of the top band
 			c := g.At(p[0], p[1])
-			if c.A.BG.Kind != layout.RGB || int(c.A.BG.R) < 120 || int(c.A.BG.G) > 110 {
+			if c.A.BG.Kind != layout.RGB || int(c.A.BG.R) < 120 || int(c.A.BG.R) < int(c.A.BG.G)+60 || int(c.A.BG.R) < int(c.A.BG.B)+60 {
 				bad = append(bad, fmt.Sprintf("%v %+v", p, c.A.BG))
 			}
 		}
@@ -672,4 +676,40 @@ func TestCmcpRedAlertRecolours(t *testing.T) {
 		t.Fatalf("band not red under a red alert: %v", bad)
 	}
 	f.dump("redalert-sensors")
+}
+
+// The LOG toggle animates: the text pane's rows step through whole-cell frames over ~200 ms (a clock the
+// test moves), land exactly on the expanded size, and step back; the input line works meanwhile.
+func TestCmcpLogToggleAnimates(t *testing.T) {
+	clock := fixedNow
+	nowFn = func() time.Time { return clock }
+	defer func() { nowFn = func() time.Time { return fixedNow } }()
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.sensors", "science", nil)
+	r0, _, h := f.pane()
+	f.keys("\x1bOR") // F3
+	var seen []int
+	for i := 0; i < 8; i++ {
+		clock = clock.Add(50 * time.Millisecond)
+		f.render()
+		r, _, _ := f.pane()
+		seen = append(seen, r.H)
+	}
+	last := seen[len(seen)-1]
+	if last*100 < h*75 {
+		t.Fatalf("did not reach the expanded size: %v of %d", seen, h)
+	}
+	mid := 0
+	for _, v := range seen {
+		if v > r0.H && v < last {
+			mid++
+		}
+	}
+	if mid < 2 {
+		t.Fatalf("no intermediate frames: %v (from %d to %d)", seen, r0.H, last)
+	}
+	f.keys("l", "s") // typing works while the screen is in motion
+	if got := f.inputText(); got != "ls" {
+		t.Fatalf("input line %q", got)
+	}
 }

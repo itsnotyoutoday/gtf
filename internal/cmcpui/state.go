@@ -62,11 +62,16 @@ type Env struct {
 	// Title, Ship and Tags fill the frame's strips; Alert is green, yellow or red.
 	Title, Ship string
 	Tags        []string
-	Status      []string // the status strip: hull, shields, core, lock, alert
-	ASCII       bool     // draw with ASCII characters only
-	Layout      string   // "auto" (default), "side" or "top"
-	Header      string
-	Notice      string
+	Status      []string
+	// ScreenID is the built-in screen shown ("std.sensors"); Vars are the closed theme variables of
+	// 19.5 (sd mode hull core lock alert ship class title) for the frame's text templates.
+	TextRows int // the text pane's rows for this frame (the textport state, mid-animation too); 0 = balanced
+	ScreenID string
+	Vars     map[string]any // the status strip: hull, shields, core, lock, alert
+	ASCII    bool           // draw with ASCII characters only
+	Layout   string         // "auto" (default), "side" or "top"
+	Header   string
+	Notice   string
 }
 
 // Effect is a transient viewscreen effect (spec 7.8): fire, hit, destroyed.
@@ -135,7 +140,10 @@ type Frame struct {
 	Grid *layout.Grid
 	// Text is where the real text pane goes (never drawn on). Empty W/H: the whole area is text
 	// (the screen did not fit and was dropped, see Compact).
-	Text    Rect
+	Text Rect
+	// Dropped counts the widgets that did not fit and were not drawn (the frame says so; F3 and F4 are
+	// the way out).
+	Dropped int
 	Compact bool
 	Items   []Item
 	// Boxes are the rectangles of every widget drawn (for the geometry tests: none overlaps another,

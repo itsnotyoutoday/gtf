@@ -4,6 +4,7 @@
 package client
 
 import (
+	"github.com/itsnotyoutoday/cmcp/textport"
 	"strconv"
 	"strings"
 
@@ -151,8 +152,9 @@ func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest stri
 	case "hide", "show":
 		if s != nil && s.cm != nil {
 			cs := s.cmScr()
-			cs.hidden = sub == "hide"
-			c.scheduleRender()
+			if (cs.view.State() == textport.Off) != (sub == "hide") {
+				c.cmcpToggleHide(s)
+			}
 		}
 	case "focus":
 		c.cmcpToggleFocus(s)

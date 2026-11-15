@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/itsnotyoutoday/cmcp/textport"
 	"os"
 	"strings"
 	"time"
@@ -38,14 +39,14 @@ type cmcpScr struct {
 	packs     map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
 	zonesFor  map[string][]string
 	jobs      map[string]*packJob
-	expanded  bool            // the log view: the output takes ~80% of the height (F3)
-	hidden    bool            // the whole screen is off: the text view has the full area (F4)
+	view      *textport.View  // the shared LOG / screen-off / textport_default state machine (cmcp/go/textport)
+	tween     tweenState      // the F3 animation in progress
 	auto      map[string]bool // group pickers that already got their first group selected
 }
 
 func (s *Session) cmScr() *cmcpScr {
 	if s.cs == nil {
-		s.cs = &cmcpScr{hidden: onVar(s.c.in.Var("cmcp_start_collapsed")), st: cmcpui.NewState(), sprites: raster.NewCache(32), packs: map[string]*pack.Pack{}, zonesFor: map[string][]string{}}
+		s.cs = &cmcpScr{view: textport.NewViewWith(onVar(s.c.in.Var("cmcp_start_collapsed")), textport.State(strings.ToLower(strings.TrimSpace(s.c.in.Var("cmcp_textport"))))), st: cmcpui.NewState(), sprites: raster.NewCache(32), packs: map[string]*pack.Pack{}, zonesFor: map[string][]string{}}
 	}
 	return s.cs
 }
@@ -206,7 +207,7 @@ func (c *Client) cmcpSyncSurface() {
 		return
 	}
 	u := s.cm.UI()
-	if u.State != session.StateReady || s.cmScr().hidden {
+	if u.State != session.StateReady || s.cmScr().view.State() == textport.Off {
 		return // the screen is off: data keeps streaming, the text view has the whole area
 	}
 	cs := s.cmScr()
@@ -263,6 +264,7 @@ func (c *Client) cmcpSyncSurface() {
 		}
 	}
 	cs.effects = live
+	textRows := c.cmcpTextRows(s, cs, w, h, th, now)
 	tags := []string{}
 	if len(u.Stack) > 1 {
 		tags = append(tags, fmt.Sprintf("%d contexts", len(u.Stack)))
@@ -270,7 +272,7 @@ func (c *Client) cmcpSyncSurface() {
 	if u.Readonly {
 		tags = append(tags, "read-only")
 	}
-	ce := cmcpui.Env{Status: c.cmcpStatusStrip(u), Expanded: cs.expanded, Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	ce := cmcpui.Env{Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -513,24 +515,112 @@ func orStr(s, d string) string {
 	return s
 }
 
-// cmcpToggleLog switches between the compact view and the log view, where the output grows to
-// about 80% of the height and the other panels become one summary line. Remembered per session.
+// tweenState is the F3 animation: the text pane's rows step from one value to another in whole
+// cells (textport.PlanTween: 4 linear steps over 200 ms, instant with %cmcp_motion off).
+type tweenState struct {
+	from, to int
+	start    time.Time
+	plan     textport.Plan
+	last     int // the rows last drawn
+}
+
+func (t *tweenState) active(now time.Time) bool {
+	return t.plan.Steps > 1 && now.Sub(t.start) < time.Duration(t.plan.DurationMS)*time.Millisecond
+}
+
+// rows is the text pane's rows at time now.
+func (t *tweenState) rows(now time.Time) int {
+	if !t.active(now) {
+		return t.to
+	}
+	step := int(now.Sub(t.start) / (time.Duration(t.plan.DurationMS) * time.Millisecond / time.Duration(t.plan.Steps)))
+	fr := textport.CellFrames(textport.Rect{0, 0, 0, float64(t.from)}, textport.Rect{0, 0, 0, float64(t.to)}, t.plan.Steps)
+	return int(fr[min(step, len(fr)-1)][3])
+}
+
+func (c *Client) cmcpMotionOn() bool {
+	switch strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_motion"))) {
+	case "off", "0", "no", "false":
+		return false
+	}
+	return true
+}
+
+// cmcpTextRows gives the text pane's rows for this frame from the shared view state (the player's
+// %cmcp_textport size, the LOG and screen-off toggles) and runs the toggle's animation.
+func (c *Client) cmcpTextRows(s *Session, cs *cmcpScr, w, h int, th cmcpui.Theme, now time.Time) int {
+	top, bottom := th.Margins(h)
+	cs.view.SetResting(textport.State(strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_textport")))))
+	ih := h - top - bottom
+	iw := w
+	target := int(textport.MinExtent(float64(iw), float64(ih), textport.Stacked, cs.view.State(), true))
+	if cs.tween.last == 0 {
+		cs.tween = tweenState{from: target, to: target, last: target}
+		return target
+	}
+	if target != cs.tween.to {
+		cs.tween.from = cs.tween.rows(now)
+		cs.tween.to = target
+		cs.tween.start = now
+		cs.tween.plan = textport.PlanTween(true, false, !c.cmcpMotionOn(), false, cs.tween.from == target)
+		if cs.tween.plan.Steps > 1 {
+			step := time.Duration(cs.tween.plan.DurationMS/cs.tween.plan.Steps) * time.Millisecond
+			for i := 1; i <= cs.tween.plan.Steps; i++ {
+				time.AfterFunc(time.Duration(i)*step+5*time.Millisecond, func() {
+					defer func() { recover() }()
+					c.Post(func(*gtfparser.Interp) { c.scheduleRender() })
+				})
+			}
+		}
+	}
+	r := cs.tween.rows(now)
+	cs.tween.last = r
+	return r
+}
+
+// cmcpVars fills the closed theme variables of spec 19.5 from the subscribed documents.
+func (c *Client) cmcpVars(u *session.UI, id, title string) map[string]any {
+	v := map[string]any{"mode": strings.TrimPrefix(id, "std."), "title": title, "ship": u.Ship.Name, "class": u.Ship.Class, "alert": u.Alert}
+	if m, _ := u.Docs["Space.Damage.Stat"].(map[string]any); m != nil {
+		if h, _ := m["hull"].(map[string]any); h != nil {
+			cur, ok1 := h["cur"].(float64)
+			mx, ok2 := h["max"].(float64)
+			if ok1 && ok2 && mx > 0 {
+				v["hull"] = cur / mx * 100
+			}
+		}
+	}
+	if m, _ := u.Docs["Space.Power"].(map[string]any); m != nil {
+		if cm, _ := m["components"].(map[string]any); cm != nil {
+			if p, ok := cm["pct"].(float64); ok {
+				v["core"] = p
+			}
+		}
+	}
+	if m, _ := u.Docs["Ship.Target"].(map[string]any); m != nil {
+		if cid, ok := m["cid"].(float64); ok {
+			v["lock"] = cid
+		}
+	}
+	return v
+}
+
+// cmcpToggleLog is the LOG toggle (F3): the shared state machine moves between the resting size and
+// expanded; the text pane then steps there over four frames.
 func (c *Client) cmcpToggleLog(s *Session) {
 	cs := s.cmScr()
-	cs.expanded = !cs.expanded
-	if cs.expanded {
-		if cs.st.Active && cs.st.Model != nil && cs.frame != nil {
-			cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now())
-		}
+	cs.view.Event(textport.EvLog)
+	if cs.st.Active && cs.st.Model != nil && cs.frame != nil && cs.view.State() == textport.Expanded {
+		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now())
 	}
 	c.scheduleRender()
 }
 
-// cmcpToggleHide hides the whole screen (the text view gets the full area back) or restores it.
+// cmcpToggleHide is the screen-off toggle (F4).
 func (c *Client) cmcpToggleHide(s *Session) {
 	cs := s.cmScr()
-	cs.hidden = !cs.hidden
-	if cs.hidden && cs.st.Active && cs.st.Model != nil && cs.frame != nil {
+	cs.view.Event(textport.EvScreen)
+	if cs.view.State() == textport.Off && cs.st.Active && cs.st.Model != nil && cs.frame != nil {
 		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now())
 	}
 	c.scheduleRender()
