@@ -231,11 +231,33 @@ func (d *drawer) cellNav(top, bottom int) {
 	cur := consoleTab(d.env.Title)
 	bg := th.blank().BG
 	y := top + 1
-	for i, it := range jlist(nav, "items") {
-		m, _ := it.(map[string]any)
-		label := strings.ToUpper(jstr(m, "label"))
-		col := th.role(jstr(m, "role"))
-		isCur := strings.Contains(strings.ToUpper(d.env.Title), strings.TrimSuffix(label, "S")) || i == cur && d.env.Title == ""
+	items := jlist(nav, "items")
+	type entry struct {
+		label, role string
+		cur, ok     bool
+	}
+	var ents []entry
+	if len(d.env.Nav) > 0 {
+		for i, e := range navWindow(d.env.Nav, g.H-top-bottom-2) {
+			role := "p"
+			if len(items) > 0 {
+				m, _ := items[i%len(items)].(map[string]any)
+				role = jstr(m, "role")
+			}
+			ents = append(ents, entry{strings.ToUpper(e.Title), role, e.Active, e.Available})
+		}
+	} else {
+		for i, it := range items {
+			m, _ := it.(map[string]any)
+			ents = append(ents, entry{strings.ToUpper(jstr(m, "label")), jstr(m, "role"), i == cur, true})
+		}
+	}
+	for _, e := range ents {
+		label, isCur := e.label, e.cur
+		col := th.role(e.role)
+		if !e.ok {
+			col = layout.Lerp(col, rgbC(0, 0, 0), 0.65)
+		}
 		if y+1 >= g.H-bottom {
 			break
 		}

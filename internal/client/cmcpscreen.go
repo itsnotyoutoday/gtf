@@ -9,6 +9,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/itsnotyoutoday/cmcp/textport"
 	"github.com/itsnotyoutoday/cmcp/theme"
@@ -284,7 +285,11 @@ func (c *Client) cmcpSyncSurface() {
 	if u.Readonly {
 		tags = append(tags, "read-only")
 	}
-	ce := cmcpui.Env{Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	var nav []cmcpui.NavEntry
+	for _, o := range u.Screens {
+		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
+	}
+	ce := cmcpui.Env{Nav: nav, Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -354,6 +359,21 @@ func (c *Client) cmcpKeys(raw string) bool {
 		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now()) // the player is typing
 		c.scheduleRender()
 		return false
+	}
+	if cs.st.Active {
+		// the screen menu: [ and ] step through the screens the console may show, a digit picks the nth
+		switch {
+		case raw == "[":
+			c.cmcpNavStep(s, -1)
+			return true
+		case raw == "]":
+			c.cmcpNavStep(s, 1)
+			return true
+		case len(raw) == 1 && raw[0] >= '1' && raw[0] <= '9':
+			if c.cmcpNavTo(s, int(raw[0]-'1')) {
+				return true
+			}
+		}
 	}
 	if cs.st.Active && (raw == "y" || raw == "n") && c.packDecide(s, "", raw == "y") {
 		c.cmcpNotice(s, "")
@@ -684,4 +704,38 @@ func (c *Client) cmcpStatusStrip(u *session.UI) []string {
 		out = append(out, strings.ToUpper(u.Alert)+" ALERT")
 	}
 	return out
+}
+
+// cmcpNavStep shows the previous or next screen of the menu (wrapping).
+func (c *Client) cmcpNavStep(s *Session, d int) {
+	var err error
+	if d > 0 {
+		_, err = s.cm.NextScreen(c.cfg.Now())
+	} else {
+		_, err = s.cm.PrevScreen(c.cfg.Now())
+	}
+	c.cmcpNavErr(s, err)
+}
+
+// cmcpNavTo shows the n-th (0-based) screen of the menu; it reports whether there is one.
+func (c *Client) cmcpNavTo(s *Session, n int) bool {
+	u := s.cm.UI()
+	if n < 0 || n >= len(u.Screens) {
+		return false
+	}
+	c.cmcpNavErr(s, s.cm.ShowScreen(c.cfg.Now(), u.Screens[n].ID))
+	return true
+}
+
+func (c *Client) cmcpNavErr(s *Session, err error) {
+	var se *session.ScreenError
+	switch {
+	case err == nil:
+	case errors.As(err, &se):
+		c.cmcpNotice(s, se.Reason+": type "+se.HintCmd)
+	default:
+		c.cmcpNotice(s, err.Error())
+	}
+	c.cmcpPump(s)
+	c.scheduleRender()
 }

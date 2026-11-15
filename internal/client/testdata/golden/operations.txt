@@ -6,27 +6,27 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ VESSEL ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Name: SS Booty King
-▀▀▀▀SENSORS▀▀│                                                                  │ Class: Marauder
+▀COMMUNICA…▀▀│                                                                  │ Class: Marauder
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Transponder: On  FCGR7043
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Hatch: CLOSED
-▀▀▀ENGINEER▀▀│                                                                  │ Docking doors: not_present
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ HATCH ◗
+▀DAMAGE CO…▀▀│                                                                  │ Hatch: CLOSED
+▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Docking doors: not_present
+▀ENGINEERI…▀▀│                                                                  │ ◖ HATCH ◗
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ TRACTOR BEAM ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
-▀▀▀TACTICAL▀▀│                                                                  │ Integrity ████████████████████ 100/100
+▀▀▀▀▀▀▀HELM▀▀│                                                                  │ Integrity ████████████████████ 100/100
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Lock: none
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Destination: not set
-▀▀▀NAVIGATE▀▀│                                                                  │ ◖ LOCK ◗ ◖ ENGAGE ◗ ◖ RESET ◗
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ CONTACTS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+▀▀▀▀SICKBAY▀▀│                                                                  │ Destination: not set
+▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ LOCK ◗ ◖ ENGAGE ◗ ◖ RESET ◗
+▀OPERATIONS▀▀│                                                                  │ ◖ CONTACTS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   11  AST5716          258-89  797.8m
-▀▀▀▀▀▀COMMS▀▀│                                                                  │   3   Vulcan           333+22  394044…
+▀POWER / E…▀▀│                                                                  │   3   Vulcan           333+22  394044…
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   15  UFPTRukh         337+26  775968…
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   5   40 Eridani A     094+33  0.87AU
+▀▀▀SECURITY▀▀│                                                                  │   5   40 Eridani A     094+33  0.87AU
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   17  UFP40EA1         108+22  1.09AU
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
+▀▀▀▀SENSORS▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ SRS ◗ ◖ LRS ◗ ◖ PASSIVE ◗
+▀▀▀TACTICAL▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
+▀TRANSPORT…▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │

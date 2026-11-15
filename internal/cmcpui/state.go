@@ -66,6 +66,9 @@ type Env struct {
 	// ScreenID is the built-in screen shown ("std.sensors"); Vars are the closed theme variables of
 	// 19.5 (sd mode hull core lock alert ship class title) for the frame's text templates.
 	TextRows int // the text pane's rows for this frame (the textport state, mid-animation too); 0 = balanced
+	// Nav is the screen menu (the core's UI.Screens): the left column's entries, the current one lit, the
+	// ones the console may not subscribe dimmed.
+	Nav      []NavEntry
 	ScreenID string
 	Vars     map[string]any // the status strip: hull, shields, core, lock, alert
 	ASCII    bool           // draw with ASCII characters only
@@ -198,4 +201,31 @@ type Plan struct {
 
 func newModel(p Plan, focusKey string) *focus.Model {
 	return focus.New(p.Panels, p.Mnemonics, focusKey)
+}
+
+// NavEntry is one entry of the screen menu drawn in the left column.
+type NavEntry struct {
+	ID, Title string
+	Active    bool
+	Available bool
+}
+
+// navWindow picks the entries that fit `capacity` rows of the column (two rows each), keeping the
+// active one in view.
+func navWindow(n []NavEntry, capacity int) []NavEntry {
+	per := capacity / 2
+	if per <= 0 || len(n) == 0 {
+		return nil
+	}
+	if len(n) <= per {
+		return n
+	}
+	act := 0
+	for i, e := range n {
+		if e.Active {
+			act = i
+		}
+	}
+	from := max(0, min(act-per/2, len(n)-per))
+	return n[from : from+per]
 }

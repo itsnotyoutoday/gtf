@@ -223,26 +223,37 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 	rows := g.H - start - botRows
 	cv := layout.NewCanvas(lw, rows)
 	ph := cv.H
-	cur := consoleTab(d.env.Title)
 	y := 0
-	for i, n := range consoleNames {
-		col := d.bandColor(i)
-		if i == cur {
-			col = layout.Lerp(col, rgbC(255, 255, 255), 0.35)
-		}
-		cv.RoundRect(0, y*2, lw-1, 4, 2, "tr br", col, 1)
-		cv.Text(max(lw-2-len(n), 0), y, n, layout.Attr{FG: dark, BG: col, Bold: true})
-		if i == cur {
-			cv.Rect(lw-1, y*2, 1, 4, rgbC(255, 255, 255), 1, true)
-		}
-		y += 3
-		if y*2+4 > ph-6 {
-			break
+	ents := d.env.Nav
+	if len(ents) == 0 {
+		for i, n := range consoleNames {
+			ents = append(ents, NavEntry{Title: n, Available: true, Active: i == consoleTab(d.env.Title)})
 		}
 	}
+	for i, e := range navWindow(ents, ph/2-3) {
+		col := d.bandColor(i)
+		fg := dark
+		if !e.Available {
+			col, fg = layout.Lerp(col, rgbC(0, 0, 0), 0.7), rgbC(150, 150, 160)
+		}
+		if e.Active {
+			col = layout.Lerp(col, rgbC(255, 255, 255), 0.35)
+		}
+		n := strings.ToUpper(e.Title)
+		if len([]rune(n)) > lw-3 {
+			n = string([]rune(n)[:lw-4]) + "…"
+		}
+		cv.RoundRect(0, y*2, lw-1, 2, 1, "tr br", col, 1)
+		cv.Text(max(lw-2-len([]rune(n)), 0), y, n, layout.Attr{FG: fg, BG: col, Bold: true})
+		if e.Active {
+			cv.Rect(lw-1, y*2, 1, 2, rgbC(255, 255, 255), 1, true)
+		}
+		y += 2
+	}
+	y++
 	// the soft blocks under the pills: stacked, rounded, each its own colour, curving into the bottom band
 	rest := ph - y*2
-	if rest > 4 {
+	if rest > 6 {
 		seg := max(rest/3, 4)
 		yy := y * 2
 		for k := 0; yy < ph; k++ {

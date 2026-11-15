@@ -20,6 +20,7 @@ import (
 
 	"github.com/itsnotyoutoday/cmcp/frame"
 	"github.com/itsnotyoutoday/cmcp/msg"
+	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/cmcp/session"
 	"github.com/itsnotyoutoday/gtf/internal/net/telnet"
 	"github.com/itsnotyoutoday/gtfparser"
@@ -54,8 +55,9 @@ func (c *Client) cmcpConfig(s *Session) session.Config {
 		Render:         &msg.Render{Kind: "cell", FPS: 4},
 		Themes:         cmcpThemeNames(),
 		Theme:          c.cmcpTheme(),
-		MaxBody:        65536, // the Welcome with the whole catalogue is about 20 KiB
-		LayerSendsGate: true,  // the gmcp handler sends Core.Hello and Core.Supports.Set
+		MaxBody:        65536,               // the Welcome with the whole catalogue is about 20 KiB
+		ScreenCatalog:  pack.SessionCatalog, // the screen menu: the 14 built-in screens and the packages each needs
+		LayerSendsGate: true,                // the gmcp handler sends Core.Hello and Core.Supports.Set
 		Packs:          &msg.HelloPacks{Formats: []int{1}, Inline: true, HTTPS: true, Cache: c.cachedPacks(s.World.Host)},
 		Logf: func(f string, a ...any) {
 			if c.in.Var("cmcp_debug") != "" {

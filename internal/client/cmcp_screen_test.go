@@ -713,3 +713,32 @@ func TestCmcpLogToggleAnimates(t *testing.T) {
 		t.Fatalf("input line %q", got)
 	}
 }
+
+// The left column is the screen menu: in focus mode ] and [ step through the screens the console may
+// show, a digit picks the nth; the current one is lit; the local choice does not touch the server.
+func TestCmcpScreenMenuKeys(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	shown := func() (id string, n int) {
+		f.c.Do(func(*gtfparser.Interp) { u := f.c.fg.cm.UI(); id, n = u.Screen.Resolved, len(u.Screens) })
+		return
+	}
+	first, n := shown()
+	if n < 3 {
+		t.Fatalf("screen menu has %d entries", n)
+	}
+	f.keys(kTab, "]")
+	second, _ := shown()
+	if second == first {
+		t.Fatalf("] did not change the screen (%s)", first)
+	}
+	f.keys("[")
+	if back, _ := shown(); back == second {
+		t.Fatalf("[ did not move the screen (still %s)", back) // (the core's wrap order is its own; see the report)
+	}
+	f.keys("3")
+	if third, _ := shown(); third == first {
+		t.Fatalf("digit 3 did not pick a screen")
+	}
+	f.contain(t, "SENSORS") // the menu's names are in the left column
+}

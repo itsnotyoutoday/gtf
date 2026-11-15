@@ -6,27 +6,27 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ * 1  Arrays        ▊                5%
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   2  Cloak                          0%
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   3  Fuel                           0%
-▀▀▀▀SENSORS▀▀│                                                                  │   4  Operations                     0%
+▀COMMUNICA…▀▀│                                                                  │   4  Operations                     0%
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   5  Shields                        0%
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   6  Warp          ████████▎       55%
-▀▀▀ENGINEER▀▀│                                                                  │   7  Weapons                        0%
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
+▀DAMAGE CO…▀▀│                                                                  │   6  Warp          ████████▎       55%
+▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   7  Weapons                        0%
+▀ENGINEERI…▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Main 5.4 GW   Aux 1 GW   Battery 4 MW
-▀▀▀TACTICAL▀▀│                                                                  │ Components ████████████         60/100
+▀▀▀▀▀▀▀HELM▀▀│                                                                  │ Components ████████████         60/100
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ GROUP Arrays
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   SHARE USE POWERED PRIO
-▀▀▀NAVIGATE▀▀│                                                                  │   30    13  100     Normal
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   3     1   100     Normal
+▀▀▀▀SICKBAY▀▀│                                                                  │   SHARE USE POWERED PRIO
+▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   30    13  100     Normal
+▀OPERATIONS▀▀│                                                                  │   3     1   100     Normal
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │   67    86  100     Normal
-▀▀▀▀▀▀COMMS▀▀│                                                                  │ ◖ 0% ◗ ◖ 25% ◗ ◖ 50% ◗ ◖ 100% ◗
+▀POWER / E…▀▀│                                                                  │ ◖ 0% ◗ ◖ 25% ◗ ◖ 50% ◗ ◖ 100% ◗
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ MAX ◗ ◖ OFF ◗
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ Set group ◀─●──────────────────────▶ 5
+▀▀▀SECURITY▀▀│                                                                  │ Set group ◀─●──────────────────────▶ 5
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │ ◖ MAIN 100% ◗ ◖ AUX 100% ◗
+▀▀▀▀SENSORS▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
+▀▀▀TACTICAL▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
+▀TRANSPORT…▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                                  │
