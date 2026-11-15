@@ -33,6 +33,7 @@ type cmcpScr struct {
 	sprites   *raster.Cache
 	packs     map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
 	zonesFor  map[string][]string
+	jobs      map[string]*packJob
 	auto      map[string]bool // group pickers that already got their first group selected
 }
 
@@ -279,6 +280,12 @@ func (c *Client) cmcpKeys(raw string) bool {
 	}
 	if !cs.st.Active || c.in.Input().Text() != "" {
 		return false
+	}
+	if raw == "y" || raw == "n" {
+		if c.packDecide(s, "", raw == "y") {
+			c.cmcpNotice(s, "")
+			return true
+		}
 	}
 	k, ok := keyNames[raw]
 	if !ok {

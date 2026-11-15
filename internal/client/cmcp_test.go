@@ -5,6 +5,8 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net"
 	"sync"
 	"testing"
@@ -20,21 +22,24 @@ import (
 
 // cmcpGame is a fake game: a telnet peer that speaks GMCP and runs the core's session.Server.
 type cmcpGame struct {
-	t    *testing.T
-	mu   sync.Mutex
-	conn net.Conn
-	srv  *session.Server
-	dec  *frame.Decoder
-	got  []frame.Frame // every GMCP frame received from the client
-	env  func() bool   // unused hook
-	done chan struct{}
+	t     *testing.T
+	mu    sync.Mutex
+	conn  net.Conn
+	srv   *session.Server
+	dec   *frame.Decoder
+	got   []frame.Frame // every GMCP frame received from the client
+	packs map[string][]byte
+	onGet func()
+	done  chan struct{}
 }
 
 type cmcpDialer struct {
-	t    *testing.T
-	c    **Client
-	game *cmcpGame
-	cfg  session.ServerConfig
+	packs map[string][]byte // sha256 -> bytes the fake game serves inline
+	gets  int               // Cobra.Pack.Get received
+	t     *testing.T
+	c     **Client
+	game  *cmcpGame
+	cfg   session.ServerConfig
 }
 
 func (d *cmcpDialer) Dial(ctx context.Context, w World, tr *DialTrace) (*gnet.Conn, error) {
@@ -42,6 +47,7 @@ func (d *cmcpDialer) Dial(ctx context.Context, w World, tr *DialTrace) (*gnet.Co
 	a, b := net.Pipe()
 	g := &cmcpGame{t: d.t, conn: b, srv: session.NewServer(d.cfg), dec: frame.NewDecoder(0), done: make(chan struct{})}
 	d.game = g
+	g.packs, g.onGet = d.packs, func() { d.gets++ }
 	go g.run()
 	return gnet.NewConn(a, gnet.Options{Env: (*d.c).cmcpEnv()}), nil
 }
@@ -91,8 +97,39 @@ func (g *cmcpGame) run() {
 			g.got = append(g.got, r.Frame)
 			g.srv.Receive(time.Now(), r.Frame)
 			g.mu.Unlock()
+			if r.Frame.Package == "Cobra.Pack.Get" {
+				g.servePack(r.Frame)
+			}
 		}
 		g.flush()
+	}
+}
+
+// servePack answers Cobra.Pack.Get with inline chunks of the pack registered for the hash.
+func (g *cmcpGame) servePack(f frame.Frame) {
+	var m msg.PackGet
+	if json.Unmarshal(f.Payload, &m) != nil {
+		return
+	}
+	if g.onGet != nil {
+		g.onGet()
+	}
+	raw, ok := g.packs[m.SHA256]
+	if !ok {
+		b, _ := frame.Encode("Cobra.Pack.Fail", msg.PackFail{ID: m.ID, SHA256: m.SHA256, Err: "not_found"})
+		g.write(b)
+		return
+	}
+	const chunk = 8192
+	parts := (len(raw) + chunk - 1) / chunk
+	for i := 0; i < parts; i++ {
+		end := min(len(raw), (i+1)*chunk)
+		b, err := frame.Encode("Cobra.Pack.Data", msg.PackData{ID: m.ID, Version: m.Version, SHA256: m.SHA256, Part: i + 1, Parts: parts, Data: base64.StdEncoding.EncodeToString(raw[i*chunk : end])})
+		if err != nil {
+			g.t.Errorf("encode chunk: %v", err)
+			return
+		}
+		g.write(b)
 	}
 }
 

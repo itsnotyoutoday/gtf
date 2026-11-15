@@ -88,9 +88,10 @@ type Client struct {
 	fg         *Session
 	xworld     string // world whose text/event is being processed
 
-	panels *panelState
-	help   *helpData
-	sq     *squatState // the squatter daemon (squatter.go); inert unless squatter=on
+	panels  *panelState
+	help    *helpData
+	sq      *squatState // the squatter daemon (squatter.go); inert unless squatter=on
+	cmPacks *cmcpPacks  // CMCP layout packs: cache, consent (cmcppacks.go)
 	// squatter plumbing (squatter.go): command output capture for tf.exec, what kind of line is
 	// being added to a world screen, and remote sends in progress
 	capture                              *[]string

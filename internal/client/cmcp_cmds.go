@@ -4,6 +4,7 @@
 package client
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/itsnotyoutoday/cmcp/session"
@@ -101,5 +102,88 @@ func cmcpThemeNames() []string {
 }
 
 func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest string) bool {
-	return false
+	echo := in.Host.Echo
+	switch sub {
+	case "packs":
+		for _, l := range c.cmcpPacksList(s) {
+			echo(l)
+		}
+	case "pack":
+		verb, id, _ := strings.Cut(rest, " ")
+		id = strings.TrimSpace(id)
+		if s == nil || s.cm == nil {
+			echo("% /cmcp pack: no CMCP connection in the foreground")
+			break
+		}
+		switch verb {
+		case "allow", "deny":
+			if !c.packDecide(s, id, verb == "allow") {
+				echo("% no pack is waiting for an answer")
+			}
+		default:
+			echo("% usage: /cmcp pack allow|deny [id]")
+		}
+	case "screen":
+		if s == nil || s.cm == nil {
+			echo("% /cmcp screen: no CMCP connection in the foreground")
+			break
+		}
+		cs := s.cmScr()
+		if rest == "" {
+			u := s.cm.UI()
+			shown := u.Screen.Resolved
+			if cs.override != "" {
+				shown = cs.override
+			}
+			echo("% screen: server " + u.Screen.ID + ", showing " + shown)
+			break
+		}
+		cs.override = rest
+		c.scheduleRender()
+	case "send":
+		return c.cmcpSend(in, s, rest)
+	case "focus":
+		if s != nil && s.cs != nil {
+			s.cs.st.Active = !s.cs.st.Active
+			c.scheduleRender()
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+// cmcpSend is /cmcp send <verb> [k=v ...]: the same path as a button (validated against the
+// catalogue and the console's verbs, echoed, sent).
+func (c *Client) cmcpSend(in *gtfparser.Interp, s *Session, rest string) bool {
+	f := strings.Fields(rest)
+	if len(f) == 0 || s == nil || s.cm == nil {
+		in.Host.Echo("% usage: /cmcp send <verb> [name=value ...]")
+		return true
+	}
+	args := map[string]any{}
+	for _, kv := range f[1:] {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			in.Host.Echo("% /cmcp send: " + kv + " is not name=value")
+			return true
+		}
+		if n, err := strconv.ParseFloat(v, 64); err == nil {
+			args[k] = n
+		} else if v == "true" || v == "false" {
+			args[k] = v == "true"
+		} else {
+			args[k] = v
+		}
+	}
+	t, err := s.cm.Command(c.cfg.Now(), f[0], args)
+	if err != nil {
+		in.Host.Echo("% /cmcp send: " + err.Error())
+		return true
+	}
+	if t.Mutating && t.Echo != "" {
+		c.cmcpEcho(s, t.Echo)
+	}
+	c.cmcpPump(s)
+	return true
 }

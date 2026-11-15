@@ -100,17 +100,22 @@ type screenFixture struct {
 
 func newScreenFixture(t *testing.T, w, h int) *screenFixture {
 	t.Helper()
+	return newScreenFixtureOpt(t, w, h, t.TempDir(), nil)
+}
+
+func newScreenFixtureOpt(t *testing.T, w, h int, home string, packs map[string][]byte) *screenFixture {
+	t.Helper()
 	var cat []msg.CommandSpec
 	readJSON(t, "commands.catalogue.json", &cat)
 	g := &fakeGame{docs: loadDocs(t), epoch: 1}
 	cfg := session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536, Commands: cat, Backend: g,
 		Packages: []string{"Space.Power", "Space.Ship.Status"}}
 	term := &recTerm{Screen: vt.New(w, h)}
-	d := &cmcpDialer{t: t, cfg: cfg}
+	d := &cmcpDialer{t: t, cfg: cfg, packs: packs}
 	var c *Client
 	d.c = &c
 	var err error
-	c, err = New(Config{Term: term, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true, Now: func() time.Time { return fixedNow }})
+	c, err = New(Config{Term: term, HomeDir: home, NoRC: true, Quiet: true, Dialer: d, Interactive: true, NoUpdateCheck: true, Now: func() time.Time { return fixedNow }})
 	if err != nil {
 		t.Fatal(err)
 	}

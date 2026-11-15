@@ -38,8 +38,8 @@ var rules = []rule{
 	{prefix: "internal/net", allow: []string{"internal/net"}},
 	{prefix: "internal/layout", allow: nil},
 	{prefix: "internal/cmcpui", allow: []string{"internal/layout"}}, // CMCP cell renderer: bound screen tree -> cells (the core module is external)
-	{prefix: "internal/raster", allow: nil}, // vector sprite rasteriser: standard library only
-	{prefix: "internal/update", allow: nil}, // releases, checksums, replacing the binary and library; no gtf imports
+	{prefix: "internal/raster", allow: nil},                         // vector sprite rasteriser: standard library only
+	{prefix: "internal/update", allow: nil},                         // releases, checksums, replacing the binary and library; no gtf imports
 	{prefix: "gtflib", allow: nil},
 }
 

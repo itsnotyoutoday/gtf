@@ -1,0 +1,1720 @@
+{
+  "format": 1,
+  "id": "fspace-std",
+  "version": "1.0.0",
+  "title": "Frontier Space standard consoles (reference screens)",
+  "description": "The five reference screens plus helm. Built-in clients implement the same screens as std.*; this pack replaces them when the server sends it.",
+  "needs": {
+    "proto": 1
+  },
+  "tokens": {
+    "color.bg": "#06080c",
+    "color.panel": "#0e1218",
+    "color.text": "#e8e0d0",
+    "color.dim": "#7a8a9a",
+    "color.accent": "#ff9900",
+    "color.accent2": "#33ccff",
+    "color.ok": "#66dd88",
+    "color.warn": "#ffcc33",
+    "color.alert": "#ff3030"
+  },
+  "screens": {
+    "operations": {
+      "title": "Operations",
+      "console": "operations",
+      "suggest_theme": "ops",
+      "root": {
+        "widget": "label",
+        "props": {
+          "text": ""
+        },
+        "layout": {
+          "dir": "col",
+          "gap": 6
+        },
+        "children": [
+          {
+            "widget": "label",
+            "bind": {
+              "text": "'OPERATIONS  -  ' + upper(@Space.Ship.Status:name)"
+            },
+            "layout": {
+              "size": 28
+            }
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6,
+              "weight": 1
+            },
+            "children": [
+              {
+                "widget": "label",
+                "props": {
+                  "text": ""
+                },
+                "layout": {
+                  "dir": "col",
+                  "gap": 6,
+                  "weight": 1
+                },
+                "children": [
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": "VESSEL"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Name: ' + @Space.Ops.Stat:vessel.name"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Class: ' + @Space.Ops.Stat:vessel.class"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Transponder: ' + (@Space.Ops.Stat:transponder.on ? 'On  ' + @Space.Ops.Stat:transponder.code : 'Off')"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Hatch: ' + upper(@Space.Ops.Stat:hatch)"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Docking doors: ' + @Space.Ops.Stat:docking_doors"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": ""
+                    },
+                    "layout": {
+                      "dir": "row",
+                      "gap": 6
+                    },
+                    "children": [
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "HATCH",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "hatch.toggle"
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "DOORS OPEN",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "dock.doors",
+                            "args": {
+                              "state": "open"
+                            }
+                          }
+                        },
+                        "show_if": "@Space.Ops.Stat:docking_doors != 'not_present'"
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "DOORS CLOSE",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "dock.doors",
+                            "args": {
+                              "state": "close"
+                            }
+                          }
+                        },
+                        "show_if": "@Space.Ops.Stat:docking_doors != 'not_present'"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "widget": "label",
+                "props": {
+                  "text": ""
+                },
+                "layout": {
+                  "dir": "col",
+                  "gap": 6,
+                  "weight": 1
+                },
+                "children": [
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": "TRACTOR BEAM"
+                    }
+                  },
+                  {
+                    "widget": "bar",
+                    "id": "tractor_integrity",
+                    "props": {
+                      "label": "Integrity"
+                    },
+                    "bind": {
+                      "value": "@Space.Tractor:integrity_pct",
+                      "max": "100"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Lock: ' + (has(@Space.Tractor:lock) ? @Space.Tractor:lock.name : 'none')"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Destination: ' + (has(@Space.Tractor:destination) ? @Space.Tractor:destination.room : 'not set')"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": ""
+                    },
+                    "layout": {
+                      "dir": "row",
+                      "gap": 6
+                    },
+                    "children": [
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "LOCK",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "tractor.lock",
+                            "args": {
+                              "cid": "=$ui.cid"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "ENGAGE",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "tractor.engage"
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "RESET",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "tractor.reset"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "widget": "label",
+                "props": {
+                  "text": ""
+                },
+                "layout": {
+                  "dir": "col",
+                  "gap": 6,
+                  "weight": 1
+                },
+                "children": [
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": "CONTACTS"
+                    }
+                  },
+                  {
+                    "widget": "contact-picker",
+                    "id": "picker",
+                    "bind": {
+                      "contacts": "@Space.Contacts:contacts",
+                      "selected": "$ui.cid"
+                    },
+                    "on": {
+                      "select": {
+                        "set": "ui.cid",
+                        "to": "=$value"
+                      }
+                    },
+                    "layout": {
+                      "weight": 1
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": ""
+                    },
+                    "layout": {
+                      "dir": "row",
+                      "gap": 6
+                    },
+                    "children": [
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "SRS",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "scan.srs"
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "LRS",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "scan.lrs"
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "PASSIVE",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "scan.passive",
+                            "args": {
+                              "cid": "=$ui.cid"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "widget": "textport",
+            "id": "text",
+            "layout": {
+              "size": 160
+            }
+          }
+        ]
+      }
+    },
+    "sensors": {
+      "title": "Sensors",
+      "console": "science",
+      "suggest_theme": "tng",
+      "root": {
+        "widget": "label",
+        "props": {
+          "text": ""
+        },
+        "layout": {
+          "dir": "col",
+          "gap": 6
+        },
+        "children": [
+          {
+            "widget": "label",
+            "bind": {
+              "text": "'SENSORS  -  ' + upper(@Space.Ship.Status:name)"
+            }
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6,
+              "weight": 1
+            },
+            "children": [
+              {
+                "widget": "viewscreen",
+                "id": "view",
+                "props": {
+                  "scene": "main"
+                },
+                "bind": {
+                  "contacts": "@Space.Contacts:contacts",
+                  "heading": "@Space.Nav:heading"
+                },
+                "layout": {
+                  "weight": 2
+                }
+              },
+              {
+                "widget": "radar",
+                "id": "radar",
+                "bind": {
+                  "contacts": "@Space.Contacts:contacts",
+                  "selected": "$ui.cid"
+                },
+                "on": {
+                  "select": {
+                    "set": "ui.cid",
+                    "to": "=$value"
+                  }
+                },
+                "layout": {
+                  "weight": 1
+                },
+                "fallback": [
+                  "contact-picker",
+                  "table"
+                ]
+              }
+            ]
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6
+            },
+            "children": [
+              {
+                "widget": "button",
+                "props": {
+                  "text": "SRS",
+                  "tone": "accent"
+                },
+                "on": {
+                  "click": {
+                    "cmd": "scan.srs"
+                  }
+                }
+              },
+              {
+                "widget": "button",
+                "props": {
+                  "text": "LRS",
+                  "tone": "accent"
+                },
+                "on": {
+                  "click": {
+                    "cmd": "scan.lrs"
+                  }
+                }
+              },
+              {
+                "widget": "button",
+                "props": {
+                  "text": "PASSIVE",
+                  "tone": "accent"
+                },
+                "on": {
+                  "click": {
+                    "cmd": "scan.passive",
+                    "args": {
+                      "cid": "=$ui.cid"
+                    }
+                  }
+                }
+              },
+              {
+                "widget": "button",
+                "props": {
+                  "text": "INTERNAL",
+                  "tone": "accent"
+                },
+                "on": {
+                  "click": {
+                    "cmd": "scan.internal",
+                    "args": {
+                      "cid": "=$ui.cid"
+                    }
+                  }
+                }
+              },
+              {
+                "widget": "button",
+                "props": {
+                  "text": "DOCKSCAN",
+                  "tone": "accent"
+                },
+                "on": {
+                  "click": {
+                    "cmd": "scan.dock",
+                    "args": {
+                      "cid": "=$ui.cid"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "widget": "table",
+            "id": "list",
+            "props": {
+              "columns": [
+                {
+                  "key": "cid",
+                  "title": "CID"
+                },
+                {
+                  "key": "name",
+                  "title": "NAME"
+                },
+                {
+                  "key": "bearing",
+                  "title": "BRG"
+                },
+                {
+                  "key": "distance_text",
+                  "title": "DIST"
+                }
+              ],
+              "selectable": true
+            },
+            "bind": {
+              "rows": "@Space.Contacts:contacts"
+            },
+            "on": {
+              "select": {
+                "set": "ui.cid",
+                "to": "=$value"
+              }
+            },
+            "layout": {
+              "size": 120
+            }
+          },
+          {
+            "widget": "textport",
+            "id": "text",
+            "layout": {
+              "size": 140
+            }
+          }
+        ]
+      }
+    },
+    "power": {
+      "title": "Power / Engineering",
+      "console": "operations",
+      "suggest_theme": "tng",
+      "root": {
+        "widget": "label",
+        "props": {
+          "text": ""
+        },
+        "layout": {
+          "dir": "col",
+          "gap": 6
+        },
+        "children": [
+          {
+            "widget": "label",
+            "bind": {
+              "text": "'POWER  -  ' + si(@Space.Power:pools.total_w, 'W') + ' total'"
+            }
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6,
+              "weight": 1
+            },
+            "children": [
+              {
+                "widget": "label",
+                "props": {
+                  "text": ""
+                },
+                "layout": {
+                  "dir": "col",
+                  "gap": 6,
+                  "weight": 1
+                },
+                "children": [
+                  {
+                    "widget": "group-picker",
+                    "id": "groups",
+                    "bind": {
+                      "groups": "@Space.Power:groups",
+                      "selected": "$ui.group"
+                    },
+                    "on": {
+                      "select": {
+                        "set": "ui.group",
+                        "to": "=$value"
+                      }
+                    },
+                    "layout": {
+                      "weight": 1
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'Main ' + si(@Space.Power:pools.main_w,'W') + '   Aux ' + si(@Space.Power:pools.aux_w,'W') + '   Battery ' + si(@Space.Power:pools.battery_w,'W')"
+                    }
+                  },
+                  {
+                    "widget": "bar",
+                    "props": {
+                      "label": "Components"
+                    },
+                    "bind": {
+                      "value": "@Space.Power:components.pct",
+                      "max": "100"
+                    }
+                  }
+                ]
+              },
+              {
+                "widget": "label",
+                "props": {
+                  "text": ""
+                },
+                "layout": {
+                  "dir": "col",
+                  "gap": 6,
+                  "weight": 1
+                },
+                "children": [
+                  {
+                    "widget": "label",
+                    "bind": {
+                      "text": "'GROUP ' + get(get(@Space.Power:groups, $ui.group), 'name')"
+                    }
+                  },
+                  {
+                    "widget": "table",
+                    "id": "components",
+                    "props": {
+                      "columns": [
+                        {
+                          "key": "share_pct",
+                          "title": "SHARE"
+                        },
+                        {
+                          "key": "consumption_pct",
+                          "title": "USE"
+                        },
+                        {
+                          "key": "powered_pct",
+                          "title": "POWERED"
+                        },
+                        {
+                          "key": "priority",
+                          "title": "PRIO"
+                        }
+                      ]
+                    },
+                    "bind": {
+                      "rows": "get(get(@Space.Power.Group:groups, $ui.group), 'components')"
+                    },
+                    "layout": {
+                      "weight": 1
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": ""
+                    },
+                    "layout": {
+                      "dir": "row",
+                      "gap": 6
+                    },
+                    "children": [
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "0%",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "power.set",
+                            "args": {
+                              "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                              "value": "0%"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "25%",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "power.set",
+                            "args": {
+                              "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                              "value": "25%"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "50%",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "power.set",
+                            "args": {
+                              "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                              "value": "50%"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "100%",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "power.set",
+                            "args": {
+                              "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                              "value": "100%"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "MAX",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "power.set",
+                            "args": {
+                              "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                              "value": "max"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "OFF",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "power.set",
+                            "args": {
+                              "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                              "value": "off"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "widget": "slider",
+                    "id": "set",
+                    "props": {
+                      "min": 0,
+                      "max": 100,
+                      "step": 5,
+                      "label": "Set group"
+                    },
+                    "bind": {
+                      "value": "get(get(@Space.Power:groups, $ui.group), 'pct')"
+                    },
+                    "on": {
+                      "change": {
+                        "cmd": "power.set",
+                        "args": {
+                          "target": "=get(get(@Space.Power:groups, $ui.group), 'name')",
+                          "value": "=fmt($value, 0) + '%'"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": ""
+                    },
+                    "layout": {
+                      "dir": "row",
+                      "gap": 6
+                    },
+                    "children": [
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "MAIN 100%",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "eng.main",
+                            "args": {
+                              "value": "100%"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "AUX 100%",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "eng.aux",
+                            "args": {
+                              "value": "100%"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "widget": "textport",
+            "id": "text",
+            "layout": {
+              "size": 140
+            }
+          }
+        ]
+      }
+    },
+    "tactical": {
+      "title": "Tactical",
+      "console": "tactical",
+      "suggest_theme": "klingon",
+      "root": {
+        "widget": "label",
+        "props": {
+          "text": ""
+        },
+        "layout": {
+          "dir": "col",
+          "gap": 6
+        },
+        "children": [
+          {
+            "widget": "label",
+            "bind": {
+              "text": "'TACTICAL  -  ' + upper(@Space.Ship.Status:name) + '   ' + upper(@Space.Ship.Status:alert) + ' ALERT'"
+            }
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6,
+              "weight": 1
+            },
+            "children": [
+              {
+                "widget": "scope",
+                "id": "scope",
+                "bind": {
+                  "contacts": "@Space.Contacts:contacts",
+                  "selected": "$ui.cid"
+                },
+                "on": {
+                  "select": {
+                    "set": "ui.cid",
+                    "to": "=$value"
+                  }
+                },
+                "layout": {
+                  "weight": 1
+                },
+                "fallback": [
+                  "radar",
+                  "contact-picker"
+                ]
+              },
+              {
+                "widget": "label",
+                "props": {
+                  "text": ""
+                },
+                "layout": {
+                  "dir": "col",
+                  "gap": 6,
+                  "weight": 1
+                },
+                "children": [
+                  {
+                    "widget": "bar-list",
+                    "id": "mounts",
+                    "props": {
+                      "label": "Weapons"
+                    },
+                    "bind": {
+                      "rows": "@Space.Weapons:mounts"
+                    }
+                  },
+                  {
+                    "widget": "table",
+                    "id": "shields",
+                    "props": {
+                      "columns": [
+                        {
+                          "key": "pct",
+                          "title": "SHIELD %"
+                        }
+                      ]
+                    },
+                    "bind": {
+                      "rows": "@Space.Shields:facings"
+                    }
+                  },
+                  {
+                    "widget": "label",
+                    "props": {
+                      "text": ""
+                    },
+                    "layout": {
+                      "dir": "row",
+                      "gap": 6
+                    },
+                    "children": [
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "LOCK",
+                          "tone": "accent"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "target.lock",
+                            "args": {
+                              "cid": "=$ui.cid"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "FIRE PHASERS",
+                          "tone": "alert"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "weapon.fire",
+                            "args": {
+                              "mount": "all"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "widget": "button",
+                        "props": {
+                          "text": "TORPEDO",
+                          "tone": "alert"
+                        },
+                        "on": {
+                          "click": {
+                            "cmd": "weapon.torpedo",
+                            "args": {
+                              "tube": 1
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "widget": "textport",
+            "id": "text",
+            "layout": {
+              "size": 140
+            }
+          }
+        ]
+      }
+    },
+    "damage": {
+      "title": "Damage Control",
+      "console": "operations",
+      "suggest_theme": "ops",
+      "root": {
+        "widget": "label",
+        "props": {
+          "text": ""
+        },
+        "layout": {
+          "dir": "col",
+          "gap": 6
+        },
+        "children": [
+          {
+            "widget": "label",
+            "bind": {
+              "text": "'DAMAGE CONTROL  -  hull ' + fmt(@Space.Damage.Stat:hull.cur, 2) + ' / ' + fmt(@Space.Damage.Stat:hull.max, 2)"
+            }
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6,
+              "weight": 1
+            },
+            "children": [
+              {
+                "widget": "team-assigner",
+                "id": "teams",
+                "bind": {
+                  "teams": "@Space.Damage.Teams:teams",
+                  "systems": "@Space.Damage.Teams:assignable"
+                },
+                "on": {
+                  "assign": {
+                    "cmd": "dmg.assign",
+                    "args": {
+                      "team": "=$value.team",
+                      "system": "=$value.system"
+                    }
+                  }
+                },
+                "layout": {
+                  "weight": 1
+                },
+                "fallback": [
+                  "table"
+                ]
+              },
+              {
+                "widget": "schematic",
+                "id": "ship",
+                "props": {
+                  "sprite": "marauder"
+                },
+                "on": {
+                  "click": {
+                    "cmd": "dmg.assign",
+                    "args": {
+                      "team": "=$ui.team",
+                      "system": "=$value"
+                    }
+                  }
+                },
+                "layout": {
+                  "weight": 2
+                },
+                "fallback": [
+                  "bar-list"
+                ]
+              },
+              {
+                "widget": "bar-list",
+                "id": "stat",
+                "props": {
+                  "label": "Damage statistics"
+                },
+                "bind": {
+                  "rows": "@Space.Damage.Stat:systems"
+                },
+                "layout": {
+                  "weight": 1
+                }
+              }
+            ]
+          },
+          {
+            "widget": "graph",
+            "id": "hull",
+            "props": {
+              "label": "Hull integrity",
+              "samples": 120
+            },
+            "bind": {
+              "value": "pct(@Space.Damage.Stat:hull.cur, @Space.Damage.Stat:hull.max)"
+            },
+            "layout": {
+              "size": 50
+            }
+          },
+          {
+            "widget": "textport",
+            "id": "text",
+            "layout": {
+              "size": 140
+            }
+          }
+        ]
+      }
+    },
+    "helm": {
+      "title": "Helm",
+      "console": "navigation",
+      "suggest_theme": "tos",
+      "root": {
+        "widget": "label",
+        "props": {
+          "text": ""
+        },
+        "layout": {
+          "dir": "col",
+          "gap": 6
+        },
+        "children": [
+          {
+            "widget": "label",
+            "bind": {
+              "text": "'HELM  -  speed ' + fmt(@Space.Nav:speed_mps, 1) + ' mps   bearing ' + fmt(@Space.Nav:bearing.az, 0) + ' mark ' + fmt(@Space.Nav:bearing.mark, 0)"
+            }
+          },
+          {
+            "widget": "label",
+            "props": {
+              "text": ""
+            },
+            "layout": {
+              "dir": "row",
+              "gap": 6,
+              "weight": 1
+            },
+            "children": [
+              {
+                "widget": "viewscreen",
+                "id": "view",
+                "props": {
+                  "scene": "main"
+                },
+                "bind": {
+                  "contacts": "@Space.Contacts:contacts",
+                  "heading": "@Space.Nav:heading"
+                },
+                "layout": {
+                  "weight": 2
+                }
+              },
+              {
+                "widget": "joystick",
+                "id": "stick",
+                "props": {
+                  "label": "HELM"
+                },
+                "on": {
+                  "change": {
+                    "cmd": "helm.stick",
+                    "args": {
+                      "yaw": "=$value.yaw",
+                      "pitch": "=$value.pitch",
+                      "throttle": "=$value.throttle"
+                    }
+                  }
+                },
+                "layout": {
+                  "weight": 1
+                }
+              }
+            ]
+          },
+          {
+            "widget": "textport",
+            "id": "text",
+            "layout": {
+              "size": 140
+            }
+          }
+        ]
+      }
+    }
+  },
+  "scenes": {
+    "main": {
+      "fov_deg": 60,
+      "backdrop": {
+        "kind": "stars",
+        "seed": 4711,
+        "density": 0.35,
+        "color": "@color.dim"
+      },
+      "contacts": {
+        "art": {
+          "marauder": "marauder"
+        },
+        "default": "marker",
+        "min_px": 3,
+        "views": {
+          "blend": true,
+          "perspective": false
+        }
+      },
+      "planets": {
+        "model": "planet-m",
+        "params": {
+          "lit": 0.7
+        }
+      },
+      "effects": {
+        "fire.phaser": {
+          "effect": "beam",
+          "color": "@color.warn",
+          "duration_ms": 400,
+          "width": 2
+        },
+        "fire.torpedo": {
+          "effect": "torpedo",
+          "color": "@color.accent2",
+          "duration_ms": 1500
+        },
+        "hit.shield": {
+          "effect": "shield_flash",
+          "color": "@color.accent2",
+          "duration_ms": 500
+        },
+        "hit": {
+          "effect": "flash",
+          "color": "@color.alert",
+          "duration_ms": 300
+        },
+        "destroyed": {
+          "effect": "explosion",
+          "color": "@color.accent",
+          "duration_ms": 2500,
+          "size": 1.0
+        }
+      }
+    }
+  },
+  "sprites": {
+    "marauder": {
+      "format": 1,
+      "id": "marauder",
+      "kind": "ship",
+      "size_m": 120,
+      "view": "side",
+      "views": {
+        "side": {
+          "viewBox": [
+            0,
+            0,
+            200,
+            80
+          ],
+          "preserveAspect": "xMidYMid meet",
+          "layers": [
+            {
+              "id": "pylons",
+              "shapes": [
+                {
+                  "type": "polygon",
+                  "points": [
+                    92,
+                    22,
+                    104,
+                    22,
+                    104,
+                    14,
+                    92,
+                    14
+                  ],
+                  "fill": "@color.panel",
+                  "stroke": {
+                    "paint": "@color.dim",
+                    "width": 1
+                  }
+                },
+                {
+                  "type": "polygon",
+                  "points": [
+                    92,
+                    58,
+                    104,
+                    58,
+                    104,
+                    66,
+                    92,
+                    66
+                  ],
+                  "fill": "@color.panel",
+                  "stroke": {
+                    "paint": "@color.dim",
+                    "width": 1
+                  }
+                }
+              ]
+            },
+            {
+              "id": "nacelles",
+              "shapes": [
+                {
+                  "type": "path",
+                  "d": "M 66 6 L 132 6 L 142 14 L 66 14 Z",
+                  "zone": "port_nacelle",
+                  "fill": {
+                    "type": "linear",
+                    "x1": 0,
+                    "y1": 6,
+                    "x2": 0,
+                    "y2": 14,
+                    "stops": [
+                      [
+                        0,
+                        "#6a7a8c"
+                      ],
+                      [
+                        1,
+                        "#2c3748"
+                      ]
+                    ]
+                  },
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.5,
+                    "join": "round"
+                  }
+                },
+                {
+                  "type": "path",
+                  "d": "M 66 66 L 132 66 L 142 74 L 66 74 Z",
+                  "zone": "starboard_nacelle",
+                  "fill": {
+                    "type": "linear",
+                    "x1": 0,
+                    "y1": 66,
+                    "x2": 0,
+                    "y2": 74,
+                    "stops": [
+                      [
+                        0,
+                        "#6a7a8c"
+                      ],
+                      [
+                        1,
+                        "#2c3748"
+                      ]
+                    ]
+                  },
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.5,
+                    "join": "round"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "hull",
+              "shapes": [
+                {
+                  "type": "path",
+                  "d": "M 20 40 L 60 22 L 150 28 L 178 40 L 150 52 L 60 58 Z",
+                  "zone": "hull",
+                  "fill": {
+                    "type": "linear",
+                    "x1": 0,
+                    "y1": 22,
+                    "x2": 0,
+                    "y2": 58,
+                    "stops": [
+                      [
+                        0,
+                        "#8c9db2"
+                      ],
+                      [
+                        1,
+                        "#34404f"
+                      ]
+                    ]
+                  },
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.5,
+                    "join": "round"
+                  }
+                },
+                {
+                  "type": "ellipse",
+                  "cx": 100,
+                  "cy": 40,
+                  "rx": 34,
+                  "ry": 7,
+                  "fill": "none",
+                  "stroke": {
+                    "paint": "@color.dim",
+                    "width": 0.8
+                  }
+                },
+                {
+                  "type": "path",
+                  "d": "M 150 34 A 16 6 0 0 1 164 38 L 164 42 A 16 6 0 0 1 150 46 Z",
+                  "fill": "@color.accent"
+                }
+              ]
+            }
+          ],
+          "zones": [
+            {
+              "id": "hull",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:hull.cur / @Space.Damage.Stat:hull.max",
+              "contact_tint": "1 - coalesce($contact.integrity.hull, 1)",
+              "label": "Hull"
+            },
+            {
+              "id": "port_nacelle",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:systems.Port_Nacelle.cur / @Space.Damage.Stat:systems.Port_Nacelle.max",
+              "contact_tint": "1 - coalesce($contact.integrity.port_nacelle, 1)",
+              "label": "Port nacelle"
+            },
+            {
+              "id": "starboard_nacelle",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:systems.Starboard_Nacelle.cur / @Space.Damage.Stat:systems.Starboard_Nacelle.max",
+              "contact_tint": "1 - coalesce($contact.integrity.starboard_nacelle, 1)",
+              "label": "Starboard nacelle"
+            }
+          ],
+          "glows": [
+            {
+              "id": "engine_p",
+              "x": 66,
+              "y": 10,
+              "r": 12,
+              "color": "@color.accent2",
+              "bind": "@Space.Power:groups.6.pct / 100",
+              "contact_bind": "0.6"
+            },
+            {
+              "id": "engine_s",
+              "x": 66,
+              "y": 70,
+              "r": 12,
+              "color": "@color.accent2",
+              "bind": "@Space.Power:groups.6.pct / 100",
+              "contact_bind": "0.6"
+            }
+          ]
+        },
+        "front": {
+          "viewBox": [
+            0,
+            0,
+            80,
+            60
+          ],
+          "preserveAspect": "xMidYMid meet",
+          "layers": [
+            {
+              "id": "all",
+              "shapes": [
+                {
+                  "type": "rect",
+                  "x": 4,
+                  "y": 8,
+                  "w": 18,
+                  "h": 8,
+                  "rx": 3,
+                  "zone": "port_nacelle",
+                  "fill": "#4c5b70",
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1
+                  }
+                },
+                {
+                  "type": "rect",
+                  "x": 58,
+                  "y": 8,
+                  "w": 18,
+                  "h": 8,
+                  "rx": 3,
+                  "zone": "starboard_nacelle",
+                  "fill": "#4c5b70",
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1
+                  }
+                },
+                {
+                  "type": "ellipse",
+                  "cx": 40,
+                  "cy": 32,
+                  "rx": 22,
+                  "ry": 16,
+                  "zone": "hull",
+                  "fill": {
+                    "type": "linear",
+                    "x1": 0,
+                    "y1": 16,
+                    "x2": 0,
+                    "y2": 48,
+                    "stops": [
+                      [
+                        0,
+                        "#8c9db2"
+                      ],
+                      [
+                        1,
+                        "#34404f"
+                      ]
+                    ]
+                  },
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.2
+                  }
+                },
+                {
+                  "type": "circle",
+                  "cx": 40,
+                  "cy": 28,
+                  "r": 4,
+                  "fill": "@color.accent"
+                }
+              ]
+            }
+          ],
+          "zones": [
+            {
+              "id": "hull",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:hull.cur / @Space.Damage.Stat:hull.max",
+              "contact_tint": "1 - coalesce($contact.integrity.hull, 1)",
+              "label": "Hull"
+            },
+            {
+              "id": "port_nacelle",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:systems.Port_Nacelle.cur / @Space.Damage.Stat:systems.Port_Nacelle.max",
+              "contact_tint": "1 - coalesce($contact.integrity.port_nacelle, 1)",
+              "label": "Port nacelle"
+            },
+            {
+              "id": "starboard_nacelle",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:systems.Starboard_Nacelle.cur / @Space.Damage.Stat:systems.Starboard_Nacelle.max",
+              "contact_tint": "1 - coalesce($contact.integrity.starboard_nacelle, 1)",
+              "label": "Starboard nacelle"
+            }
+          ],
+          "glows": [
+            {
+              "id": "engine_p",
+              "x": 13,
+              "y": 12,
+              "r": 9,
+              "color": "@color.accent2",
+              "bind": "@Space.Power:groups.6.pct / 100"
+            },
+            {
+              "id": "engine_s",
+              "x": 67,
+              "y": 12,
+              "r": 9,
+              "color": "@color.accent2",
+              "bind": "@Space.Power:groups.6.pct / 100"
+            }
+          ]
+        },
+        "top": {
+          "viewBox": [
+            0,
+            0,
+            200,
+            100
+          ],
+          "preserveAspect": "xMidYMid meet",
+          "layers": [
+            {
+              "id": "all",
+              "shapes": [
+                {
+                  "type": "path",
+                  "d": "M 66 8 L 132 8 L 142 16 L 66 16 Z",
+                  "zone": "port_nacelle",
+                  "fill": "#4c5b70",
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.2
+                  }
+                },
+                {
+                  "type": "path",
+                  "d": "M 66 84 L 132 84 L 142 92 L 66 92 Z",
+                  "zone": "starboard_nacelle",
+                  "fill": "#4c5b70",
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.2
+                  }
+                },
+                {
+                  "type": "path",
+                  "d": "M 20 50 L 60 28 L 150 34 L 178 50 L 150 66 L 60 72 Z",
+                  "zone": "hull",
+                  "fill": {
+                    "type": "linear",
+                    "x1": 0,
+                    "y1": 28,
+                    "x2": 0,
+                    "y2": 72,
+                    "stops": [
+                      [
+                        0,
+                        "#8c9db2"
+                      ],
+                      [
+                        1,
+                        "#34404f"
+                      ]
+                    ]
+                  },
+                  "stroke": {
+                    "paint": "@color.accent2",
+                    "width": 1.5
+                  }
+                },
+                {
+                  "type": "circle",
+                  "cx": 157,
+                  "cy": 50,
+                  "r": 5,
+                  "fill": "@color.accent"
+                }
+              ]
+            }
+          ],
+          "zones": [
+            {
+              "id": "hull",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:hull.cur / @Space.Damage.Stat:hull.max",
+              "contact_tint": "1 - coalesce($contact.integrity.hull, 1)",
+              "label": "Hull"
+            },
+            {
+              "id": "port_nacelle",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:systems.Port_Nacelle.cur / @Space.Damage.Stat:systems.Port_Nacelle.max",
+              "contact_tint": "1 - coalesce($contact.integrity.port_nacelle, 1)",
+              "label": "Port nacelle"
+            },
+            {
+              "id": "starboard_nacelle",
+              "color": "@color.alert",
+              "tint": "1 - @Space.Damage.Stat:systems.Starboard_Nacelle.cur / @Space.Damage.Stat:systems.Starboard_Nacelle.max",
+              "contact_tint": "1 - coalesce($contact.integrity.starboard_nacelle, 1)",
+              "label": "Starboard nacelle"
+            }
+          ],
+          "glows": [
+            {
+              "id": "engine_p",
+              "x": 66,
+              "y": 12,
+              "r": 12,
+              "color": "@color.accent2",
+              "bind": "@Space.Power:groups.6.pct / 100"
+            },
+            {
+              "id": "engine_s",
+              "x": 66,
+              "y": 88,
+              "r": 12,
+              "color": "@color.accent2",
+              "bind": "@Space.Power:groups.6.pct / 100"
+            }
+          ]
+        }
+      },
+      "ansi": [
+        "      \u001b[36m▄▄▄▄▄▄▄▄▄▄\u001b[0m",
+        "  \u001b[36m▄▄▄\u001b[0m\u001b[37m▀▀▀▀▀▀▀▀▀▀▀▀\u001b[36m▄▄\u001b[0m",
+        " \u001b[37m▐████████████████▌\u001b[33m■\u001b[0m",
+        "  \u001b[36m▀▀▀\u001b[0m\u001b[37m▄▄▄▄▄▄▄▄▄▄▄▄\u001b[36m▀▀\u001b[0m",
+        "      \u001b[36m▀▀▀▀▀▀▀▀▀▀\u001b[0m"
+      ]
+    }
+  }
+}

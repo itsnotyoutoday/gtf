@@ -52,7 +52,7 @@ func (c *Client) cmcpConfig(s *Session) session.Config {
 		Theme:          c.cmcpTheme(),
 		MaxBody:        65536, // the Welcome with the whole catalogue is about 20 KiB
 		LayerSendsGate: true,  // the gmcp handler sends Core.Hello and Core.Supports.Set
-		Packs:          &msg.HelloPacks{Formats: []int{1}},
+		Packs:          &msg.HelloPacks{Formats: []int{1}, Inline: true, HTTPS: true, Cache: c.packStore().cache.Recent(s.World.Host, 16)},
 		Logf: func(f string, a ...any) {
 			if c.in.Var("cmcp_debug") != "" {
 				c.Post(func(*gtfparser.Interp) { c.echoLine("% cmcp: " + fmt.Sprintf(f, a...)) })
@@ -88,8 +88,13 @@ func (c *Client) cmcpReceive(s *Session, m telnet.Message) {
 	if m.Raw != "" {
 		f.Payload = json.RawMessage(m.Raw)
 	}
+	if f.Package == msg.PkgPackData || f.Package == msg.PkgPackFail {
+		c.cmcpPackFrame(s, f)
+		return
+	}
 	s.cm.Receive(c.cfg.Now(), f)
 	c.cmcpPump(s)
+	c.cmcpEnsurePacks(s)
 }
 
 // cmcpPump moves what the session produced to the game and to the user.
