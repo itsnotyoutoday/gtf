@@ -49,7 +49,7 @@ func (s *Session) cmScr() *cmcpScr {
 // cmcpCaps: the default capabilities of the core: every core widget, none of the optional ones
 // (the joystick resolves to helm-controls: gtf steers with commands, the owner's decision; scope
 // falls back to radar; lights are not drawn).
-var cmcpCaps = pack.Caps{}
+var cmcpCaps = pack.Caps{Class: "cell"} // also applies the pack's layout.cell hints (spec 6.13)
 
 func (c *Client) cmcpScreensOn() bool {
 	switch strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_screens"))) {
