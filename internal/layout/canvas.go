@@ -345,6 +345,39 @@ func (cx *Ctx) renderCanvas(c *Canvas) {
 	}
 }
 
+// Block returns the canvas as cells (the half-block trick), the form CMCP screens draw into
+// their grid: the upper pixel is the foreground of "▀", the lower pixel its background; an unset
+// pixel shows the colour given as bg (the terminal default when it is the zero Color).
+func (c *Canvas) Block(bg Color) *CellBlock {
+	cw, ch := c.Cells()
+	blk := &CellBlock{W: cw, H: ch, Cells: make([]Cell, cw*ch)}
+	col := func(p pixel) Color {
+		if !p.Set {
+			return bg
+		}
+		return Color{Kind: RGB, R: p.R, G: p.G, B: p.B}
+	}
+	for y := 0; y < ch; y++ {
+		for x := 0; x < cw; x++ {
+			top, bot := c.pix[(2*y)*c.W+x], c.pix[(2*y+1)*c.W+x]
+			cell := Cell{R: '▀', A: Attr{FG: col(top), BG: col(bot)}}
+			if !top.Set && !bot.Set && bg.Kind == Default {
+				cell = Cell{R: ' '}
+			}
+			if tc, ok := c.text[y*cw+x]; ok {
+				a := tc.A
+				a.BG = col(top)
+				if !top.Set && bot.Set {
+					a.BG = col(bot)
+				}
+				cell = Cell{R: tc.R, A: a}
+			}
+			blk.Cells[y*cw+x] = cell
+		}
+	}
+	return blk
+}
+
 // canvasWidget renders {canvas NAME}; the client resolves "canvas:NAME" to a *Canvas.
 func (c *Ctx) canvasWidget(name string) {
 	v, ok := c.lookup("canvas:" + name)

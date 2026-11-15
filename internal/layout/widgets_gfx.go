@@ -146,22 +146,81 @@ func (c *Ctx) radar(kw map[string]string) {
 	if w < 5 || h < 3 {
 		return
 	}
-	trail := float64(intOpt(kw, "trail", 100))
-	rings := intOpt(kw, "rings", 3)
-	sweep := 0.0
+	o := RadarOpts{W: w, H: h, Trail: float64(intOpt(kw, "trail", 100)), Rings: intOpt(kw, "rings", 3)}
 	if r := kw["sweep"]; r != "" {
-		sweep, _ = c.num(r)
+		o.Sweep, _ = c.num(r)
 	}
-	var contacts []radarContact
 	if r := kw["contacts"]; r != "" {
 		v, _ := c.lookup(r)
-		contacts = parseContacts(toString(v))
+		for _, ct := range parseContacts(toString(v)) {
+			o.Contacts = append(o.Contacts, RadarContact{ID: ct.id, Bearing: ct.brg, Range: ct.rng, Kind: ct.kind})
+		}
 	}
-	bg, _ := ParseColor(kw["bg"])
+	o.BG, _ = ParseColor(kw["bg"])
+	blk := RenderRadar(o)
+	for y := 0; y < blk.H; y++ {
+		for x := 0; x < blk.W; x++ {
+			cell := blk.Cells[y*blk.W+x]
+			c.emitWith(string(cell.R), cell.A)
+		}
+		if y < blk.H-1 {
+			c.emit("\n")
+		}
+	}
+}
+
+// RadarContact is one blip of the radar dish: bearing in degrees (0 = up), range 0..100 (percent
+// of the dish radius), Kind F friend, H hostile, N neutral, U unknown.
+type RadarContact struct {
+	ID      string
+	Bearing float64
+	Range   float64
+	Kind    string
+	Mark    rune // the blip character (default a dot)
+	Bold    bool // draw it emphasised (the selected contact)
+}
+
+// RadarPalette colours the dish; the zero value is the classic green of /lcars.
+type RadarPalette struct {
+	Sweep, Head, Ring, Outer, Grid, Centre Color
+	Set                                    bool
+}
+
+// RadarOpts describes a radar dish picture.
+type RadarOpts struct {
+	W, H     int     // cells
+	Trail    float64 // degrees of fading sweep trail (default 100)
+	Rings    int     // range rings (default 3)
+	Sweep    float64 // sweep head, degrees, 0 = up
+	Contacts []RadarContact
+	BG       Color
+	Palette  RadarPalette
+}
+
+// RenderRadar draws the /lcars sensor dish: Braille dots (2 x 4 per cell) in truecolor, a sweep with
+// a fading trail, range rings, a cross hair and contacts that glow brightest just after the sweep
+// passes. It is the one dish drawing in gtf: the {radar} template widget and the CMCP screens both
+// call it.
+func RenderRadar(o RadarOpts) *CellBlock {
+	w, h := o.W, o.H
+	if o.Trail <= 0 {
+		o.Trail = 100
+	}
+	if o.Rings <= 0 {
+		o.Rings = 3
+	}
+	pal := o.Palette
+	if !pal.Set {
+		pal = RadarPalette{Sweep: Color{Kind: RGB, R: 20, G: 255, B: 110}, Head: Color{Kind: RGB, R: 190, G: 255, B: 210},
+			Ring: Color{Kind: RGB, G: 90, B: 55}, Outer: Color{Kind: RGB, G: 190, B: 90}, Grid: Color{Kind: RGB, G: 70, B: 45},
+			Centre: Color{Kind: RGB, R: 120, G: 255, B: 170}, Set: true}
+	}
+	trail, rings, sweep := o.Trail, o.Rings, o.Sweep
 	d := newDotCanvas(w, h)
 	pw, ph := float64(w*2), float64(h*4)
 	cx, cy := (pw-1)/2, (ph-1)/2
 	R := math.Min(cx, cy)
+	sw := pal.Sweep
 	for py := 0; py < h*4; py++ {
 		for px := 0; px < w*2; px++ {
 			dx, dy := float64(px)-cx, float64(py)-cy
@@ -175,9 +234,9 @@ func (c *Ctx) radar(kw map[string]string) {
 				in := math.Pow(1-delta/trail, 1.6)
 				if in > 0.5 || (px+py)%2 == 0 {
 					if delta < 2 {
-						d.set(px, py, Color{Kind: RGB, R: 190, G: 255, B: 210}, 3)
+						d.set(px, py, pal.Head, 3)
 					} else if in > 0.05 {
-						d.set(px, py, scaleRGB(20, 255, 110, 0.15+0.85*in), 1)
+						d.set(px, py, scaleRGB(sw.R, sw.G, sw.B, 0.15+0.85*in), 1)
 					}
 				}
 			}
@@ -185,42 +244,65 @@ func (c *Ctx) radar(kw map[string]string) {
 				rr := R * float64(k) / float64(rings)
 				if math.Abs(dist-rr) < 0.55 {
 					if k == rings {
-						d.set(px, py, Color{Kind: RGB, G: 190, B: 90}, 2)
+						d.set(px, py, pal.Outer, 2)
 					} else if (px+py)%2 == 0 {
-						d.set(px, py, Color{Kind: RGB, G: 90, B: 55}, 2)
+						d.set(px, py, pal.Ring, 2)
 					}
 				}
 			}
 			if (math.Abs(dx) < 0.6 || math.Abs(dy) < 0.6) && (px+py)%3 == 0 {
-				d.set(px, py, Color{Kind: RGB, G: 70, B: 45}, 2)
+				d.set(px, py, pal.Grid, 2)
 			}
 			if dist < 1.2 {
-				d.set(px, py, Color{Kind: RGB, R: 120, G: 255, B: 170}, 4)
+				d.set(px, py, pal.Centre, 4)
 			}
 		}
 	}
 	over := map[int]Cell{}
-	for _, ct := range contacts {
-		a := ct.brg * math.Pi / 180
-		rr := math.Max(0, math.Min(100, ct.rng)) / 100 * R * 0.94
+	for _, ct := range o.Contacts {
+		a := ct.Bearing * math.Pi / 180
+		rr := math.Max(0, math.Min(100, ct.Range)) / 100 * R * 0.94
 		x, y := cx+rr*math.Sin(a), cy-rr*math.Cos(a)
 		cxc, cyc := int(x)>>1, int(y)>>2
 		if cxc < 0 || cyc < 0 || cxc >= w || cyc >= h {
 			continue
 		}
-		ping := 1 - normDeg(sweep-normDeg(ct.brg))/360 // brightest just after the sweep passes
-		rC, gC, bC := contactRGB(ct.kind)
+		ping := 1 - normDeg(sweep-normDeg(ct.Bearing))/360 // brightest just after the sweep passes
+		rC, gC, bC := contactRGB(ct.Kind)
 		col := scaleRGB(rC, gC, bC, 0.35+0.65*ping)
-		over[cyc*w+cxc] = Cell{R: '●', A: Attr{FG: col, Bold: ping > 0.85}}
+		mark := ct.Mark
+		if mark == 0 {
+			mark = '●'
+		}
+		over[cyc*w+cxc] = Cell{R: mark, A: Attr{FG: col, Bold: ct.Bold || ping > 0.85, Reverse: ct.Bold}}
 		if cxc+1 < w {
-			if _, taken := over[cyc*w+cxc+1]; !taken && ct.id != "" {
-				lc := []rune(ct.id)[0]
+			if _, taken := over[cyc*w+cxc+1]; !taken && ct.ID != "" {
+				lc := []rune(ct.ID)[0]
 				over[cyc*w+cxc+1] = Cell{R: lc, A: Attr{FG: scaleRGB(rC, gC, bC, 0.55+0.45*ping)}}
 			}
 		}
 	}
-	c.emitCanvas(d, over, bg)
+	blk := &CellBlock{W: w, H: h, Cells: make([]Cell, w*h)}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			i := y*w + x
+			if oc, ok := over[i]; ok {
+				oc.A.BG = o.BG
+				blk.Cells[i] = oc
+				continue
+			}
+			r := ' '
+			if d.bits[i] != 0 {
+				r = rune(0x2800) + rune(d.bits[i])
+			}
+			blk.Cells[i] = Cell{R: r, A: Attr{FG: d.col[i], BG: o.BG}}
+		}
+	}
+	return blk
 }
+
+// Lerp blends two colours (both made RGB) by t in 0..1: the ramp of the gradient bars.
+func Lerp(a, b Color, t float64) Color { return lerpColor(RGBOf(a), RGBOf(b), clamp01(t)) }
 
 // scope draws a multi-row line graph of a variable's recent history in Braille:
 //
