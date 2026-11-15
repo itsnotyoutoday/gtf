@@ -422,8 +422,17 @@ func (d *drawer) teamAssigner(b *pack.BoundNode, r Rect, foc bool) {
 		d.c.put(r.X, r.Y+1+i-f0, mk, a)
 		d.c.text(r.X+2, r.Y+1+i-f0, fmt.Sprintf("T%-2s crew %-3s %s", tk[i], str(t["crew"]), str(t["assign"])), a, lw-2)
 	}
-	for i, s := range sys {
-		if sy+1+i >= r.Y+r.H-1 {
+	vis := max(r.Y+r.H-1-(sy+1), 1)
+	if ws.zone >= ws.scroll+vis {
+		ws.scroll = ws.zone - vis + 1
+	}
+	if ws.zone < ws.scroll {
+		ws.scroll = ws.zone
+	}
+	ws.scroll = max(0, min(ws.scroll, max(len(sys)-vis, 0)))
+	for i0, s := range sys[min(ws.scroll, len(sys)):] {
+		i := i0 + ws.scroll
+		if sy+1+i0 >= r.Y+r.H-1 {
 			break
 		}
 		a := th.text()
@@ -431,8 +440,8 @@ func (d *drawer) teamAssigner(b *pack.BoundNode, r Rect, foc bool) {
 		if ws.stage == 1 && foc && ws.zone == i {
 			mk, a = '>', focused(th.accent())
 		}
-		d.c.put(sx, sy+1+i, mk, a)
-		d.c.text(sx+2, sy+1+i, str(s), a, r.X+r.W-sx-2)
+		d.c.put(sx, sy+1+i0, mk, a)
+		d.c.text(sx+2, sy+1+i0, str(s), a, r.X+r.W-sx-2)
 	}
 	msg := "Enter: choose a team"
 	if ws.stage == 1 {

@@ -72,7 +72,7 @@ func leafSize(b *pack.BoundNode, w int) (int, int) {
 	case "group-picker":
 		return 24, min(len(asMap(prop(b, "groups"))), maxListRows) + 1
 	case "team-assigner":
-		n := max(len(asMap(prop(b, "teams"))), len(asList(prop(b, "systems"))))
+		n := min(max(len(asMap(prop(b, "teams"))), len(asList(prop(b, "systems")))), maxListRows)
 		return 44, n + 3
 	case "sector-map":
 		return 40, 14

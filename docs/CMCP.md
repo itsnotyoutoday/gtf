@@ -7,6 +7,15 @@ gtf adds only rendering, keys and platform glue.
 
 A game that does not offer CMCP, or a gtf with `%cmcp off`, is plain text as always. Nothing CMCP is sent before gtf declared it.
 
+## Layout
+
+The default is a **band over the output**: the screen's widgets are laid out as the pack arranges them (a viewscreen and radar side by
+side, controls, tables), each only as tall as its content, and the real text pane takes everything below, never less than 8 rows or a
+quarter of the height. A row whose parts do not fit the width is stacked into a column (spec 6.13), long lists scroll in their region,
+and a pack's `layout.cell` hints (order, hidden, dir, weight...) are applied through the core. `%cmcp_layout side` is the alternative:
+the output on the whole left side and every widget stacked in a column on the right. `%cmcp_ascii` (on, off, auto: on when the locale
+is not UTF-8) draws only ASCII characters (bars `#`, radar and starfield as dots).
+
 ## What you see
 
 When a server puts you at a console (`man opera` on the Evennia PoC), the output area becomes the console screen: widgets around
@@ -72,6 +81,8 @@ AI, someone else took the console) nothing is offered.
 |---|---|---|
 | `%cmcp` | on | declare `Cobra 1` to servers |
 | `%cmcp_key_focus` | `^I` (Tab) | the key that enters the screen (see Keyboard) |
+| `%cmcp_layout` | auto (band) | `side` stacks the widgets in a right-hand column |
+| `%cmcp_ascii` | auto | ASCII-only drawing |
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
 | `%cmcp_theme` | (plain) | `plain`, `tng`, `klingon`, `romulan`, `ferengi`: palette tokens; plain leaves colours to the terminal |
 | `%cmcp_ship_theme` | off | when on and `%cmcp_theme` is unset, follow the console's/ship's/screen's suggested theme (spec 6.6) |
@@ -82,8 +93,9 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_origins` | | extra allowed pack origins (`https://host[:port]`, space separated); the game host is always allowed |
 | `%cmcp_debug` | | non-empty: show protocol diagnostics as `% cmcp:` lines |
 
-gtf plays **no audio**. It does not claim to in `Hello.audio`, so a server sends it no `Sound.*`; the bell rings for the
-alert `Cobra.Event`s (and for `Sound.Play` of the bell events, should a server send them).
+gtf plays **no audio**. It does not claim to in `Hello.audio`, so a server sends it no `Sound.*`. **Deliberate deviation:** with
+`%cmcp_bell on` the bell also rings for the alert `Cobra.Event`s (red/yellow alert, proximity, comm, hail), because a client without
+audio would otherwise never hear about them; spec 9.9 only names `Sound.Play`. `Sound.Play` of the bell events rings it too.
 
 ## Packs, cache, consent
 
@@ -104,6 +116,11 @@ Any failure keeps the built-in screens and the session running.
 * `internal/ui`: a `Surface` (a drawn grid plus the rectangle of the text pane) replaces docked panels while a screen is shown.
 * The expression language, binding, actions and pack validation are the core's (`pack.Bind`, `Node.Perform`); gtf never evaluates an
   expression itself.
+
+## /restart
+
+After `/restart` the new process has no CMCP state, so it declares afresh on every carried connection (`Core.Supports.Remove` then
+`Set`, which a server treats as a new offer) and the server answers with a full handshake, the console and snapshots.
 
 ## Squatter peers (what workstream W needs)
 

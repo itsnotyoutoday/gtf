@@ -54,3 +54,48 @@ func TestCmcpEvenniaE2E(t *testing.T) {
 	exec(c, "unman")
 	time.Sleep(time.Second)
 }
+
+// TestCmcpEvenniaTransporterAndDamage walks to the transporter room (the context stack), then
+// mans operations and assigns a damage team (GTF_E2E_EVENNIA=1; Evennia PoC on 127.0.0.1:4101).
+func TestCmcpEvenniaTransporterAndDamage(t *testing.T) {
+	if os.Getenv("GTF_E2E_EVENNIA") == "" {
+		t.Skip("set GTF_E2E_EVENNIA=1 with the Evennia PoC running on 127.0.0.1:4101")
+	}
+	term := &recTerm{Screen: vt.New(120, 40)}
+	c, err := New(Config{Term: term, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Interactive: true, NoUpdateCheck: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	f := &screenFixture{t: t, c: c, term: term}
+	exec(c, "/set cmcp_pack_consent=always", "/set cmcp_debug=1", "/connect 127.0.0.1 4101")
+	cmEventually(t, "handshake", f.clientReady)
+	exec(c, "connect bob cobalt-fern-52")
+	time.Sleep(1500 * time.Millisecond)
+	screen := func() (id string, stack int) {
+		c.Do(func(*gtfparser.Interp) { u := c.fg.cm.UI(); id, stack = u.Screen.Resolved, len(u.Stack) })
+		return
+	}
+	for _, cmd := range []string{"board resolute", "lift", "d3", "tr"} {
+		exec(c, cmd)
+		time.Sleep(1500 * time.Millisecond)
+	}
+	f.render()
+	id, n := screen()
+	t.Logf("after tr: screen %s, stack %d\n%s", id, n, term.Dump())
+	f.dump("evennia-transporter")
+	for _, cmd := range []string{"corridor", "board resolute", "man opera"} {
+		exec(c, cmd)
+		time.Sleep(1200 * time.Millisecond)
+	}
+	exec(c, "/cmcp screen std.damage")
+	time.Sleep(1500 * time.Millisecond)
+	exec(c, "/cmcp send dmg.assign team=1 system=Hull")
+	time.Sleep(1500 * time.Millisecond)
+	f.render()
+	id, n = screen()
+	t.Logf("operations/damage: screen %s, stack %d\n%s", id, n, term.Dump())
+	f.dump("evennia-damage")
+	exec(c, "unman")
+	time.Sleep(time.Second)
+}
