@@ -34,6 +34,9 @@ type Assets interface {
 	// Sprite renders sprite id (view chosen by the implementation) into w x h cells, with the
 	// zone tints and glows currently evaluated from data.
 	Sprite(id string, w, h int) *Block
+	// ContactArt renders the art the scene gives a contact (a ship of that class and empire) into
+	// w x h cells, or nil when it has none (a plain marker is drawn instead).
+	ContactArt(scene string, contact map[string]any, w, h int) *Block
 	// Zones lists the zone ids of a sprite in drawing order (for keyboard selection).
 	Zones(id string) []string
 }
@@ -51,6 +54,7 @@ type Env struct {
 	// through pack FocusPlan); the renderer underlines it.
 	Mnemonics map[string]string
 	// Header is the title shown on row 0; Notice replaces the key hint there for a while.
+	ASCII  bool   // draw with ASCII characters only
 	Layout string // "auto" (default), "side" or "top"
 	Header string
 	Notice string

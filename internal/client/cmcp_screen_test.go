@@ -554,3 +554,22 @@ func TestCmcpKeyboardMnemonicAndSlider(t *testing.T) {
 		t.Fatalf("slider sent %q", got)
 	}
 }
+
+// A ship in view on the viewscreen is drawn with the scene's art for its class (a sprite through
+// the core's view selection and the rasteriser), not as a marker.
+func TestCmcpViewscreenDrawsShipSprite(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	docs := f.docs["Space.Contacts"].(map[string]any)["contacts"].(map[string]any)
+	ship := docs["17"].(map[string]any)
+	ship["rel"] = map[string]any{"az": 8.0, "mark": 2.0}
+	ship["distance_m"] = 1500.0
+	ship["class"] = "Marauder"
+	ship["size_m"] = 120.0
+	ship["heading"] = map[string]any{"az": 40.0, "mark": 0.0, "roll": 0.0}
+	f.console("std.sensors", "science", nil)
+	s := f.surface()
+	if !strings.ContainsAny(s, "▀▄█") {
+		t.Fatalf("no sprite cells on the viewscreen:\n%s", s)
+	}
+	f.dump("viewscreen-ship")
+}

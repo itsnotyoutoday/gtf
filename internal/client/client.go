@@ -300,7 +300,7 @@ func (c *Client) loadRC() {
 func (c *Client) Start() {
 	if c.restored != nil {
 		c.startRestored()
-		c.Post(func(*gtfparser.Interp) { c.squatCheck(); c.afterTask() }) // the restored variables say whether to listen
+		c.Post(func(*gtfparser.Interp) { c.squatCheck(); c.cmcpAfterRestore(); c.afterTask() }) // the restored variables say whether to listen
 	} else {
 		c.Post(func(in *gtfparser.Interp) {
 			for _, cmd := range c.cfg.Commands {

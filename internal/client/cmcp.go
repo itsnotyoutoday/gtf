@@ -11,6 +11,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	gmcpproto "github.com/itsnotyoutoday/gtf/internal/net/proto/gmcp"
 	"os"
 	"path/filepath"
 	"sort"
@@ -223,4 +224,23 @@ func (c *Client) cachedPacks(host string) []msg.CacheEntry {
 		}
 	}
 	return c.packStore().cache.Recent(host, 16)
+}
+
+// cmcpAfterRestore re-handshakes CMCP on the connections a /restart carried over: the new process
+// has no session state, so it declares afresh (Core.Supports.Remove then Set, which a server treats
+// as a new offer) and the server answers with Cobra.Server, Welcome, the console and full snapshots.
+func (c *Client) cmcpAfterRestore() {
+	if !c.cmcpEnabled() {
+		return
+	}
+	for _, s := range c.order {
+		if s.conn == nil || !s.open() || !s.conn.Enabled(telnet.OptGMCP, telnet.Them) {
+			continue
+		}
+		c.cmcpWanted.Store(true)
+		s.cm = nil
+		c.cmcpOption(s, true)
+		s.conn.SendProto("gmcp", "Core.Supports.Remove", []string{"Cobra"})
+		s.conn.SendProto("gmcp", "Core.Supports.Set", append(append([]string(nil), gmcpproto.DefaultSupports...), "Cobra 1"))
+	}
 }

@@ -8,7 +8,9 @@ package client
 // renderer of internal/cmcpui, and operates it from the keyboard.
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -249,7 +251,7 @@ func (c *Client) cmcpSyncSurface() {
 		}
 	}
 	cs.effects = live
-	ce := cmcpui.Env{Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	ce := cmcpui.Env{ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -399,4 +401,74 @@ func (c *Client) cmcpAutoSelect(s *Session, f *cmcpui.Frame) bool {
 		did = true
 	}
 	return did
+}
+
+// ContactArt gives a ship contact the art its scene names for its empire and class, in the view
+// that faces the observer (pack.SelectView), tinted from the contact's own data (never the own
+// ship's damage, spec 7.2.3).
+func (a *cmAssets) ContactArt(scene string, contact map[string]any, w, h int) *cmcpui.Block {
+	if a.p == nil || w < 3 || h < 2 {
+		return nil
+	}
+	sc := a.p.Scenes[scene]
+	if sc == nil {
+		return nil
+	}
+	var def struct {
+		Contacts struct {
+			Art     map[string]string `json:"art"`
+			Default string            `json:"default"`
+		} `json:"contacts"`
+	}
+	if json.Unmarshal(sc.Raw, &def) != nil {
+		return nil
+	}
+	id := pack.LookupArt(def.Contacts.Art, str1(contact["empire"]), str1(contact["class"]), str1(contact["type"]), def.Contacts.Default)
+	sp := a.p.Sprites[id]
+	if sp == nil {
+		return nil
+	}
+	az, el := 0.0, 0.0
+	if hd, ok := contact["heading"].(map[string]any); ok {
+		if v, ok := hd["az"].(float64); ok {
+			az = v
+		}
+	}
+	view, _ := pack.SelectView(sp.ViewNames, az, el)
+	if view == "" {
+		view = viewOf(sp)
+	}
+	spr, err := sp.Resolve(view, a.p.Resolver(a.th.TokenMap()))
+	if err != nil {
+		return nil
+	}
+	par := sp.EvaluateContact(view, contact).Params()
+	cells, err := a.s.cmScr().sprites.Cells(spr, w, h, par, raster.Options{Mode: raster.HalfBlock, Depth: raster.TrueColor})
+	if err != nil || cells == nil {
+		return nil
+	}
+	blk := &cmcpui.Block{W: cells.W, H: cells.H, Cells: make([]layout.Cell, len(cells.C))}
+	for i, ce := range cells.C {
+		blk.Cells[i] = layout.Cell{R: ce.R, A: layout.Attr{FG: layoutColorC(ce.FG), BG: layoutColorC(ce.BG)}}
+	}
+	return blk
+}
+
+func str1(v any) string { s, _ := v.(string); return s }
+
+// cmcpASCII is %cmcp_ascii: on, off, or auto (default): ASCII when the locale is not UTF-8.
+func (c *Client) cmcpASCII() bool {
+	switch strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_ascii"))) {
+	case "on", "1", "yes", "true":
+		return true
+	case "off", "0", "no", "false":
+		return false
+	}
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			u := strings.ToUpper(v)
+			return !(strings.Contains(u, "UTF-8") || strings.Contains(u, "UTF8"))
+		}
+	}
+	return false
 }

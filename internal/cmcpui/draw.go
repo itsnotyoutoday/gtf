@@ -306,3 +306,33 @@ func FirstKey(m map[string]any) any {
 	}
 	return keyValue(k[0])
 }
+
+// asciiMap is what the ASCII-only mode draws in place of the block, braille and box characters.
+var asciiMap = map[rune]rune{
+	'█': '#', '▉': '#', '▊': '#', '▋': '#', '▌': '#', '▍': '=', '▎': '=', '▏': '-', '░': '.', '▀': '"', '▄': '_',
+	'▁': '_', '▂': '_', '▃': '-', '▅': '=', '▆': '#', '▇': '#',
+	'·': '.', '▲': '^', '●': 'o', '◆': '*', '✛': '+', '◀': '<', '▶': '>', '◖': '(', '◗': ')', '─': '-', '│': '|',
+	'┌': '+', '┐': '+', '└': '+', '┘': '+', '✸': '*', '╱': '/', '▾': 'v', '◉': 'o', '╰': '\\', '╯': '/',
+}
+
+// asciify replaces every non-ASCII character of the grid (the %cmcp_ascii mode, or a terminal
+// without UTF-8): braille becomes a dot where it has any, other characters are mapped or '?'.
+func asciify(g *layout.Grid) {
+	for i, c := range g.Cells {
+		switch {
+		case c.R < 0x80:
+		case c.R >= 0x2800 && c.R <= 0x28ff:
+			if c.R == 0x2800 {
+				g.Cells[i].R = ' '
+			} else {
+				g.Cells[i].R = '.'
+			}
+		default:
+			if r, ok := asciiMap[c.R]; ok {
+				g.Cells[i].R = r
+			} else {
+				g.Cells[i].R = '?'
+			}
+		}
+	}
+}

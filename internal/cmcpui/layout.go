@@ -92,6 +92,9 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	if i := f.index(st.Focus); i >= 0 {
 		f.Hint = d.hint(f.Items[i])
 	}
+	if env.ASCII {
+		asciify(g)
+	}
 	return f
 }
 

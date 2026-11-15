@@ -146,3 +146,18 @@ func TestHoldButtonNeedsThreePresses(t *testing.T) {
 		t.Fatalf("a slow third press fired: %+v", r)
 	}
 }
+
+// ASCII-only mode: no character outside ASCII reaches the grid.
+func TestASCIIMode(t *testing.T) {
+	p := loadPack(t)
+	st := NewState()
+	docs := loadDocs(t)
+	env := &pack.Env{Docs: docs, UI: st.UI}
+	tree := p.Screens["transporter"].Bind(env, pack.Caps{Class: "cell"})
+	f := Draw(tree, 120, 40, Env{Theme: ThemeByName("plain"), Now: now, ASCII: true}, st)
+	for _, c := range f.Grid.Cells {
+		if c.R >= 0x80 {
+			t.Fatalf("non-ASCII %q in ASCII mode", c.R)
+		}
+	}
+}

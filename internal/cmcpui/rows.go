@@ -444,6 +444,7 @@ func (d *drawer) teamAssigner(b *pack.BoundNode, r Rect, foc bool) {
 // ---- radar ----
 
 type blip struct {
+	raw   map[string]any
 	cid   string
 	name  string
 	az, d float64
@@ -461,7 +462,7 @@ func (d *drawer) blips(b *pack.BoundNode) []blip {
 		if bear == nil {
 			bear = asMap(c["bearing"])
 		}
-		out = append(out, blip{cid: k, name: str(c["name"]), az: numOr(bear["az"], 0), d: numOr(c["distance_m"], 0), typ: str(c["type"]), iff: str(c["iff"]), rel: bear})
+		out = append(out, blip{raw: c, cid: k, name: str(c["name"]), az: numOr(bear["az"], 0), d: numOr(c["distance_m"], 0), typ: str(c["type"]), iff: str(c["iff"]), rel: bear})
 	}
 	return out
 }
@@ -564,6 +565,13 @@ func (d *drawer) radar(b *pack.BoundNode, r Rect, foc bool) {
 
 // ---- viewscreen ----
 
+func (d *drawer) artFor(scene string, c map[string]any, w, h int) *Block {
+	if d.env.Assets == nil {
+		return nil
+	}
+	return d.env.Assets.ContactArt(scene, c, w, h)
+}
+
 func hash(i int) uint32 {
 	x := uint32(i)*2654435761 + 0x9e3779b9
 	x ^= x >> 15
@@ -601,18 +609,26 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 		d.c.put(r.X+x, r.Y+y, ch, a)
 	}
 	fov := 60.0
+	scene := str(prop(b, "scene"))
 	for _, x := range d.blips(b) {
-		az := math.Mod(x.az+540, 360) - 180 // -180..180, 0 = dead ahead
-		mk := numOr(x.rel["mark"], 0)
 		a := bg
 		a.FG = iffColor(th, x.iff)
 		if x.iff == "" {
 			a.FG = th.Token("color.text")
 		}
-		if math.Abs(az) > fov/2 {
+		rel := asMap(x.raw["rel"])
+		if rel == nil {
+			rel = asMap(x.raw["bearing"])
+		}
+		relAz := numOr(rel["az"], 0)
+		if relAz > 180 {
+			relAz -= 360
+		}
+		fx, fy, vis := pack.Project(relAz, numOr(rel["mark"], 0), fov, float64(r.H*2)/float64(r.W))
+		if !vis {
 			// off screen: an arrow on the edge it is on
 			if x.typ == "Ship" {
-				if az < 0 {
+				if relAz < 0 {
 					d.c.text(r.X, r.Y+r.H/2, "◀ "+x.name, a, r.W)
 				} else {
 					s := x.name + " ▶"
@@ -621,8 +637,7 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 			}
 			continue
 		}
-		px := r.X + int(float64(r.W)*(0.5+az/fov))
-		py := r.Y + int(float64(r.H)*(0.5-mk/(fov*0.6)))
+		px, py := r.X+int(fx*float64(r.W)), r.Y+int(fy*float64(r.H))
 		if py < r.Y || py >= r.Y+r.H {
 			continue
 		}
@@ -637,8 +652,26 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 				}
 			}
 		case "Ship":
-			d.c.put(px, py, '▲', a)
-			d.c.text(px+2, py, x.name, a, r.X+r.W-px-2)
+			// the scene's art for its class, as wide as its apparent size on the screen
+			wc := int(pack.ApparentFraction(numOr(x.raw["size_m"], 0), x.d, fov) * float64(r.W))
+			wc = max(wc, 6)
+			if blk := d.artFor(scene, x.raw, min(wc, r.W/2), max(3, min(wc/2, r.H/2))); blk != nil {
+				for y := 0; y < blk.H; y++ {
+					for xx := 0; xx < blk.W; xx++ {
+						c := blk.Cells[y*blk.W+xx]
+						if c.R == ' ' && c.A.BG.Kind == layout.Default {
+							continue
+						}
+						if c.A.BG.Kind == layout.Default {
+							c.A.BG = bg.BG
+						}
+						d.c.put(px-blk.W/2+xx, py-blk.H/2+y, c.R, c.A)
+					}
+				}
+			} else {
+				d.c.put(px, py, '▲', a)
+			}
+			d.c.text(px-runeLen(x.name)/2, py+max(1, 1), x.name, a, r.X+r.W-px)
 		default:
 			d.c.put(px, py, '·', a)
 		}
