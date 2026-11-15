@@ -41,7 +41,7 @@ send("man science\r", 2.0)
 drain(1)
 bad = []
 def step(key, name, want):
-    send(key, 1.5); h = hint(); ok = want in h
+    send(key, 1.5); h = hint(); ok = want in h or (want == "PANEL " and h.startswith("MENU ")) # a screen with no panels (a ship room) has only the menu
     print(("ok   " if ok else "FAIL ") + f"{name:10}: {h[:110]}")
     if not ok: bad.append(name)
 step("", "start", "INPUT - Tab or F2")
