@@ -873,3 +873,14 @@ func TestCmcpAlertRecolourModes(t *testing.T) {
 	f.contain(t, "RED ALERT")
 	f.dump("alert-romulan-default")
 }
+
+// The output is formatted for about 80 columns: in the side layout the text pane stops at 80 columns
+// and the widget column takes the rest (spec 6.13.1 1b).
+func TestCmcpTextWidthCap(t *testing.T) {
+	f := newScreenFixtureSetup(t, 200, 50, t.TempDir(), nil, "/set cmcp_motion=off")
+	f.console("std.operations", "", nil)
+	r, _, _ := f.pane()
+	if r.W > 80 || r.W < 60 {
+		t.Fatalf("text pane is %d columns wide at 200 columns", r.W)
+	}
+}
