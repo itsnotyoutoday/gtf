@@ -286,6 +286,7 @@ func (c *Client) cmcpSyncSurface() {
 	}
 	now := c.cfg.Now()
 	env := pack.EnvFromUI(u, cs.st.UI)
+	env.Ctx = u.CtxLocal() // $ctx: the active context (name, kind, key)
 	budget := 4096
 	env.Budget = &budget
 	tree := scr.Bind(env, cmcpCaps)
@@ -299,7 +300,11 @@ func (c *Client) cmcpSyncSurface() {
 	th := c.cmcpResolveTheme(s, u, c.cmcpThemeFor(s, u, scr.SuggestTheme))
 	c.cmcpFxConfig(s, cs, th)
 	look := s.cm.Ambient(now)
-	hdr := scr.Title
+	title := scr.Title
+	if n := len(u.Stack); n > 0 && u.Stack[n-1].Kind == "room" && u.Stack[n-1].Name != "" {
+		title = u.Stack[n-1].Name // a ship room: the frame's title is the room's name ($ctx.name, spec 3.3.3)
+	}
+	hdr := title
 	if hdr == "" {
 		hdr = id
 	}
@@ -341,12 +346,13 @@ func (c *Client) cmcpSyncSurface() {
 	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpRoomVars(u, c.cmcpVars(u, id, title), title), Builtin: p != nil && p.Builtin, Title: title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
 		// a picker had nothing selected: its first row was chosen (a $ui write only), draw again
 		env = pack.EnvFromUI(u, cs.st.UI)
+		env.Ctx = u.CtxLocal() // $ctx: the active context (name, kind, key)
 		budget = 4096
 		env.Budget = &budget
 		tree = scr.Bind(env, cmcpCaps)
@@ -447,6 +453,10 @@ func (c *Client) cmcpKeys(raw string) bool {
 	}
 	s.cmScr().lockNote = "" // the locked-screen note lasts until the next key
 	if c.cmcpScreensOn() && c.cmcpAlertKey(s, name, raw) {
+		return true
+	}
+	if c.cmcpScreensOn() && name == cmcpui.FocusKeyName(orStr(c.in.Var("cmcp_key_close"), "F6")) && c.cmcpConsentLine(s.cmScr()) == "" {
+		c.cmcpClose(s) // while a pack question is pending F6 is its REFUSE key instead
 		return true
 	}
 	// two screen-wide keys that work from the input line too: the log view (F3) and the screen off (F4)
@@ -550,6 +560,7 @@ func (c *Client) cmcpPerform(s *Session, ev cmcpui.Event) {
 	cs := s.cmScr()
 	u := s.cm.UI()
 	env := pack.EnvFromUI(u, cs.st.UI)
+	env.Ctx = u.CtxLocal() // $ctx: the active context (name, kind, key)
 	res := ev.Node.Perform(ev.Name, ev.Value, env, cs.st.UI, s.cm, c.cfg.Now())
 	for _, t := range res.Tickets {
 		if t.Mutating && t.Echo != "" {
@@ -949,7 +960,7 @@ func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr) (string, string) {
 	case cs.st.Active:
 		return f.Header(), "focus"
 	}
-	return f.Header() + "   F3 log   F4 screen off   F5 alert   /cmcp keys", "idle"
+	return f.Header() + "   F3 log   F4 screen off   F5 alert   F6 close   /cmcp keys", "idle"
 }
 
 // cmcpWithHint returns the frame's grid with one more row at the bottom holding the hint line.
@@ -1170,4 +1181,39 @@ func (c *Client) cmcpRecolourWith(th cmcpui.Theme, look ambient.Look) string {
 		return "edge"
 	}
 	return mode
+}
+
+// cmcpRoomVars lets a ship room's name stand where the console's mode name goes in a theme's band.
+func (c *Client) cmcpRoomVars(u *session.UI, v map[string]any, title string) map[string]any {
+	if n := len(u.Stack); n > 0 && u.Stack[n-1].Kind == "room" && v != nil {
+		v["mode"] = title
+	}
+	return v
+}
+
+// cmcpClose is the close key and /cmcp close (spec 3.3.4): tell the game the player closed the screen
+// and let it decide. gtf never hides the screen itself; the update that follows (a pop, or the console
+// unmanned) does, and a refusal or silence shows an error notice (the core posts it).
+func (c *Client) cmcpClose(s *Session) {
+	if s == nil || s.cm == nil {
+		return
+	}
+	now := c.cfg.Now()
+	_, err := s.cm.CloseContext(now, session.CloseUser)
+	switch {
+	case err == nil:
+	case errors.Is(err, session.ErrContextlessClient):
+		// a game that does not speak contexts: the old way of leaving a console
+		if t, e := s.cm.Command(now, "console.unman", nil); e != nil {
+			c.cmcpNotice(s, "Close: "+e.Error())
+		} else if t.Mutating && t.Echo != "" {
+			c.cmcpEcho(s, t.Echo)
+		}
+	case errors.Is(err, session.ErrNoActiveContext):
+		c.cmcpNotice(s, "Nothing to close")
+	default:
+		c.cmcpNotice(s, "Close: "+err.Error())
+	}
+	c.cmcpPump(s)
+	c.scheduleRender()
 }

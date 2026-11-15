@@ -1068,3 +1068,67 @@ func TestCmcpHitShake(t *testing.T) {
 		t.Fatalf("the picture is still moving after the shake: %d of %d cells equal", same, len(a1))
 	}
 }
+
+// unman sends a Cobra.Console with no console (the player left the station), so no console screen is shown.
+func (f *screenFixture) unman() {
+	f.t.Helper()
+	var m struct {
+		Payload msg.Console `json:"payload"`
+	}
+	readJSON(f.t, "Cobra.Console--manned-operations.json", &m)
+	c := m.Payload
+	c.Rev += 50
+	c.Console, c.Screen, c.Commands, c.Subscribe = nil, "", nil, nil
+	f.d.gm().with(func(s *session.Server) { s.SetConsole(c) })
+}
+
+// pushRoom puts a ship-room context (spec 3.3.3) on the stack.
+func (f *screenFixture) pushRoom(rev int64, name string) {
+	prio := 35
+	f.sendContext(msg.Context{Rev: int(rev), Ship: msg.ContextShip{ID: "ss-booty-king", Epoch: 1}, Op: "push", Reason: "room", Context: &msg.ContextEntry{
+		Key: "room:shiproom", Ctx: rev, Kind: "room", ID: "shiproom", Name: name, Screen: "std.shiproom", Priority: &prio}})
+}
+
+// The generic ship room (spec 3.3.3): every empire's frame, the room name from $ctx, the alert and the
+// notice row all show in a corridor with no console.
+func TestCmcpShipRoomEveryTheme(t *testing.T) {
+	for _, th := range []string{"tng", "tos", "ops", "soft", "klingon", "romulan", "ferengi"} {
+		f := newScreenFixture(t, 120, 40)
+		f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
+		f.console("std.operations", "", func(c *msg.Console) { c.Ship.Theme = th })
+		f.unman()
+		f.pushRoom(200, "Main Corridor")
+		cmEventually(t, th+": shiproom shown", func() bool { id, _ := f.screenState(); return id == "std.shiproom" })
+		f.render()
+		f.contain(t, "RED ALERT")
+		if !strings.Contains(strings.ToUpper(f.text()), "MAIN CORRIDOR") && th != "ops" { // ops' band carries no mode or room name
+			t.Errorf("%s: the room name is not shown", th)
+		}
+		f.dump("shiproom-" + th)
+	}
+}
+
+// F6 and /cmcp close tell the game (Cobra.Context.Close) and wait for its answer; gtf does not hide the
+// screen itself. While a pack question is pending F6 refuses it instead.
+func TestCmcpCloseKey(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	f.contain(t, "F6 close")
+	f.keys("\x1b[17~") // F6
+	f.render()
+	f.contain(t, "OPERATIONS") // nothing was hidden: the screen stays until the game answers
+	exec(f.c, "/cmcp close")
+	f.render()
+	f.contain(t, "OPERATIONS")
+}
+
+func TestCmcpCloseKeyRefusesPackQuestionFirst(t *testing.T) {
+	raw, ref := readPack(t)
+	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	exec(f.c, "/set cmcp_pack_consent=ask")
+	f.console("fspace-std/damage", "operations", packConsole(ref))
+	f.render()
+	f.contain(t, "F5 = ALLOW")
+	f.keys("\x1b[17~") // F6: the question wins
+	cmEventually(t, "question refused", func() bool { f.render(); return !strings.Contains(f.text(), "F5 = ALLOW") })
+}

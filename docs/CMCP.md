@@ -73,6 +73,7 @@ the same in every theme and layout) always names the area and the keys valid the
 | anywhere in focus | `[` `]` `1`-`9` | quick aliases: previous / next / n-th screen (not advertised in the header) |
 | anywhere | F3 / F4 | log view / screen off (work from the input line too) |
 | alert control | **F5** or **Alt+A** | open the alert chooser on the next level (green > yellow > red); Left/Right choose, Enter sends `alert.set` and echoes `alert red`, Esc cancels. A console that may not set the alert gets `man <console>` as a hint |
+| close the screen | **F6** (`%cmcp_key_close`) or `/cmcp close` | tells the game (`Cobra.Context.Close`) and waits for its answer: a console is unmanned, a special room or the generic ship room is hidden for the visit; gtf never hides the screen itself, a refusal or silence shows an error notice. While a pack question is pending F6 refuses it instead |
 | pack question | **F5 / F6** | only while a pack question is pending (`%cmcp_pack_consent ask`): allow / refuse; also `/cmcp pack allow|deny` |
 
 A control with `hold_ms` (the transporter's energize) takes its key **three times within two seconds** (a terminal has no key
@@ -134,6 +135,12 @@ AI, someone else took the console) nothing is offered.
 gtf plays **no audio**. It does not claim to in `Hello.audio`, so a server sends it no `Sound.*`. **Deliberate deviation:** with
 `%cmcp_bell on` the bell also rings for the alert `Cobra.Event`s (red/yellow alert, proximity, comm, hail), because a client without
 audio would otherwise never hear about them; spec 9.9 only names `Sound.Play`. `Sound.Play` of the bell events rings it too.
+
+## Ship rooms
+
+Every ordinary room aboard a ship shows `std.shiproom` (context `room:shiproom`, priority 35): the status strip (ship, class, alert,
+hull, shields), the room name (`$ctx.name`, also the frame's title) and the text, in the ship's theme, so the alert edge, the pulse, the
+hit shake and the notice row are there in corridors too.
 
 ## Notice line
 

@@ -221,10 +221,10 @@ func (d *drawer) cellFrame() {
 			if jstr(o, "edge") == "bottom" {
 				y = h - 1
 			}
-			x := 2
+			x := 7 // clear of the corner glyphs
 			switch jstr(o, "align") {
 			case "right":
-				x = w - len(rs) - 2
+				x = w - len(rs) - 7
 			case "center":
 				x = (w - len(rs)) / 2
 			}

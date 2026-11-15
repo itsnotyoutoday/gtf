@@ -261,7 +261,7 @@ func TestCmcpMenuAvailableOnlyAndScreensList(t *testing.T) {
 	f.contain(t, "std.operations", "to use") // a dimmed entry names the console that provides it
 	exec(f.c, "/cmcp keys")
 	f.render()
-	f.contain(t, "SCREEN MENU", "Esc")
+	f.contain(t, "Esc", "F6")
 }
 
 // The default is `always`: no question, the pack loads, and one quiet line says so.
