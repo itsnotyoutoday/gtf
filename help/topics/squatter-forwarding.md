@@ -13,10 +13,10 @@ A remote client shows what the game sent, plus the lines you and it typed. gtf k
 * game text, after your triggers, gags and highlights have run
 * what you (or a remote) sent to the game, marked as an echo
 * what a trigger or hook prints while a game line is being handled, as a "system" line
-* the output of a command that a paired device typed, errors included, to that device
 
 ## Not forwarded
 
+* the output of a command a paired device typed (the typed line itself is echoed, so the device shows what it typed, but gtf's answer, an error or the `/restart` plan for example, stays on this screen)
 * gtf's own messages and script errors (`% ...`, for example `% SQUAT: not supported by this client`)
 * the output of commands you type here, including `/recall` (it carries its own `[hh:mm]` stamps, which would show twice next to the remote client's timestamps)
 * the output of hooks that run at connect time

@@ -186,14 +186,15 @@ func (c *Client) squatTap(s *Session, cells []layout.Cell) {
 }
 
 // tapKind says whether a line shown on a world's screen goes to the squatter's clients, and as what. Game text always does. Other text is the
-// client's own: it is NOT forwarded (script errors, "% ..." messages, command output, /recall, the output of hooks at connect time), with one
+// client's own: it is NOT forwarded (script errors, "% ..." messages, command output, /recall, the output of hooks at connect time, and what a
+// command typed by a paired device prints: the typed line is echoed, gtf's answer stays on this screen), with one
 // exception: what a trigger or hook prints while a game line is being handled goes out as a "system" line, as the TinyFugue bridge does.
 // squatter_local=on forwards all of it.
 func (c *Client) tapKind(cells []layout.Cell) (string, bool) {
 	if c.tapGame {
 		return proto.KindGame, true
 	}
-	if c.remoteSend || c.sq.sq.Config().Local { // a command a paired peer typed shows its own output (errors included)
+	if c.sq.sq.Config().Local {
 		return proto.KindSystem, true
 	}
 	if c.inWarn {

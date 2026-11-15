@@ -191,7 +191,8 @@ func TestSquatterEndToEnd(t *testing.T) {
 	}
 	srv.Expect([]byte("look\r\n"))
 	got = readUntil(t, pc, func(l string) bool { return l == "echo:look" })
-	// an admin's /command runs in gtf's engine, its output is a line of that session
+	// an admin's /command runs in gtf's engine; the typed line is echoed (SquatClient shows what it typed through that echo) but gtf's own
+	// output for it (messages, errors, the /restart plan) is not forwarded to the devices
 	if err := pc.Send(ctx, id, "/set from_peer=hello"); err != nil {
 		t.Fatal(err)
 	}
@@ -199,12 +200,17 @@ func TestSquatterEndToEnd(t *testing.T) {
 	if err := pc.Send(ctx, id, "/echo said by the engine"); err != nil {
 		t.Fatal(err)
 	}
-	got = readUntil(t, pc, func(l string) bool { return l == "system:said by the engine" })
-	waitScreen(t, c, scr, "said by the engine") // and the local user sees it too: one world, two terminals
+	got = readUntil(t, pc, func(l string) bool { return l == "echo:/echo said by the engine" })
+	waitScreen(t, c, scr, "said by the engine") // the local user sees the output: it stays on this terminal
 	// the local user's typing is mirrored to the peer as an echo from "tf"
 	c.Do(func(*gtfparser.Interp) { c.onKeys("say hi\r") })
 	srv.Expect([]byte("say hi\r\n"))
-	readUntil(t, pc, func(l string) bool { return l == "echo:say hi" })
+	got = readUntil(t, pc, func(l string) bool { return l == "echo:say hi" })
+	for _, l := range got {
+		if strings.HasPrefix(l, "system:") && strings.Contains(l, "said by the engine") {
+			t.Fatalf("the output of a command a device typed was forwarded to the devices: %q", got)
+		}
+	}
 	// a password is sent without echo, record or history
 	if err := pc.SendSecret(ctx, id, "hunter2"); err != nil {
 		t.Fatal(err)
@@ -673,4 +679,45 @@ func TestSquatterSeedSkipsTheClientsOwnText(t *testing.T) {
 	if contains(got, "game:local before") || contains(got, "system:local before") {
 		t.Fatalf("the client's own text was replayed: %q", got)
 	}
+}
+
+// What a device sees of a command it typed: the echo of the line (SquatClient shows what it typed through it) and nothing of gtf's own output
+// for it, neither an error nor the /restart plan, so none of it is stored in the session, replayed to the other devices or carried over a restart.
+func TestACommandADeviceTypedDoesNotForwardGtfsOutput(t *testing.T) {
+	c, scr, d := squatClient(t)
+	c.Do(func(in *gtfparser.Interp) {
+		in.Exec("/addworld w god pw localhost 4000")
+		in.Exec("/connect w")
+	})
+	srv := <-d.srv
+	srv.Expect([]byte("connect god pw\r\n"))
+	srv.Send([]byte("Welcome\r\n"))
+	waitScreen(t, c, scr, "Welcome")
+	pc, _ := pairPeer(t, c, "admin", "phone")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	id := pc.Sessions()[0].ID
+	if err := pc.Attach(ctx, id, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, pc, func(l string) bool { return l == "game:Welcome" })
+	for _, cmd := range []string{"/nosuchcommand", "/restart -n", "/echo local output"} {
+		if err := pc.Send(ctx, id, cmd); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := readUntil(t, pc, func(l string) bool { return l == "echo:/echo local output" })
+	srv.Send([]byte("marker\r\n")) // whatever gtf printed for the commands would be stored before this line
+	got = append(got, readUntil(t, pc, func(l string) bool { return l == "game:marker" })...)
+	for _, want := range []string{"echo:/nosuchcommand", "echo:/restart -n", "echo:/echo local output"} {
+		if !contains(got, want) {
+			t.Errorf("the typed line %q is echoed to the device: %q", want, got)
+		}
+	}
+	for _, l := range got {
+		if strings.HasPrefix(l, "system:") {
+			t.Fatalf("gtf's output for a device's command was forwarded: %q in %q", l, got)
+		}
+	}
+	waitScreen(t, c, scr, "no such command") // the local user does see it
 }

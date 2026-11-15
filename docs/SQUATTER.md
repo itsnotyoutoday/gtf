@@ -203,7 +203,7 @@ every line came from and forwards only what belongs there:
 * **Not forwarded:** gtf's own messages and script errors (`% ...`, "not supported by this client"), the output of commands you
   type, `/recall` output (it carries its own `[hh:mm]` stamps, which would show twice next to the remote client's
   timestamps), and the output of hooks that run at connect time. A client that attaches later is not replayed these either.
-* **A command a paired device typed** shows its own output, errors included, to that device.
+* **A command a paired device typed** is echoed (the device shows what it typed through that echo), but gtf's own output for it, such as errors or the `/restart` plan, is not forwarded: it appears on this screen only. (`tf.exec` returns its output in its reply, as before.)
 
 `/set squatter_local=on` forwards the client's own text as well; it takes effect at once and does not
 disconnect anyone.
