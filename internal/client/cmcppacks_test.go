@@ -179,13 +179,16 @@ func TestSemverPrecedence(t *testing.T) {
 // the pack is verified and parsed, and its frame replaces the embedded one. With the pack withheld
 // the embedded theme stays.
 func TestCmcpThemePackOverridesEmbedded(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "cmcp", "klingon-1.0.1.theme.json"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "cmcp", "klingon-1.0.1.cell.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(raw)
-	ref := msg.PackRef{ID: "klingon", Kind: "theme", Version: "1.0.1", SHA256: hex.EncodeToString(sum[:]), Size: len(raw), Inline: true}
-	f := newThemeFixture(t, map[string][]byte{ref.SHA256: raw}, ref)
+	// the announcement carries one file per render class; gtf asks for the cell rendition only (spec 19.1)
+	sha := hex.EncodeToString(sum[:])
+	ref := msg.PackRef{ID: "klingon", Kind: "theme", Version: "1.0.1", Renditions: &msg.Renditions{Cell: &msg.Rendition{SHA256: sha, Size: len(raw), Inline: true}}}
+	_ = sha
+	f := newThemeFixture(t, map[string][]byte{sha: raw}, ref)
 	exec(f.c, "/set cmcp_pack_consent=always")
 	f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = "klingon" })
 	cmEventually(t, "downloaded theme installed", func() (ok bool) {
@@ -303,5 +306,19 @@ func TestCmcpNoticeLine(t *testing.T) {
 		clock = clock.Add(2 * time.Second)
 		f.render()
 		f.lack(t, "Could not get X theme pack")
+	}
+}
+
+// A theme announced with only a gpu rendition is never fetched by a cell client: the built-in stays.
+func TestCmcpThemeGpuOnlyNotFetched(t *testing.T) {
+	ref := msg.PackRef{ID: "klingon", Kind: "theme", Version: "1.0.1", Renditions: &msg.Renditions{GPU: &msg.Rendition{SHA256: strings.Repeat("ab", 32), Size: 10, Inline: true}}}
+	f := newThemeFixture(t, nil, ref)
+	f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = "klingon" })
+	time.Sleep(150 * time.Millisecond)
+	exec(f.c, "/cmcp themes")
+	f.render()
+	f.contain(t, "active: klingon (embedded)")
+	if int(f.d.gets.Load()) != 0 {
+		t.Fatal("a gpu-only theme was fetched")
 	}
 }

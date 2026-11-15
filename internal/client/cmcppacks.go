@@ -194,6 +194,9 @@ func (c *Client) packDecide(s *Session, id string, allow bool) bool {
 
 func (c *Client) packFailed(s *Session, j *packJob, why string) {
 	j.state, j.why = "failed", why
+	if j.ref.Kind == "theme" {
+		s.cmScr().reg.NoteFailed(j.ref.ID)
+	}
 	s.cm.PackFailed(c.cfg.Now(), j.ref, why)
 	c.cmcpDebug("pack %s: %s (staying on the built-in screens)", j.ref.ID, why)
 	if s.cm != nil {
@@ -377,6 +380,7 @@ func (c *Client) themeInstall(s *Session, j *packJob, raw []byte, store bool) {
 	if old := cs.themes[tp.ID]; old == nil || semverGT(tp.Version, old.Version) {
 		cs.themes[tp.ID] = tp
 	}
+	cs.reg.NoteVerified(tp.ID, tp.Version, tp.Parts)
 	j.state = "ready"
 	s.cm.PackDownloaded(c.cfg.Now(), j.ref)
 	c.scheduleRender()
@@ -436,26 +440,32 @@ func semverGT(a, b string) bool {
 // fetch the announced pack the first time the selection needs it.
 func (c *Client) cmcpResolveTheme(s *Session, u *session.UI, id string) cmcpui.Theme {
 	cs := s.cmScr()
-	builtin := theme.Builtin(id)
 	force := onVar(c.in.Var("cmcp_dev_force_theme_download"))
+	cs.reg.SetForce(force)
 	if u.Welcome != nil {
 		for _, p := range u.Welcome.Packs {
-			if p.Kind == "theme" && strings.EqualFold(p.ID, id) && cs.themes[id] == nil && !cs.themeAsked[id] {
-				if builtin == nil || force || semverGT(p.Version, builtin.Version) {
-					if cs.themeAsked == nil {
-						cs.themeAsked = map[string]bool{}
-					}
-					cs.themeAsked[id] = true
-					s.cm.WantTheme(id)
-					c.cmcpPump(s)
+			if p.Kind != "theme" || !strings.EqualFold(p.ID, id) || cs.themes[id] != nil || cs.themeAsked[id] {
+				continue
+			}
+			// the selected theme is announced: fetch it when it beats the embedded copy (higher version,
+			// or %cmcp_dev_force_theme_download); only the cell rendition is requested (spec 19.1)
+			if b := theme.Builtin(id); b == nil || force || semverGT(p.Version, b.Version) {
+				if cs.themeAsked == nil {
+					cs.themeAsked = map[string]bool{}
 				}
+				cs.themeAsked[id] = true
+				s.cm.WantTheme(id)
+				c.cmcpPump(s)
 			}
 		}
 	}
-	if dl := cs.themes[id]; dl != nil && (builtin == nil || force || semverGT(dl.Version, builtin.Version)) {
-		return cmcpui.ThemeFromPack(dl)
+	want, src := cs.reg.Resolve(id)
+	if src == theme.SourcePack {
+		if dl := cs.themes[want]; dl != nil {
+			return cmcpui.ThemeFromPack(dl)
+		}
 	}
-	return cmcpui.ThemeByName(id)
+	return cmcpui.ThemeByName(want)
 }
 
 // cmcpThemesList is /cmcp themes: the embedded themes, the announced theme packs and which one is used.

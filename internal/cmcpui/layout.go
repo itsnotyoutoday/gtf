@@ -43,6 +43,9 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	if env.Theme.Name == "" {
 		env.Theme = ThemeByName("plain")
 	}
+	if env.AlertRecolour != "off" && strings.EqualFold(env.Alert, "yellow") {
+		env.AlertRecolour = "edge" // yellow alert is edge-style in every theme (spec 19.3)
+	}
 	switch env.AlertRecolour {
 	case "off":
 	case "edge":

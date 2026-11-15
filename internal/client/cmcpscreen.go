@@ -51,12 +51,13 @@ type cmcpScr struct {
 	told         bool            // the one-line CMCP notice was shown
 	lockNote     string          // "MENU x - locked: hint", shown until the next key
 	reenter      bool            // a screen switch from the menu keeps the keyboard focus on the new screen
+	reg          *theme.Registry // downloaded theme versions, the override rule and the dev force flag (spec 19.9)
 	auto         map[string]bool // group pickers that already got their first group selected
 }
 
 func (s *Session) cmScr() *cmcpScr {
 	if s.cs == nil {
-		s.cs = &cmcpScr{view: textport.NewViewWith(onVar(s.c.in.Var("cmcp_start_collapsed")), textport.State(strings.ToLower(strings.TrimSpace(s.c.in.Var("cmcp_textport"))))), st: cmcpui.NewState(), sprites: raster.NewCache(32), packs: map[string]*pack.Pack{}, zonesFor: map[string][]string{}}
+		s.cs = &cmcpScr{view: textport.NewViewWith(onVar(s.c.in.Var("cmcp_start_collapsed")), textport.State(strings.ToLower(strings.TrimSpace(s.c.in.Var("cmcp_textport"))))), st: cmcpui.NewState(), reg: theme.NewRegistry(theme.ClassCell), sprites: raster.NewCache(32), packs: map[string]*pack.Pack{}, zonesFor: map[string][]string{}}
 	}
 	return s.cs
 }
@@ -1016,6 +1017,11 @@ func (c *Client) cmcpAlertRecolour(th cmcpui.Theme) string {
 	switch v := strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_alert_recolour"))); v {
 	case "full", "edge", "off":
 		return v
+	}
+	if th.Pack != nil { // the theme pack's own alert_recolour field (spec 19.3)
+		if v, _ := th.Pack.Doc["alert_recolour"].(string); v == "full" || v == "edge" || v == "off" {
+			return v
+		}
 	}
 	switch th.Style {
 	case "romulan", "ferengi":
