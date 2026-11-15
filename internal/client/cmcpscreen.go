@@ -52,6 +52,7 @@ type cmcpScr struct {
 	told         bool   // the one-line CMCP notice was shown
 	lockNote     string // "MENU x - locked: hint", shown until the next key
 	reenter      bool   // a screen switch from the menu keeps the keyboard focus on the new screen
+	alertPick    string // the level the alert chooser has highlighted; empty when it is closed
 	alertLevel   string // the alert level the pulse counts from
 	alertSince   time.Time
 	pulseAt      time.Time       // the flip a redraw is already scheduled for
@@ -433,6 +434,9 @@ func (c *Client) cmcpKeys(raw string) bool {
 		return false
 	}
 	s.cmScr().lockNote = "" // the locked-screen note lasts until the next key
+	if c.cmcpScreensOn() && c.cmcpAlertKey(s, name, raw) {
+		return true
+	}
 	// two screen-wide keys that work from the input line too: the log view (F3) and the screen off (F4)
 	if c.cmcpScreensOn() {
 		switch name {
@@ -449,13 +453,11 @@ func (c *Client) cmcpKeys(raw string) bool {
 	}
 	cs := s.cs
 	empty := c.in.Input().Text() == ""
-	// the consent question has its own keys, which do not collide with typing or the screen keys
-	if name == "f5" || name == "f6" {
+	// the consent question answers on F5 / F6 only while a question is pending (F5 is the alert control otherwise)
+	if (name == "f5" || name == "f6") && c.cmcpConsentLine(cs) != "" {
 		if c.packDecide(s, "", name == "f5") {
-			c.cmcpNotice(s, "")
 			return true
 		}
-		return false
 	}
 	if name == "shift_tab" && !cs.st.Active {
 		if !empty || len(cs.frame.Items) == 0 {
@@ -926,6 +928,8 @@ func (c *Client) cmcpOrderPanels(cs *cmcpScr, f *cmcpui.Frame, plan cmcpui.Plan)
 // or a notice takes the line while it lasts.
 func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr) (string, string) {
 	switch {
+	case cs.alertPick != "":
+		return c.cmcpAlertLine(cs, cs.alertLevel), "consent"
 	case c.cmcpConsentLine(cs) != "":
 		return c.cmcpConsentLine(cs), "consent"
 	case cs.lockNote != "":
@@ -933,7 +937,7 @@ func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr) (string, string) {
 	case cs.st.Active:
 		return f.Header(), "focus"
 	}
-	return f.Header() + "   F3 log   F4 screen off   /cmcp keys", "idle"
+	return f.Header() + "   F3 log   F4 screen off   F5 alert   /cmcp keys", "idle"
 }
 
 // cmcpWithHint returns the frame's grid with one more row at the bottom holding the hint line.
@@ -1073,4 +1077,75 @@ func (c *Client) cmcpPulse(s *Session, cs *cmcpScr, th cmcpui.Theme, alert strin
 		time.AfterFunc(next.Sub(now)+5*time.Millisecond, c.scheduleRender)
 	}
 	return cmcpui.PulseSpec{Dim: st.Phase == "dim", Depth: 1 - st.Level}
+}
+
+// cmcpAlertKey is the alert control (spec 6.15): F5 or Alt+A opens the chooser on the next level
+// (green > yellow > red > green) unless a pack question is pending (then F5 answers it); inside it
+// Left/Right/Tab/F5 move the choice, Enter confirms (alert.set, echoed as `alert red`), Esc cancels.
+// It reports whether it took the key.
+func (c *Client) cmcpAlertKey(s *Session, name, raw string) bool {
+	cs := s.cmScr()
+	u := s.cm.UI()
+	if cs.alertPick != "" {
+		i := 0
+		for j, l := range session.AlertLevels {
+			if l == cs.alertPick {
+				i = j
+			}
+		}
+		n := len(session.AlertLevels)
+		switch name {
+		case "left", "up", "shift_tab":
+			cs.alertPick = session.AlertLevels[(i-1+n)%n]
+		case "right", "down", "tab", "f5":
+			cs.alertPick = session.AlertLevels[(i+1)%n]
+		case "enter":
+			level := cs.alertPick
+			cs.alertPick = ""
+			cmd, args, echo := session.AlertCommand(u.Catalogue, level)
+			if t, err := s.cm.Command(c.cfg.Now(), cmd, args); err != nil {
+				c.cmcpNotice(s, err.Error())
+			} else if t.Mutating && echo != "" {
+				c.cmcpEcho(s, echo)
+			}
+			c.cmcpPump(s)
+		default: // esc, or anything else, cancels; nothing was sent
+			cs.alertPick = ""
+		}
+		c.scheduleRender()
+		return true
+	}
+	if name != "f5" && name != "alt_a" || u.Console == nil {
+		return false
+	}
+	if name == "f5" && c.cmcpConsentLine(cs) != "" {
+		return false
+	}
+	st := session.AlertControl(u.Catalogue, u.Console.ID, strings.ToLower(u.Alert), u.AI, u.Readonly)
+	if !st.Enabled {
+		hint := ""
+		if st.Hint != nil {
+			hint = ": " + *st.Hint
+		}
+		c.cmcpNotice(s, "Alert control not available"+hint)
+		return true
+	}
+	cs.alertPick = session.AlertNext(strings.ToLower(u.Alert))
+	c.scheduleRender()
+	return true
+}
+
+// cmcpAlertLine is the chooser as the hint line shows it.
+func (c *Client) cmcpAlertLine(cs *cmcpScr, current string) string {
+	var b strings.Builder
+	b.WriteString("ALERT (now " + strings.ToUpper(current) + ")  ")
+	for _, l := range session.AlertLevels {
+		if l == cs.alertPick {
+			b.WriteString("[" + strings.ToUpper(l) + "] ")
+		} else {
+			b.WriteString(" " + strings.ToUpper(l) + "  ")
+		}
+	}
+	b.WriteString("  Left/Right choose   Enter confirm   Esc cancel")
+	return b.String()
 }

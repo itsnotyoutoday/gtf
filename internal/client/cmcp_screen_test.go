@@ -959,3 +959,29 @@ func TestCmcpAlertPulsePhases(t *testing.T) {
 		t.Fatalf("reduced motion must be steady: %+v %+v", on, dim)
 	}
 }
+
+// The alert control (spec 6.15): F5 opens the chooser on the next level, Left/Right move, Enter sends
+// alert.set and echoes `alert red`, Esc cancels; a console that may not set the alert gets a hint.
+func TestCmcpAlertControl(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.command", "command", nil)
+	f.keys("\x1b[15~") // F5
+	f.contain(t, "ALERT (now GREEN)", "[YELLOW]", "Enter confirm")
+	f.keys("\x1b[C") // Right: red
+	f.contain(t, "[RED]")
+	f.keys("\x1b") // Esc: nothing is sent
+	f.lack(t, "Enter confirm")
+	if len(f.game.commands()) != 0 {
+		t.Fatalf("a cancelled chooser sent %v", f.game.commands())
+	}
+	f.keys("\x1ba", "\x1b[C", kEnter) // Alt+A, red, confirm
+	// the test server's manned console is not allowed to run alert.set, so it answers with its own
+	// refusal; what matters here is that exactly the typed form was echoed and the command went out
+	cmEventually(t, "alert echoed and answered", func() bool { return strings.Contains(f.text(), "cmcp> alert red") && strings.Contains(f.text(), "alert.set") })
+
+	g := newScreenFixture(t, 120, 40)
+	g.console("std.sensors", "science", nil)
+	g.keys("\x1b[15~")
+	g.lack(t, "Enter confirm")
+	g.contain(t, "Alert control not available")
+}

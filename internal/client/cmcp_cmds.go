@@ -230,5 +230,6 @@ var cmcpKeysHelp = []string{
 	"  In a PANEL:   Up/Down           move in lists, tables and tab rows (they never leave the panel: use Tab)",
 	"                Left/Right        move between tabs/buttons in a row, adjust sliders",
 	"                Enter             activate;   a button's letter presses it",
+	"  F5 or Alt+A                      alert control: choose green/yellow/red (Left/Right), Enter sends, Esc cancels (F5/F6 answer a pack question while one is pending)",
 	"  F3 log view, F4 screen off.   Quick aliases, from anywhere in focus mode: [ previous screen, ] next screen, 1-9 the nth screen.",
 }

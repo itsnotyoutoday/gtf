@@ -11,7 +11,7 @@ import (
 
 // rawKeys names the terminal byte sequences the focus model knows (cmcp/go/focus key names).
 var rawKeys = map[string]string{
-	"\t": "tab", "\x1b[Z": "shift_tab", "\x1b": "esc", "\r": "enter", "\n": "enter",
+	"\t": "tab", "\x1b[Z": "shift_tab", "\x1ba": "alt_a", "\x1b": "esc", "\r": "enter", "\n": "enter",
 	"\x1b[A": "up", "\x1b[B": "down", "\x1b[C": "right", "\x1b[D": "left",
 	"\x1bOA": "up", "\x1bOB": "down", "\x1bOC": "right", "\x1bOD": "left",
 	"\x1b[H": "home", "\x1b[F": "end", "\x1bOH": "home", "\x1bOF": "end", "\x1b[5~": "pgup", "\x1b[6~": "pgdn",

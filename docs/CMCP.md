@@ -72,7 +72,8 @@ the same in every theme and layout) always names the area and the keys valid the
 | PANEL | an **underlined letter** | press that button or toggle |
 | anywhere in focus | `[` `]` `1`-`9` | quick aliases: previous / next / n-th screen (not advertised in the header) |
 | anywhere | F3 / F4 | log view / screen off (work from the input line too) |
-| pack question | **F5 / F6** | allow / refuse (own keys, never mixed with the focus keys; also `/cmcp pack allow|deny`) |
+| alert control | **F5** or **Alt+A** | open the alert chooser on the next level (green > yellow > red); Left/Right choose, Enter sends `alert.set` and echoes `alert red`, Esc cancels. A console that may not set the alert gets `man <console>` as a hint |
+| pack question | **F5 / F6** | only while a pack question is pending (`%cmcp_pack_consent ask`): allow / refuse; also `/cmcp pack allow|deny` |
 
 A control with `hold_ms` (the transporter's energize) takes its key **three times within two seconds** (a terminal has no key
 release). Shift-Arrow and Alt-Arrow are never bound (terminals and tmux swallow them). Every action is also a typeable command
