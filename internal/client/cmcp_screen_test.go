@@ -451,7 +451,7 @@ func TestCmcpHelmControlsSendCommands(t *testing.T) {
 	f := newScreenFixture(t, 160, 60)
 	f.console("std.helm", "navigation", nil)
 	f.contain(t, "HELM CONTROLS", "azimuth", "[ STOP ]")
-	f.lack(t, "thr ")                          // no stick
+	f.lack(t, "thr ")                                            // no stick
 	f.keys(kTab, kTab, kTab, kTab, kDown, kDown, kRight, kEnter) // menu, map, radar, helm controls; speed row, +10, send
 	cmEventually(t, "speed sent", func() bool { return len(f.game.commands()) == 1 })
 	if got := f.game.commands()[0]; got != `helm.speed {"pct":10}` {

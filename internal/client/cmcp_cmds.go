@@ -4,8 +4,8 @@
 package client
 
 import (
-	"github.com/itsnotyoutoday/cmcp/textport"
 	"fmt"
+	"github.com/itsnotyoutoday/cmcp/textport"
 	"strconv"
 	"strings"
 
