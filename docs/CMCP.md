@@ -18,27 +18,36 @@ Screens: the built-in `std.operations`, `std.power`, `std.damage`, `std.sensors`
 when the core provides it), or a layout pack's screens (`fspace-klingon/tactical`) after the pack was fetched, verified and
 allowed. Until a pack is usable the built-in screen of the same console is shown (spec 16.6).
 
-Widgets (all core widgets): textport, label, bar, bar-list, list, table, gauge, graph, button, toggle, slider, joystick, radar,
+Widgets (all core widgets): textport, label, bar, bar-list, list, table, gauge, graph, button, toggle, slider, helm-controls (a pack's joystick resolves to it), radar,
 schematic (a sprite rasterised into half-block cells; damage zones tinted from `Space.Damage.Stat`, glows from power), viewscreen
 (starfield and contacts in view, effects for fire/hit/destroyed), contact-picker, team-assigner, group-picker, and simple versions
 of the later-edition widgets (log, sector-map, portrait, pad-diagram). `scope` falls back to `radar`; `lights` is not drawn.
 
-## Keyboard
+## Keyboard (keyboard first)
 
-The input line always works. **F2** toggles *screen keys* (also `/cmcp focus`); while they are on and the input line is **empty**:
+The input line always works and is never taken over: typing, Enter, history and completion behave exactly as without CMCP.
+The screen has a **focus mode**:
 
 | key | action |
 |---|---|
-| Tab / Shift-Tab | next / previous widget |
-| Up / Down | move in a list, table, picker; at the ends the focus moves on |
-| Left / Right | slider, radar contact, schematic zone; otherwise previous/next widget |
-| Enter, Space | activate a button, toggle, row, zone, team |
-| `+` `-`, arrows, `0` | joystick throttle, steering, centre (helm) |
-| Esc | leave a sub-step (team assigner), then leave screen keys |
+| **Tab** on an empty input line | enter the screen (with text in the line Tab stays tf's completion key); also **F2**, and `/cmcp focus` |
+| Tab / Shift-Tab | next / previous panel; past the last (first) one they return to the input line |
+| Up / Down | move in a list, table, picker, team assigner, helm controls; at the ends the focus moves on |
+| Left / Right | adjust a slider (Left/Down -, Right/Up +), choose a radar contact or schematic zone, change a helm value |
+| `+` `-` | sliders (and helm values) |
+| Enter, Space | activate: a button's click, the selected row's select, a zone, a team |
+| an **underlined letter** | press that button or toggle (first free letter or digit of its text, or the pack's `key` prop) |
+| Esc | back to the input line; so does any printable key the screen does not use (it is then typed there) |
 | y / n | answer a pack consent prompt |
 
-Any other key, and every key while the input line has text, goes to the input line. A control with `hold_ms` (the transporter's
-energize) is pressed twice, because a terminal reports no key release. Mouse: gtf has no mouse support; the screen is keyboard-only.
+A control with `hold_ms` (the transporter's energize) takes its key **three times within two seconds** (a terminal has no key
+release). Shift-Arrow and Alt-Arrow are never bound (terminals and tmux swallow them). Every action is also a typeable command
+and echoes it. Rebinding: `%cmcp_key_focus` sets the key that enters focus mode (`^I` default, `F2`, `^[OQ`, any control letter
+`^X`); or leave it and use the engine's own key bindings: `/bind ^[OS = /cmcp focus`. **Mouse: gtf has none** (the spec makes it
+optional; `Hello.input.mouse` is never claimed by gtf).
+
+The helm has **no joystick** in gtf: the pack's `joystick` resolves to the core widget **helm-controls** (heading with step,
+speed, warp, engage, stop, course to the selected contact, dock, undock), each of which sends the ordinary command.
 
 A click is a command: pressing a button sends the verb to the server exactly as the typed text would, and gtf echoes the equivalent
 text as a client-generated line (`cmcp> dmg assign 3=Port_Nacelle`). A refused command shows the server's hint (and the
@@ -62,6 +71,7 @@ AI, someone else took the console) nothing is offered.
 | variable | default | meaning |
 |---|---|---|
 | `%cmcp` | on | declare `Cobra 1` to servers |
+| `%cmcp_key_focus` | `^I` (Tab) | the key that enters the screen (see Keyboard) |
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
 | `%cmcp_theme` | (plain) | `plain`, `tng`, `klingon`, `romulan`, `ferengi`: palette tokens; plain leaves colours to the terminal |
 | `%cmcp_ship_theme` | off | when on and `%cmcp_theme` is unset, follow the console's/ship's/screen's suggested theme (spec 6.6) |

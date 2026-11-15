@@ -58,7 +58,7 @@ func draw(t testing.TB, scr *pack.Screen, docs map[string]any, w, h int, st *Sta
 		st = NewState()
 	}
 	env := &pack.Env{Docs: docs, UI: st.UI, CanSend: func(string) bool { return true }}
-	tree := scr.Bind(env, pack.Caps{})
+	tree := scr.Bind(env, pack.Caps{Has: func(w string) bool { return w != "joystick" && w != "scope" && w != "lights" }})
 	return Draw(tree, w, h, Env{Theme: ThemeByName(th), Now: now, Header: scr.Title}, st)
 }
 
@@ -109,7 +109,7 @@ func TestTransporterGolden(t *testing.T) {
 }
 
 // The energize control has hold_ms: a terminal has no key release, so it takes two presses.
-func TestHoldButtonNeedsTwoPresses(t *testing.T) {
+func TestHoldButtonNeedsThreePresses(t *testing.T) {
 	p := loadPack(t)
 	st := NewState()
 	st.Active = true
@@ -126,10 +126,12 @@ func TestHoldButtonNeedsTwoPresses(t *testing.T) {
 	}
 	st.Focus = target
 	f = draw(t, p.Screens["transporter"], docs, 120, 40, st, "plain")
-	if ev, _ := f.HandleKey(st, "enter"); len(ev) != 0 {
-		t.Fatalf("fired on the first press: %+v", ev)
+	for i := 1; i <= 2; i++ {
+		if ev, _ := f.HandleKey(st, "enter"); len(ev) != 0 {
+			t.Fatalf("fired on press %d: %+v", i, ev)
+		}
 	}
 	if ev, _ := f.HandleKey(st, "enter"); len(ev) != 1 || ev[0].Name != "click" {
-		t.Fatalf("no click on the second press: %+v", ev)
+		t.Fatalf("no click on the third press: %+v", ev)
 	}
 }

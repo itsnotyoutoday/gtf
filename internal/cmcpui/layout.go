@@ -25,6 +25,7 @@ type arranger struct {
 	leaves []placed
 	text   Rect
 	hasTxt bool
+	need   int // rows the text pane must keep: 8 or a quarter of the height (spec 6.13)
 }
 
 // Draw lays the bound tree out in a w x h cell area, draws it and returns the frame. The text
@@ -46,7 +47,7 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		f.Compact = true
 		return f
 	}
-	a := &arranger{}
+	a := &arranger{need: max(8, h/4)}
 	a.arrange(root, Rect{X: 0, Y: 1, W: w, H: h - 1}, true) // row 0 is the header
 	if !a.hasTxt {
 		a.text = Rect{} // a screen must have a textport; without one, drop the screen
@@ -206,6 +207,9 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 		}
 		if hasText(k) {
 			prot = i
+			if !horiz && wt[i] == 0 {
+				ext[i] = max(ext[i], a.need)
+			}
 		}
 		wsum += wt[i]
 		fixed += float64(ext[i])

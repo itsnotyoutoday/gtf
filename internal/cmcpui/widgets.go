@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
@@ -56,8 +57,8 @@ func leafSize(b *pack.BoundNode, w int) (int, int) {
 		return runeLen(str(prop(b, "text"))) + 5, 1
 	case "slider":
 		return 30, 1
-	case "joystick":
-		return 17, 8
+	case "helm-controls":
+		return 40, 8
 	case "radar":
 		return 31, 15
 	case "viewscreen":
@@ -95,16 +96,17 @@ func (d *drawer) collect(p placed) {
 	switch b.Widget {
 	case "button":
 		it.key = d.buttonKeys(b)
+		it.Mnemonic = d.mnemonic(b)
 		it.Disabled = !b.Enabled || boolProp(b, "enabled") == false && b.Props["enabled"] != nil
 	case "toggle":
 		it.key = d.toggleKeys(b)
+		it.Mnemonic = d.mnemonic(b)
 		it.Disabled = !b.Enabled
 	case "slider":
 		it.key = d.sliderKeys(b)
 		it.Disabled = !b.Enabled
-	case "joystick":
-		it.key = d.stickKeys(b)
-		it.Disabled = !b.Enabled
+	case "helm-controls":
+		it.key = d.helmKeys(b)
 	case "radar", "scope":
 		it.key = d.radarKeys(b)
 	case "contact-picker":
@@ -129,6 +131,37 @@ func (d *drawer) collect(p placed) {
 		}
 	}
 	d.f.Items = append(d.f.Items, it)
+}
+
+// mnemonic assigns the control's letter by spec 6.12.1: an explicit `key` prop first, else the
+// first letter or digit of its text not yet used on the screen, else the first free of a-z0-9.
+func (d *drawer) mnemonic(b *pack.BoundNode) rune {
+	if !b.Enabled {
+		return 0
+	}
+	free := func(r rune) bool {
+		for _, it := range d.f.Items {
+			if it.Mnemonic == r {
+				return false
+			}
+		}
+		return true
+	}
+	alnum := func(r rune) bool { return (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') }
+	if k := []rune(strings.ToUpper(str(prop(b, "key")))); len(k) == 1 && alnum(k[0]) && free(k[0]) {
+		return k[0]
+	}
+	for _, r := range strings.ToUpper(str(prop(b, "text"))) {
+		if alnum(r) && free(r) {
+			return r
+		}
+	}
+	for _, r := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" {
+		if free(r) {
+			return r
+		}
+	}
+	return 0
 }
 
 func pickEvent(b *pack.BoundNode) string {
@@ -168,8 +201,8 @@ func (d *drawer) draw(p placed) {
 		d.toggle(b, r, foc)
 	case "slider":
 		d.slider(b, r, foc)
-	case "joystick":
-		d.joystick(b, r, foc)
+	case "helm-controls":
+		d.helmControls(b, r, foc)
 	case "radar", "scope":
 		d.radar(b, r, foc)
 	case "viewscreen":
@@ -202,8 +235,8 @@ func (d *drawer) hint(it Item) string {
 		return "Enter: activate"
 	case "slider":
 		return "Left/Right: change"
-	case "joystick":
-		return "arrows: steer, +/-: throttle, 0: centre"
+	case "helm-controls":
+		return "Up/Down: control, Left/Right: change, Enter: send"
 	case "radar", "scope", "contact-picker", "group-picker", "list", "table", "bar-list", "log":
 		return "Up/Down: choose, Enter: select"
 	case "team-assigner":
@@ -229,13 +262,13 @@ func (d *drawer) header() {
 	}
 	d.c.fill(Rect{W: g.W, H: 1}, ' ', a)
 	x := d.c.text(1, 0, d.env.Header, a, g.W-2)
-	right := "F2: keys"
+	right := "Tab: screen keys"
 	at := th.dim()
 	if th.PaintBG {
 		at.BG = th.Token("color.panel")
 	}
 	if d.st.Active {
-		right = "KEYS ON  Tab/arrows move  Enter act  Esc/F2 leave"
+		right = "KEYS ON  Tab move  Enter act  underlined letter = button  Esc: input line"
 		at = th.attr(th.Token("color.ok"))
 		if th.PaintBG {
 			at.BG = th.Token("color.panel")
@@ -403,8 +436,8 @@ func (d *drawer) button(b *pack.BoundNode, r Rect, foc bool) {
 		a = th.dim()
 	}
 	ws := d.st.ws(b.Node.Path)
-	if !ws.armed.IsZero() && d.env.Now.Sub(ws.armed) < 3e9 {
-		txt = "CONFIRM " + txt
+	if !ws.armed.IsZero() && d.env.Now.Sub(ws.armed) < 2*time.Second {
+		txt = fmt.Sprintf("%s %d/3", txt, ws.stage)
 	}
 	if foc {
 		a = focused(a)
@@ -413,7 +446,20 @@ func (d *drawer) button(b *pack.BoundNode, r Rect, foc bool) {
 	if runeLen(s) > r.W {
 		s = "[" + txt + "]"
 	}
-	d.c.text(r.X, r.Y, s, a, r.W)
+	n := d.c.text(r.X, r.Y, s, a, r.W)
+	_ = n
+	if i := d.f.index(b.Node.Path); i >= 0 && d.f.Items[i].Mnemonic != 0 {
+		// the mnemonic letter is underlined
+		m := d.f.Items[i].Mnemonic
+		for k, ch := range []rune(clean(s)) {
+			if unicode.ToUpper(ch) == m && k >= 1 {
+				ua := a
+				ua.Underline = true
+				d.c.put(r.X+k, r.Y, ch, ua)
+				break
+			}
+		}
+	}
 }
 
 func (d *drawer) buttonKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
@@ -423,12 +469,16 @@ func (d *drawer) buttonKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
 		}
 		ws := d.st.ws(b.Node.Path)
 		if hold := numOr(prop(b, "hold_ms"), 0); hold > 0 {
-			// a terminal has no key-up: a held control (the transporter's energize) is pressed twice
-			if ws.armed.IsZero() || d.env.Now.Sub(ws.armed) >= 3e9 {
-				ws.armed = d.env.Now
+			// a terminal has no key-up: a hold_ms control (the transporter's energize) is pressed
+			// three times within two seconds (spec 6.12)
+			if ws.armed.IsZero() || d.env.Now.Sub(ws.armed) >= 2*time.Second {
+				ws.armed, ws.stage = d.env.Now, 0
+			}
+			ws.stage++
+			if ws.stage < 3 {
 				return nil, true
 			}
-			ws.armed = time.Time{}
+			ws.armed, ws.stage = time.Time{}, 0
 		}
 		return []Event{{Node: b.Node, Name: "click"}}, true
 	}
@@ -508,9 +558,9 @@ func (d *drawer) sliderKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
 		step := numOr(prop(b, "step"), math.Max((hi-lo)/20, 1))
 		v := d.sliderVal(b)
 		switch k {
-		case "left", "-":
+		case "left", "down", "-":
 			v -= step
-		case "right", "+", "=":
+		case "right", "up", "+", "=":
 			v += step
 		case "home":
 			v = lo
@@ -526,101 +576,11 @@ func (d *drawer) sliderKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
 	}
 }
 
-// ---- joystick ----
-
-func (d *drawer) joystick(b *pack.BoundNode, r Rect, foc bool) {
-	th := d.env.Theme
-	ws := d.st.ws(b.Node.Path)
-	lab := str(prop(b, "label"))
-	y := r.Y
-	if lab != "" {
-		d.c.text(r.X, y, lab, th.text(), r.W)
-		y++
-	}
-	bw, bh := 11, 5
-	if r.H-(y-r.Y) < bh+1 || r.W < bw+5 {
-		bw, bh = 7, 3
-	}
-	a := th.dim()
-	if foc {
-		a = th.accent()
-	}
-	d.c.put(r.X, y, '┌', a)
-	d.c.put(r.X+bw-1, y, '┐', a)
-	d.c.put(r.X, y+bh-1, '└', a)
-	d.c.put(r.X+bw-1, y+bh-1, '┘', a)
-	for i := 1; i < bw-1; i++ {
-		d.c.put(r.X+i, y, '─', a)
-		d.c.put(r.X+i, y+bh-1, '─', a)
-	}
-	for j := 1; j < bh-1; j++ {
-		d.c.put(r.X, y+j, '│', a)
-		d.c.put(r.X+bw-1, y+j, '│', a)
-	}
-	cx, cy := r.X+bw/2, y+bh/2
-	d.c.put(cx, cy, '+', th.dim())
-	px := cx + int(math.Round(ws.yaw*float64(bw/2-1)))
-	py := cy - int(math.Round(ws.pitch*float64(bh/2-1)))
-	d.c.put(px, py, '●', focusedIf(th.accent(), foc))
-	// throttle bar to the right
-	tx := r.X + bw + 1
-	for j := 0; j < bh; j++ {
-		on := float64(bh-1-j) < ws.thr*float64(bh)
-		ch, at := '░', th.dim()
-		if on {
-			ch, at = '█', th.accent()
-		}
-		d.c.put(tx, y+j, ch, at)
-	}
-	d.c.text(tx+2, y, fmt.Sprintf("thr %3.0f%%", ws.thr*100), th.text(), r.X+r.W-tx-2)
-	d.c.text(tx+2, y+1, fmt.Sprintf("yaw %+.2f", ws.yaw), th.dim(), r.X+r.W-tx-2)
-	d.c.text(tx+2, y+2, fmt.Sprintf("pit %+.2f", ws.pitch), th.dim(), r.X+r.W-tx-2)
-	if foc && r.H > y-r.Y+bh {
-		d.c.text(r.X, y+bh, "arrows steer  +/- throttle  0 centre", th.dim(), r.W)
-	}
-}
-
 func focusedIf(a layout.Attr, f bool) layout.Attr {
 	if f {
 		return focused(a)
 	}
 	return a
-}
-
-func (d *drawer) stickKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
-	return func(k Key) ([]Event, bool) {
-		ws := d.st.ws(b.Node.Path)
-		clamp := func(v float64) float64 { return math.Max(-1, math.Min(1, math.Round(v*100)/100)) }
-		release := false
-		switch k {
-		case "left":
-			ws.yaw = clamp(ws.yaw - 0.25)
-		case "right":
-			ws.yaw = clamp(ws.yaw + 0.25)
-		case "up":
-			ws.pitch = clamp(ws.pitch + 0.25)
-		case "down":
-			ws.pitch = clamp(ws.pitch - 0.25)
-		case "+", "=":
-			ws.thr = math.Max(0, math.Min(1, math.Round((ws.thr+0.1)*100)/100))
-		case "-":
-			ws.thr = math.Max(0, math.Min(1, math.Round((ws.thr-0.1)*100)/100))
-		case "0", "space":
-			ws.yaw, ws.pitch = 0, 0
-			release = true
-		case "esc":
-			ws.yaw, ws.pitch = 0, 0
-			release = true
-		default:
-			return nil, false
-		}
-		v := map[string]any{"yaw": ws.yaw, "pitch": ws.pitch, "throttle": ws.thr}
-		name := "change"
-		if release {
-			name = "release"
-		}
-		return []Event{{Node: b.Node, Name: name, Value: v}}, true
-	}
 }
 
 // ---- row widgets ----

@@ -5,6 +5,7 @@ package cmcpui
 
 import (
 	"time"
+	"unicode"
 
 	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
@@ -64,8 +65,9 @@ type wstate struct {
 	zone        int
 	val         float64
 	valUntil    time.Time
-	yaw, pitch  float64
-	thr         float64
+	az, mark    float64
+	speed, warp float64
+	inited      bool
 	hist        []float64
 	armed       time.Time
 	lastVal     float64
@@ -104,6 +106,8 @@ type Item struct {
 	key  func(k Key) ([]Event, bool)
 	// Disabled items are drawn dim and skipped by the focus order.
 	Disabled bool
+	// Mnemonic is the letter (upper case) that activates a button in screen-key mode, 0 if none.
+	Mnemonic rune
 }
 
 // Frame is the result of Draw.
@@ -167,6 +171,16 @@ func (f *Frame) HandleKey(st *State, k Key) ([]Event, bool) {
 	if len(f.focusOrder()) == 0 {
 		return nil, false
 	}
+	if r := []rune(string(k)); len(r) == 1 && (unicode.IsLetter(r[0]) || unicode.IsDigit(r[0])) {
+		// a mnemonic letter: focus that button and press it
+		u := unicode.ToUpper(r[0])
+		for _, i := range f.focusOrder() {
+			if f.Items[i].Mnemonic == u {
+				st.Focus = f.Items[i].Node.Node.Path
+				return f.Items[i].key("enter")
+			}
+		}
+	}
 	if i := f.index(st.Focus); i >= 0 && f.Items[i].key != nil && !f.Items[i].Disabled {
 		if ev, used := f.Items[i].key(k); used {
 			return ev, true
@@ -181,4 +195,20 @@ func (f *Frame) HandleKey(st *State, k Key) ([]Event, bool) {
 		return nil, true
 	}
 	return nil, false
+}
+
+// AtEdge reports whether moving the focus by d (Tab = +1, Shift-Tab = -1) would leave the
+// screen: the focus is on the last (first) operable item, so the key returns to the input line.
+func (f *Frame) AtEdge(st *State, d int) bool {
+	o := f.focusOrder()
+	if len(o) == 0 {
+		return true
+	}
+	if i := f.index(st.Focus); i >= 0 {
+		if d > 0 {
+			return i == o[len(o)-1]
+		}
+		return i == o[0]
+	}
+	return false
 }

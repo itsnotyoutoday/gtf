@@ -1,4 +1,4 @@
- Damage Control  -  SS Booty King                                      F2: keys
+ Damage Control  -  SS Booty King                              Tab: screen keys
 DAMAGE CONTROL  -  hull 806.16 / 875.00
 TEAMS                               ▀ ▄▄                    Damage statistics
   T1  crew 10  Hull             ▄▄▄▀▀▀▀▀▀▄▄▄▄▄                Port_Nacel ██████░

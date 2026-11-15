@@ -1,13 +1,10 @@
- Transporter Room                                                                                              F2: keys
+ Transporter Room                                                                                      Tab: screen keys
 TRANSPORTER  -  READY   range 40 km
 
 POWER                   ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐        PATTERN
 Power a ◀────●─────▶ 40 │Pad 1     │     │Pad 2     │     │Pad 3     │     │Pad 4     │        Pattern  ◀───────●───▶ 65
                         │Lt. Ok +1 │     │          │     │          │     │          │
                         └──────────┘     └──────────┘     └──────────┘     └──────────┘
-
-
-
 
 
 
@@ -31,6 +28,9 @@ DESTINATIONS (in range first)                                           AWAY TEA
 
 
                                                                         [ RECALL TEAM ]
+
+
+
 
 
 

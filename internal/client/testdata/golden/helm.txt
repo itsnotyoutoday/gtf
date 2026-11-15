@@ -1,16 +1,16 @@
- Helm  -  SS Booty King                                                                                        F2: keys
+ Helm  -  SS Booty King                                                                                Tab: screen keys
 HELM  -  speed 0.0 mps   bearing 259 mark -30
-                               ·                         *              ·       HELM
-                       ·      ·                ·              ·   ·      ·      ┌─────────┐ ░ thr   0%
-                                      · ·                 ·             ·       │         │ ░ yaw +0.00
-          ··                        ·                                           │    ●    │ ░ pit +0.00
-           ·                                                     ·              │         │ ░
-              *          *                    ·                         ·       └─────────┘ ░
-                                                         ·
-      · ·           ·            ·
-  ·    *    ·  ·          ·                      ·      *        ·
-·                                                       ·
- ·                        ·           *         ·
+                               ·                         *              ·       HELM CONTROLS
+                       ·      ·                ·              ·   ·      ·      now: bearing 259-30  speed 0 m/s  warp 0
+                                      · ·                 ·             ·         azimuth    258.52   Left/Right 5, +/-
+          ··                        ·                                             mark       -30      elevation -90..90,
+           ·                                                     ·                speed %    0        Left/Right 10, Ent
+              *          *                    ·                         ·         warp       0        Left/Right 1, +/-
+                                                         ·                        engage     impulse  Left/Right chooses
+      · ·           ·            ·                                                [ STOP ]            all stop
+  ·    *    ·  ·          ·                      ·      *        ·                [ COURSE ]          none (select a con
+·                                                       ·                         [ DOCK ]            none (select a con
+ ·                        ·           *         ·                                 [ UNDOCK ]
                                         ·
    ·             ·              *     ·       ·                      UFP40EA1 ▶
       ·                                                  ·        ·

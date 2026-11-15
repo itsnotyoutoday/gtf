@@ -68,7 +68,7 @@ type fakeGame struct {
 }
 
 func (g *fakeGame) Player() session.Player {
-	return session.Player{Epoch: g.epoch, Aboard: true, Held: []string{"operations", "room:transporter"}}
+	return session.Player{Epoch: g.epoch, Aboard: true, Held: []string{"operations", "navigation", "science", "tactical", "engineering", "room:transporter"}}
 }
 func (g *fakeGame) Permitted(string) bool         { return true }
 func (g *fakeGame) CanSubscribe(string) bool      { return true }
@@ -121,6 +121,7 @@ type screenFixture struct {
 	d    *cmcpDialer
 	game *fakeGame
 	docs map[string]any
+	cat  []msg.CommandSpec
 }
 
 func newScreenFixture(t *testing.T, w, h int) *screenFixture {
@@ -152,7 +153,7 @@ func newScreenFixtureSetup(t *testing.T, w, h int, home string, packs map[string
 		t.Fatal(err)
 	}
 	t.Cleanup(c.Close)
-	f := &screenFixture{t: t, c: c, term: term, d: d, game: g, docs: g.docs}
+	f := &screenFixture{t: t, c: c, term: term, d: d, game: g, docs: g.docs, cat: cat}
 	f0 := f
 	exec(c, setup...)
 	exec(c, "/connect localhost 4101")
@@ -192,6 +193,10 @@ func (f *screenFixture) console(screen, console string, mutate func(*msg.Console
 	c.Screen = screen
 	if console != "" {
 		c.Console.ID = console
+	}
+	c.Commands = nil
+	for _, sp := range f.cat {
+		c.Commands = append(c.Commands, sp.Name)
 	}
 	c.Subscribe = nil
 	for _, pkg := range sortedDocKeys(f.docs) {
@@ -297,7 +302,7 @@ func TestCmcpDamageAssignByKeyboard(t *testing.T) {
 func TestCmcpInputLineStillWorks(t *testing.T) {
 	f := newScreenFixture(t, 120, 40)
 	f.console("std.operations", "", nil)
-	f.keys(kF2)
+	f.keys(kTab, "\x1b") // into the screen and back: the line is the player's again
 	f.keys("l", "o", "o", "k")
 	f.render()
 	if got := f.inputText(); got != "look" {
@@ -420,4 +425,120 @@ func TestCmcpContextStack(t *testing.T) {
 	f.render()
 	f.contain(t, "OPERATIONS")
 	f.lack(t, "[2 contexts]")
+}
+
+// There is no joystick in gtf: the helm is steered with the pack's helm-controls (a core widget),
+// whose events the pack maps to ordinary commands.
+func TestCmcpHelmControlsSendCommands(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.helm", "navigation", nil)
+	f.contain(t, "HELM CONTROLS", "azimuth", "[ STOP ]")
+	f.lack(t, "thr ")                         // no stick
+	f.keys(kF2, kDown, kDown, kRight, kEnter) // speed row, +10, send
+	cmEventually(t, "speed sent", func() bool { return len(f.game.commands()) == 1 })
+	if got := f.game.commands()[0]; got != `helm.speed {"pct":10}` {
+		t.Fatalf("ran %q", got)
+	}
+	f.keys(kDown, kDown, kDown, kEnter) // warp, engage, stop: Enter on STOP
+	cmEventually(t, "stop sent", func() bool { return len(f.game.commands()) == 2 })
+	if got := f.game.commands()[1]; got != `helm.stop null` {
+		t.Fatalf("ran %q", got)
+	}
+	f.contain(t, "cmcp> speed 10", "cmcp> stop")
+	if h := f.d.gm().srv.Hello(); h == nil || h.Widgets["joystick"] != 0 {
+		t.Fatalf("joystick advertised: %+v", h)
+	}
+}
+
+// Keyboard first (owner decision): Tab on an empty input line enters the screen, Tab/Shift-Tab
+// move between panels, an underlined letter presses its button, sliders adjust with the arrows and
+// +/-, Tab past the last panel and Esc return to the input line, which keeps working.
+func (f *screenFixture) active() (a bool) {
+	f.c.Do(func(*gtfparser.Interp) { a = f.c.fg.cs.st.Active })
+	return
+}
+
+func (f *screenFixture) focusPath() (p string) {
+	f.c.Do(func(*gtfparser.Interp) { p = f.c.fg.cs.st.Focus })
+	return
+}
+
+func TestCmcpKeyboardFocusOrderAndReturn(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	if f.active() {
+		t.Fatal("focus on before the player asked")
+	}
+	f.keys(kTab)
+	if !f.active() {
+		t.Fatal("Tab on an empty input line did not enter the screen")
+	}
+	f.contain(t, "KEYS ON")
+	first := f.focusPath()
+	f.keys(kTab)
+	second := f.focusPath()
+	if first == second || second == "" {
+		t.Fatalf("Tab did not move the focus: %q %q", first, second)
+	}
+	f.keys("\x1b[Z") // Shift-Tab
+	if f.focusPath() != first {
+		t.Fatal("Shift-Tab did not return to the first panel")
+	}
+	f.keys("\x1b[Z") // Shift-Tab on the first panel: back to the input line
+	if f.active() {
+		t.Fatal("Shift-Tab before the first panel did not return to the input line")
+	}
+	f.keys(kTab) // enter again, walk to the end
+	for i := 0; i < 40 && f.active(); i++ {
+		f.keys(kTab)
+	}
+	if f.active() {
+		t.Fatal("Tab past the last panel did not return to the input line")
+	}
+	// Esc returns, and typing works
+	f.keys(kTab, "\x1b")
+	if f.active() {
+		t.Fatal("Esc did not return to the input line")
+	}
+	f.keys("l", "s")
+	if got := f.inputText(); got != "ls" {
+		t.Fatalf("input line %q", got)
+	}
+	f.keys(kTab) // the line has text: Tab is the engine's (completion), not the screen's
+	if f.active() {
+		t.Fatal("Tab took focus away from a line being typed")
+	}
+}
+
+func TestCmcpKeyboardMnemonicAndSlider(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	f.keys(kTab, "h") // HATCH: its underlined letter presses it
+	cmEventually(t, "hatch", func() bool { return len(f.game.commands()) == 1 })
+	if got := f.game.commands()[0]; got != `hatch.toggle null` {
+		t.Fatalf("ran %q", got)
+	}
+	f.console("std.power", "", nil)
+	f.keys(kTab)
+	// walk to the slider and adjust it with the arrows and +/-
+	for i := 0; i < 30; i++ {
+		var kind string
+		f.c.Do(func(*gtfparser.Interp) {
+			for _, it := range f.c.fg.cs.frame.Items {
+				if it.Node.Node.Path == f.c.fg.cs.st.Focus {
+					kind = it.Kind
+				}
+			}
+		})
+		if kind == "slider" {
+			break
+		}
+		f.keys(kTab)
+	}
+	n := len(f.game.commands())
+	f.keys(kRight, "+")
+	cmEventually(t, "slider commands", func() bool { return len(f.game.commands()) >= n+1 })
+	if got := f.game.commands()[n]; !strings.HasPrefix(got, "power.set") || !strings.Contains(got, "%") {
+		t.Fatalf("slider sent %q", got)
+	}
 }

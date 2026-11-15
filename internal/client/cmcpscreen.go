@@ -46,6 +46,11 @@ func (s *Session) cmScr() *cmcpScr {
 	return s.cs
 }
 
+// cmcpCaps: the default capabilities of the core: every core widget, none of the optional ones
+// (the joystick resolves to helm-controls: gtf steers with commands, the owner's decision; scope
+// falls back to radar; lights are not drawn).
+var cmcpCaps = pack.Caps{}
+
 func (c *Client) cmcpScreensOn() bool {
 	switch strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_screens"))) {
 	case "off", "0", "no", "false":
@@ -216,7 +221,7 @@ func (c *Client) cmcpSyncSurface() {
 	env := pack.EnvFromUI(u, cs.st.UI)
 	budget := 4096
 	env.Budget = &budget
-	tree := scr.Bind(env, pack.Caps{})
+	tree := scr.Bind(env, cmcpCaps)
 	th := cmcpui.ThemeByName(c.cmcpThemeFor(u, scr.SuggestTheme))
 	hdr := scr.Title
 	if hdr == "" {
@@ -253,7 +258,7 @@ func (c *Client) cmcpSyncSurface() {
 		env = pack.EnvFromUI(u, cs.st.UI)
 		budget = 4096
 		env.Budget = &budget
-		tree = scr.Bind(env, pack.Caps{})
+		tree = scr.Bind(env, cmcpCaps)
 		ce.Assets = &cmAssets{c: c, s: s, p: p, env: env, th: th}
 		f = cmcpui.Draw(tree, w, h, ce, cs.st)
 	}
@@ -278,23 +283,57 @@ var keyNames = map[string]cmcpui.Key{
 	"+": "+", "-": "-", "=": "=", "0": "0",
 }
 
-var focusKeys = map[string]bool{"\x1bOQ": true, "\x1b[12~": true, "\x1b[1;2Q": true}
+// focusKeySeq turns the %cmcp_key_focus setting into the raw bytes of the key: "^I" (control
+// letter), "^[OQ" (escape sequence, as in /bind), "F2".."F4", or a literal character. The default
+// is Tab, which only takes effect while the input line is empty (tf's completion key otherwise).
+func (c *Client) focusKeySeq() string {
+	v := strings.TrimSpace(c.in.Var("cmcp_key_focus"))
+	switch {
+	case v == "":
+		return "\t"
+	case strings.HasPrefix(v, "^[") && len(v) > 2:
+		return "\x1b" + v[2:]
+	case len(v) == 2 && v[0] == '^':
+		return string(rune(v[1] & 0x1f))
+	case v == "F2":
+		return "\x1bOQ"
+	case v == "F3":
+		return "\x1bOR"
+	case v == "F4":
+		return "\x1bOS"
+	}
+	return v
+}
 
-// cmcpKeys offers raw terminal bytes to the screen. It returns true when it took them. F2 toggles
-// the screen's keyboard focus; with focus on and the input line empty the navigation keys operate
-// the focused widget, every other key (and every key while the line has text) is the input line's.
+// cmcpKeys offers raw terminal bytes to the screen. It returns true when it took them.
+//
+// Keyboard first: on an empty input line the focus key (Tab by default, %cmcp_key_focus; F2 always;
+// /cmcp focus for a /bind) moves the focus into the screen. Inside, Tab and Shift-Tab move between
+// panels (past the last or first one they return to the input line), the arrows work inside a
+// list, table or slider, Enter or Space activates, an underlined letter presses its button, Esc
+// returns to the input line. Everything else, and every key while the input line has text, is the
+// input line's: it always works.
 func (c *Client) cmcpKeys(raw string) bool {
 	s := c.fg
 	if s == nil || s.cm == nil || s.cs == nil || s.cs.frame == nil || c.ui.Surf == nil {
 		return false
 	}
 	cs := s.cs
-	if focusKeys[raw] {
+	empty := c.in.Input().Text() == ""
+	if raw == "\x1bOQ" || raw == "\x1b[12~" || raw == "\x1b[1;2Q" {
 		cs.st.Active = !cs.st.Active
 		c.scheduleRender()
 		return true
 	}
-	if !cs.st.Active || c.in.Input().Text() != "" {
+	if !cs.st.Active {
+		if raw == c.focusKeySeq() && empty && len(cs.frame.Items) > 0 {
+			cs.st.Active = true
+			c.scheduleRender()
+			return true
+		}
+		return false
+	}
+	if !empty {
 		return false
 	}
 	if raw == "y" || raw == "n" {
@@ -304,8 +343,22 @@ func (c *Client) cmcpKeys(raw string) bool {
 		}
 	}
 	k, ok := keyNames[raw]
+	if !ok && len([]rune(raw)) == 1 {
+		k, ok = cmcpui.Key(raw), true
+	}
 	if !ok {
 		return false
+	}
+	if k == "tab" || k == "btab" {
+		d := 1
+		if k == "btab" {
+			d = -1
+		}
+		if cs.frame.AtEdge(cs.st, d) {
+			cs.st.Active = false // Tab past the last panel: back to the input line
+			c.scheduleRender()
+			return true
+		}
 	}
 	evs, used := cs.frame.HandleKey(cs.st, k)
 	if !used && k == "esc" {
@@ -313,7 +366,11 @@ func (c *Client) cmcpKeys(raw string) bool {
 		used = true
 	}
 	if !used {
-		return false // e.g. a "+" the widget does not want goes to the input line
+		if r := []rune(raw); len(r) == 1 && r[0] >= 0x20 && r[0] != 0x7f {
+			cs.st.Active = false // a character the screen does not want: the player is typing
+			c.scheduleRender()
+		}
+		return false
 	}
 	for _, ev := range evs {
 		c.cmcpPerform(s, ev)

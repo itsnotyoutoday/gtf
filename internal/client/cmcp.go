@@ -11,6 +11,8 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -53,7 +55,7 @@ func (c *Client) cmcpConfig(s *Session) session.Config {
 		Theme:          c.cmcpTheme(),
 		MaxBody:        65536, // the Welcome with the whole catalogue is about 20 KiB
 		LayerSendsGate: true,  // the gmcp handler sends Core.Hello and Core.Supports.Set
-		Packs:          &msg.HelloPacks{Formats: []int{1}, Inline: true, HTTPS: true, Cache: c.packStore().cache.Recent(s.World.Host, 16)},
+		Packs:          &msg.HelloPacks{Formats: []int{1}, Inline: true, HTTPS: true, Cache: c.cachedPacks(s.World.Host)},
 		Logf: func(f string, a ...any) {
 			if c.in.Var("cmcp_debug") != "" {
 				c.Post(func(*gtfparser.Interp) { c.echoLine("% cmcp: " + fmt.Sprintf(f, a...)) })
@@ -211,3 +213,14 @@ func (c *Client) cmcpStatus(s *Session) []string {
 func (c *Client) cmcpClock() { c.cmcpTick() }
 
 var _ = time.Second
+
+// cachedPacks lists the packs held for a host (Hello.packs.cache) without creating the cache
+// directory: a player who never met a pack leaves no files behind.
+func (c *Client) cachedPacks(host string) []msg.CacheEntry {
+	if c.cmPacks == nil {
+		if _, err := os.Stat(filepath.Join(c.cfg.HomeDir, ".gtf", "cmcp", "packs")); err != nil {
+			return nil
+		}
+	}
+	return c.packStore().cache.Recent(host, 16)
+}
