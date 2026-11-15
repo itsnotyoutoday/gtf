@@ -94,9 +94,9 @@ func (d *drawer) cellFrame() {
 			edge := jstr(o, "edge")
 			col := func(i, n int) layout.Color {
 				if gr := jlist(o, "gradient"); len(gr) > 0 {
-					return th.gradientAt(gr, float64(i)/float64(max(n-1, 1)))
+					return th.edgeTheme().gradientAt(gr, float64(i)/float64(max(n-1, 1)))
 				}
-				return th.role(jstr(o, "role"))
+				return th.edgeTheme().role(jstr(o, "role"))
 			}
 			switch edge {
 			case "top", "bottom":
@@ -132,7 +132,7 @@ func (d *drawer) cellFrame() {
 				y = h - 1
 			}
 			if set[idx] != 0 {
-				put(x, y, set[idx], th.role(jstr(o, "role")), bg)
+				put(x, y, set[idx], th.edgeTheme().role(jstr(o, "role")), bg)
 			}
 		case "rule":
 			chars := []rune(jstr(o, "chars"))
@@ -147,7 +147,7 @@ func (d *drawer) cellFrame() {
 				continue
 			}
 			for x := th.leftCols(w); x < w; x++ {
-				put(x, y, chars[x%len(chars)], th.role(jstr(o, "role")), bg)
+				put(x, y, chars[x%len(chars)], th.edgeTheme().role(jstr(o, "role")), bg)
 			}
 		case "rivets":
 			chars := []rune(jstr(o, "chars"))
@@ -158,7 +158,7 @@ func (d *drawer) cellFrame() {
 			}
 			if len(chars) > 0 {
 				for x := every / 2; x < w; x += every {
-					put(x, y, chars[0], th.role(jstr(o, "role")), bg)
+					put(x, y, chars[0], th.edgeTheme().role(jstr(o, "role")), bg)
 				}
 			}
 		case "text":
@@ -184,7 +184,7 @@ func (d *drawer) cellFrame() {
 				if xx < 0 || xx >= w {
 					continue
 				}
-				fg, b := th.role(role), bg
+				fg, b := th.edgeTheme().role(role), bg
 				if role == "bg" { // dark text on a coloured strip: sit on the strip's colour
 					b = g.At(xx, y).A.FG
 				}

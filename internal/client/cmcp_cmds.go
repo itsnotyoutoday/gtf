@@ -22,7 +22,7 @@ const cmcpUsage = `usage: /cmcp [status | keys | screens | packs | screen [id] |
   log           toggle the log view: output at ~80% of the height (F3)
   hide, show    switch the whole screen off or on (F4); %cmcp_start_collapsed starts it off
 Settings (variables): %cmcp (on/off) %cmcp_theme %cmcp_ship_theme (off) %cmcp_bell (off) %cmcp_era (tng)
-%cmcp_sounds_dir (stored, unused) %cmcp_pack_consent (ask|always|never) %cmcp_debug`
+%cmcp_sounds_dir (stored, unused) %cmcp_pack_consent (always|ask|never; default always) %cmcp_debug`
 
 func (c *Client) cmdCmcp(in *gtfparser.Interp, args string) gtfparser.Value {
 	args = strings.TrimSpace(args)

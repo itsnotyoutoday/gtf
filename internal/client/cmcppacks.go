@@ -79,13 +79,14 @@ type packJob struct {
 	ship   string // the ship whose announcement asked for it: a question outlives neither the ship nor the pack's need
 }
 
-// consentMode is %cmcp_pack_consent: ask (default), always or never.
+// consentMode is %cmcp_pack_consent: always (default: packs and themes announced by the game's
+// origin are taken; every check stays), ask (the F5/F6 question) or never.
 func (c *Client) consentMode() string {
 	switch v := strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_pack_consent"))); v {
-	case "always", "never":
+	case "ask", "never":
 		return v
 	}
-	return "ask"
+	return "always"
 }
 
 // fullRef completes an announced identity with the entry the server listed (size, url, sig).
@@ -147,6 +148,14 @@ func (c *Client) packStart(s *Session, j *packJob) {
 		c.cmcpDebug("pack %s refused", j.ref.ID)
 		return
 	case mode == "always" || dec == "allow" || !fetch.NeedsPrompt(trust):
+		if mode == "always" && dec != "allow" {
+			kind := "interface pack"
+			if j.ref.Kind == "theme" {
+				kind = "interface theme"
+			}
+			c.echoTo(s.scr, "", fmt.Sprintf("%% Accepted %s %s %s from %s", kind, j.ref.ID, j.ref.Version, host))
+			c.cmcpNoteKey(s, "acc:"+j.ref.SHA256, fmt.Sprintf("Accepted %s %s %s from %s", kind, j.ref.ID, j.ref.Version, host), cmcpui.NoticeInfo)
+		}
 		c.packFetch(s, j)
 		return
 	}
@@ -158,7 +167,6 @@ func (c *Client) packStart(s *Session, j *packJob) {
 	line := fmt.Sprintf("%% %s offers a %s %q %s (%d KiB). Use it? /cmcp pack allow | deny   (or F5 / F6)",
 		host, kind, j.ref.ID, j.ref.Version, (j.ref.Size+1023)/1024)
 	c.echoTo(s.scr, "", line)
-	c.cmcpNotice(s, "pack "+j.ref.ID+": y = allow, n = refuse")
 }
 
 // packDecide answers a consent prompt (id "" = the one pending).
@@ -187,6 +195,7 @@ func (c *Client) packDecide(s *Session, id string, allow bool) bool {
 
 func (c *Client) packFailed(s *Session, j *packJob, why string) {
 	j.state, j.why = "failed", why
+	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Could not get "+packLabel(j.ref)+": "+why, cmcpui.NoticeFail)
 	c.cmcpDebug("pack %s: %s (staying on the built-in screens)", j.ref.ID, why)
 	if s.cm != nil {
 		s.cm.PackAvailable(j.ref.ID, j.ref.SHA256, false)
@@ -202,6 +211,7 @@ func (c *Client) packFetch(s *Session, j *packJob) {
 		return
 	}
 	j.state = "fetching"
+	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Downloading "+packLabel(j.ref)+"...", cmcpui.NoticeProgress)
 	u := s.cm.UI()
 	switch {
 	case j.ref.Inline && s.conn != nil:
@@ -303,6 +313,7 @@ func (c *Client) packInstall(s *Session, j *packJob, raw []byte, store bool) {
 	ps.save()
 	s.cmScr().packs[j.ref.ID] = p
 	j.state = "ready"
+	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Downloaded "+packLabel(j.ref), cmcpui.NoticeDone)
 	s.cm.PackAvailable(j.ref.ID, j.ref.SHA256, true)
 	c.cmcpPump(s)
 	c.scheduleRender()
@@ -368,7 +379,20 @@ func (c *Client) themeInstall(s *Session, j *packJob, raw []byte, store bool) {
 		cs.themes[tp.ID] = tp
 	}
 	j.state = "ready"
+	c.cmcpNoteKey(s, "pack:"+j.ref.SHA256, "Downloaded "+packLabel(j.ref), cmcpui.NoticeDone)
 	c.scheduleRender()
+}
+
+// packLabel names an announced pack for the notice line: "Romulan theme pack", "fspace-std interface pack".
+func packLabel(r msg.PackRef) string {
+	if r.Kind == "theme" {
+		id := r.ID
+		if id != "" {
+			id = strings.ToUpper(id[:1]) + id[1:]
+		}
+		return id + " theme pack"
+	}
+	return r.ID + " interface pack"
 }
 
 // semverParts splits "1.10.0-rc.1" into numbers and the pre-release identifiers.

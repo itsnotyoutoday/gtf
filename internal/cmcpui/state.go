@@ -50,6 +50,9 @@ type Env struct {
 	Now    time.Time
 	// Alert is "green"/"yellow"/"red" (tints the frame of a red alert).
 	Alert string
+	// AlertRecolour is full (the whole palette switches), edge (only the frame edge, the alert segment and
+	// the title accent) or off; empty is full.
+	AlertRecolour string
 	// Effects are recent Cobra.Event happenings for the viewscreen.
 	Effects []Effect
 	// Mnemonics maps Node.Path to the mnemonic letter of a button or toggle (focus.AssignMnemonics

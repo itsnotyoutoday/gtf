@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/itsnotyoutoday/cmcp/msg"
+	"github.com/itsnotyoutoday/gtf/internal/cmcpui"
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
@@ -52,6 +53,7 @@ func TestCmcpPackConsentInlineCache(t *testing.T) {
 	raw, ref := readPack(t)
 	home := t.TempDir()
 	f := packFixture(t, home, map[string][]byte{ref.SHA256: raw})
+	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	if id, fb := f.screenState(); id != "std.operations" || !fb {
 		t.Fatalf("expected the built-in screen first, got %q fallback=%v", id, fb)
@@ -71,6 +73,7 @@ func TestCmcpPackConsentInlineCache(t *testing.T) {
 
 	// second launch: same home, same host: cached and already allowed
 	f2 := packFixture(t, home, map[string][]byte{ref.SHA256: raw})
+	exec(f2.c, "/set cmcp_pack_consent=ask")
 	f2.console("fspace-std/damage", "operations", packConsole(ref))
 	cmEventually(t, "pack from cache", func() bool { id, fb := f2.screenState(); return id == "fspace-std/damage" && !fb })
 	if int(f2.d.gets.Load()) != 0 {
@@ -82,6 +85,7 @@ func TestCmcpPackConsentInlineCache(t *testing.T) {
 func TestCmcpPackRefused(t *testing.T) {
 	raw, ref := readPack(t)
 	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	exec(f.c, "/cmcp pack deny")
 	time.Sleep(100 * time.Millisecond)
@@ -220,6 +224,7 @@ func TestCmcpOneThemePerShip(t *testing.T) {
 func TestCmcpStaleConsentDroppedOnShipHop(t *testing.T) {
 	raw, ref := readPack(t)
 	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	f.render()
 	f.contain(t, "F5 = ALLOW") // the question, in gtf's own status line
@@ -254,4 +259,49 @@ func TestCmcpMenuAvailableOnlyAndScreensList(t *testing.T) {
 	exec(f.c, "/cmcp keys")
 	f.render()
 	f.contain(t, "SCREEN MENU", "Esc")
+}
+
+// The default is `always`: no question, the pack loads, and one quiet line says so.
+func TestCmcpPackDefaultAlways(t *testing.T) {
+	raw, ref := readPack(t)
+	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f.console("fspace-std/damage", "operations", packConsole(ref))
+	cmEventually(t, "pack in use without asking", func() bool { id, fb := f.screenState(); return id == "fspace-std/damage" && !fb })
+	f.render()
+	f.contain(t, "Accepted interface pack fspace-std 1.0.0 from")
+	f.lack(t, "F5 = ALLOW", "offers a layout pack")
+}
+
+// The notice line (top row, every theme): "Downloading ..." is replaced in place by "Downloaded ...",
+// which lingers about 5.5 s, then goes; a failure lingers 8 s.
+func TestCmcpNoticeLine(t *testing.T) {
+	clock := fixedNow
+	nowFn = func() time.Time { return clock }
+	defer func() { nowFn = func() time.Time { return fixedNow } }()
+	for _, th := range []string{"tng", "romulan", "ferengi"} {
+		clock = fixedNow
+		f := newScreenFixture(t, 120, 40)
+		f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = th })
+		post := func(key, text string, k cmcpui.NoticeKind) {
+			f.c.Do(func(*gtfparser.Interp) { f.c.cmcpNoteKey(f.c.fg, key, text, k) })
+			f.render()
+		}
+		post("pack:x", "Downloading Romulan theme pack...", cmcpui.NoticeProgress)
+		f.contain(t, "Downloading Romulan theme pack...")
+		clock = clock.Add(3 * time.Second)
+		post("pack:x", "Downloaded Romulan theme pack", cmcpui.NoticeDone)
+		f.contain(t, "Downloaded Romulan theme pack")
+		f.lack(t, "Downloading Romulan")
+		f.dump("notice-" + th)
+		clock = clock.Add(6 * time.Second)
+		f.render()
+		f.lack(t, "Downloaded Romulan theme pack")
+		post("pack:y", "Could not get X theme pack: bad hash", cmcpui.NoticeFail)
+		clock = clock.Add(7 * time.Second)
+		f.render()
+		f.contain(t, "Could not get X theme pack")
+		clock = clock.Add(2 * time.Second)
+		f.render()
+		f.lack(t, "Could not get X theme pack")
+	}
 }

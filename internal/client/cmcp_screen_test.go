@@ -837,3 +837,39 @@ func TestCmcpRealKeySequences(t *testing.T) {
 	f.keys("\x1b[Z", "\x1b[Z")
 	f.lack(t, "key_shift_tab", "is undefined", "no such command or macro")
 }
+
+// %cmcp_alert_recolour: full (the whole palette goes red), edge (only the frame edge and the alert
+// segment) and off (nothing); romulan and ferengi default to edge. Under every mode gtf's own hint
+// line says RED ALERT in words.
+func TestCmcpAlertRecolourModes(t *testing.T) {
+	redCells := func(f *screenFixture) (n int) {
+		f.c.Do(func(*gtfparser.Interp) {
+			g := f.c.ui.Surf.Grid
+			for i := 0; i < 8*g.W; i++ { // the top band and its segments
+				c := g.Cells[i]
+				if c.A.BG.Kind == layout.RGB && int(c.A.BG.R) >= 120 && int(c.A.BG.R) >= int(c.A.BG.G)+60 && int(c.A.BG.R) >= int(c.A.BG.B)+60 {
+					n++
+				}
+			}
+		})
+		return
+	}
+	count := map[string]int{}
+	for _, mode := range []string{"full", "edge", "off"} {
+		f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_alert_recolour="+mode)
+		f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
+		f.console("std.sensors", "science", nil)
+		f.contain(t, "RED ALERT")
+		count[mode] = redCells(f)
+		f.dump("alert-" + mode)
+	}
+	if !(count["full"] > count["edge"] && count["edge"] > count["off"]) {
+		t.Fatalf("red cells in the top band should shrink full > edge > off: %v", count)
+	}
+	// romulan defaults to edge: the top band is not all red
+	f := newScreenFixture(t, 120, 40)
+	f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
+	f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = "romulan" })
+	f.contain(t, "RED ALERT")
+	f.dump("alert-romulan-default")
+}

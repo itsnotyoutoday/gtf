@@ -121,7 +121,9 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_bell` | off | ring the terminal bell for alerts (`red_alert`, `yellow_alert`, `proximity_warning`, `comm_beep`, `hail`) |
 | `%cmcp_era` | tng | sound era; stored, unused (gtf plays no sound) |
 | `%cmcp_sounds_dir` | | local sound folder; stored, unused, never sent anywhere |
-| `%cmcp_pack_consent` | ask | `ask` once per pack, `always`, or `never` (built-in screens only) |
+
+| `%cmcp_pack_consent` | always | `always`: packs and themes announced by the game's own origin are taken (hash, size caps, origin pinning and schema checks all stay; one quiet line says so); `ask`: the F5/F6 question once per pack; `never`: built-in screens only |
+| `%cmcp_alert_recolour` | theme | `full` (the whole palette goes red/yellow), `edge` (only the frame edge, the alert segment and the title accent), `off`; `theme` = the theme's own (edge for romulan and ferengi) |
 | `%cmcp_origins` | | extra allowed pack origins (`https://host[:port]`, space separated); the game host is always allowed |
 | `%cmcp_debug` | | non-empty: show protocol diagnostics as `% cmcp:` lines |
 
@@ -129,12 +131,18 @@ gtf plays **no audio**. It does not claim to in `Hello.audio`, so a server sends
 `%cmcp_bell on` the bell also rings for the alert `Cobra.Event`s (red/yellow alert, proximity, comm, hail), because a client without
 audio would otherwise never hear about them; spec 9.9 only names `Sound.Play`. `Sound.Play` of the bell events rings it too.
 
+## Notice line
+
+The top row of the CMCP screen, in every theme, shows one transient line: `Downloading Romulan theme pack...` is replaced in place by
+`Downloaded Romulan theme pack` (it lingers about 5.5 s; a failure 8 s; other notices 5 s), `Accepted interface pack X 1.0.0 from
+host`, command errors and hints. A newer notice replaces the visible one once it has been up 1.2 s (a short queue keeps quick events
+readable). The alert is also said in words (`RED ALERT`) at the right end of the hint line, whatever the theme does with colour.
+
 ## Packs, cache, consent
 
 `Cobra.Welcome`/`Cobra.Console` announce a pack; the shared `fetch` package gets it (inline chunks, or HTTPS from the announced
 origin only, which must be the game host or one in `%cmcp_origins`), checks the SHA-256, parses it whole-or-nothing and caches it
-under `~/.gtf/cmcp/packs` by (game host, hash). The **first use of a pack asks** (a line in the output, a notice in the screen
-status line; answer with F5 / F6 or `/cmcp pack allow|deny`; a question belongs to the ship that announced the pack and is dropped on a ship hop); the answer is remembered per (host, pack id) in
+under `~/.gtf/cmcp/packs` by (game host, hash). With `%cmcp_pack_consent always` (the default) it is taken without a question and one line says so. With `ask`, the **first use of a pack asks** (a line in the output and the status line; answer with F5 / F6 or `/cmcp pack allow|deny`; a question belongs to the ship that announced the pack and is dropped on a ship hop); the answer is remembered per (host, pack id) in
 `~/.gtf/cmcp/consent.json`, as are trust-on-first-use signature keys. A pack with an invalid signature is rejected, never offered.
 Any failure keeps the built-in screens and the session running.
 

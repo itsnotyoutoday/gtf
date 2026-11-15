@@ -43,7 +43,17 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	if env.Theme.Name == "" {
 		env.Theme = ThemeByName("plain")
 	}
-	env.Theme = env.Theme.withAlert(env.Alert)
+	switch env.AlertRecolour {
+	case "off":
+	case "edge":
+		// only the frame edge, the alert segment and the title accent take the alert's colours
+		alt := env.Theme.withAlert(env.Alert)
+		if alt.Set != env.Theme.Set {
+			env.Theme.edge = &alt
+		}
+	default:
+		env.Theme = env.Theme.withAlert(env.Alert)
+	}
 	bl := env.Theme.blank()
 	for i := range g.Cells {
 		g.Cells[i].A = bl

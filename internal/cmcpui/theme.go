@@ -18,6 +18,9 @@ import (
 // its controls and pictures look (docs/CMCP-THEMES.md). The plain theme leaves backgrounds to the
 // terminal and draws no frame; the others paint their own ground, frame, pills and radar.
 type Theme struct {
+	// edge is the theme in the alert's palette set when the alert recolours only the frame edge
+	// (%cmcp_alert_recolour edge): the frame's strips, rules, border and the alert segment use it.
+	edge   *Theme
 	Name   string
 	Tokens map[string]string // "color.accent" -> "#rrggbb" (or a colour name)
 	// PaintBG makes the screen draw color.bg behind everything but the text pane.
@@ -236,3 +239,11 @@ func (t Theme) cycle(i int) layout.Color {
 
 // dark is the colour of text on a coloured pill: near black.
 var dark = layout.Color{Kind: layout.RGB, R: 8, G: 8, B: 16}
+
+// edgeTheme is the theme whose colours the frame EDGE uses: the alert palette in edge mode, else the theme itself.
+func (t Theme) edgeTheme() Theme {
+	if t.edge != nil {
+		return *t.edge
+	}
+	return t
+}

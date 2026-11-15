@@ -83,6 +83,9 @@ func (d *drawer) frameBottom() {}
 // theme's own palette, red when a red alert switched the set.
 func (d *drawer) bandColor(i int) layout.Color { return d.env.Theme.cycle(i) }
 
+// edgeColor is the i-th band colour of the frame edge: the alert's palette in edge mode.
+func (d *drawer) edgeColor(i int) layout.Color { return d.env.Theme.edgeTheme().cycle(i) }
+
 // seg is one coloured segment of a band: its label and width in cells (0 = takes the rest).
 type seg struct {
 	text string
@@ -114,8 +117,8 @@ func (d *drawer) tngBands() {
 		elbowW = lw
 	}
 	if lw == 0 {
-		cv.RoundRect(0, 0, elbowW, hh, float64(hh), "tl", d.bandColor(0), 1)
-		cv.Rect(elbowW-3, 0, 3, hh, d.bandColor(0), 1, true)
+		cv.RoundRect(0, 0, elbowW, hh, float64(hh), "tl", d.edgeColor(0), 1)
+		cv.Rect(elbowW-3, 0, 3, hh, d.edgeColor(0), 1, true)
 	}
 	// segments
 	title := strings.ToUpper(d.env.Title)
@@ -141,7 +144,7 @@ func (d *drawer) tngBands() {
 	for _, t := range d.env.Tags {
 		segs = append(segs, seg{text: strings.ToUpper(t), col: d.bandColor(4)})
 	}
-	segs = append(segs, seg{text: alert, col: d.bandColor(2)})
+	segs = append(segs, seg{text: alert, col: d.edgeColor(2)})
 	right := seg{text: keys, col: d.bandColor(0)}
 	x := elbowW + 2
 	rightW := runeLen(right.text) + 4
@@ -167,8 +170,8 @@ func (d *drawer) tngBands() {
 		// the elbow: a large corner with a long, anti-aliased curve, one piece with the column below it
 		er := topRows + 4
 		ce := layout.NewCanvas(lw, er)
-		ce.RoundRect(0, 0, lw, er*2, 22, "tl", d.bandColor(0), 1)
-		ce.Rect(lw-4, 0, 4, hh-2, d.bandColor(0), 1, true)
+		ce.RoundRect(0, 0, lw, er*2, 22, "tl", d.edgeColor(0), 1)
+		ce.Rect(lw-4, 0, 4, hh-2, d.edgeColor(0), 1, true)
 		ce.RoundRect(lw-6, hh-2, 6, 3, 0, "", bg, 1) // a notch under the band, where the first segment starts
 		d.blitRows(ce.Block(bg), 0, 0, er)
 	}
@@ -176,7 +179,7 @@ func (d *drawer) tngBands() {
 	// ---- bottom band: 2 rows, a segment strip with the focused widget's hint
 	cb := layout.NewCanvas(w, botRows)
 	bh := botRows * 2
-	cb.RoundRect(0, 0, elbowW, bh, float64(bh)/2, "bl", d.bandColor(0), 1)
+	cb.RoundRect(0, 0, elbowW, bh, float64(bh)/2, "bl", d.edgeColor(0), 1)
 	// the status strip: hull, shields, core, lock and alert as coloured segments
 	x = elbowW + 2
 	status := d.env.Status
@@ -201,7 +204,7 @@ func (d *drawer) tngBands() {
 	if w-x-10 > 0 {
 		cb.Rect(x, 0, w-x-10, bh-1, d.bandColor(4), 0.8, true)
 	}
-	cb.RoundRect(w-8, 0, 8, bh-1, float64(bh-1)/2, "br", d.bandColor(2), 1)
+	cb.RoundRect(w-8, 0, 8, bh-1, float64(bh-1)/2, "br", d.edgeColor(2), 1)
 	d.blitRows(cb.Block(bg), 0, g.H-botRows, botRows)
 }
 
@@ -294,7 +297,7 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 // edge; it lives in the ring of cells around the text pane's rectangle.
 func (d *drawer) textBorder(o Rect) {
 	th := d.env.Theme
-	col := d.bandColor(0)
+	col := d.edgeColor(0)
 	bg := th.blank().BG
 	a := layout.Attr{FG: layout.Lerp(col, rgbC(0, 0, 0), 0.25), BG: bg}
 	d.c.clip = Rect{W: d.f.Grid.W, H: d.f.Grid.H}

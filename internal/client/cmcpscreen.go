@@ -36,8 +36,7 @@ type cmcpScr struct {
 	frame        *cmcpui.Frame
 	override     string // a client-local {"show":...} screen, until the server names another
 	lastSrv      string
-	notice       string
-	noticeEnd    time.Time
+	notes        cmcpui.Notices // the notice line at the top of the screen
 	effects      []cmcpui.Effect
 	sprites      *raster.Cache
 	packs        map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
@@ -301,9 +300,9 @@ func (c *Client) cmcpSyncSurface() {
 			hdr += " AI"
 		}
 	}
-	notice := ""
-	if now.Before(cs.noticeEnd) {
-		notice = cs.notice
+	noteText, noteKind := cs.notes.Current(now)
+	if at := cs.notes.NextChange(now); !at.IsZero() {
+		time.AfterFunc(at.Sub(now)+20*time.Millisecond, c.scheduleRender)
 	}
 	var live []cmcpui.Effect
 	for _, e := range cs.effects {
@@ -324,7 +323,7 @@ func (c *Client) cmcpSyncSurface() {
 	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpVars(u, id, scr.Title), Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, AlertRecolour: c.cmcpAlertRecolour(th), Header: hdr, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -338,15 +337,21 @@ func (c *Client) cmcpSyncSurface() {
 		f = cmcpui.Draw(tree, w, h, ce, cs.st)
 	}
 	c.cmcpOrderPanels(cs, f, plan)
-	f.Grid = c.cmcpWithHint(f, cs, notice, w, fullH)
+	f.Grid = c.cmcpWithHint(f, cs, noteText, noteKind, u.Alert, w, fullH)
 	cs.frame = f
 	c.ui.Surf = &ui.Surface{Grid: f.Grid, Text: layout.Rect{X: f.Text.X, Y: f.Text.Y, W: f.Text.W, H: f.Text.H}}
 }
 
 // cmcpNoticef shows a short message in the screen's header.
 func (c *Client) cmcpNotice(s *Session, text string) {
-	cs := s.cmScr()
-	cs.notice, cs.noticeEnd = text, c.cfg.Now().Add(6*time.Second)
+	if text != "" {
+		c.cmcpNoteKey(s, "", text, cmcpui.NoticeInfo)
+	}
+}
+
+// cmcpNoteKey posts to the notice line; a notice with the key of a visible one replaces it in place.
+func (c *Client) cmcpNoteKey(s *Session, key, text string, kind cmcpui.NoticeKind) {
+	s.cmScr().notes.Post(c.cfg.Now(), key, text, kind)
 	c.scheduleRender()
 }
 
@@ -886,14 +891,12 @@ func (c *Client) cmcpOrderPanels(cs *cmcpScr, f *cmcpui.Frame, plan cmcpui.Plan)
 // cmcpHintText is the key-hint line of a CMCP screen: gtf's own, so it shows in every theme. Not in
 // focus: the keys that start it; in focus: the area and the keys valid there; a pending pack consent
 // or a notice takes the line while it lasts.
-func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr, notice string) (string, string) {
+func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr) (string, string) {
 	switch {
 	case c.cmcpConsentLine(cs) != "":
 		return c.cmcpConsentLine(cs), "consent"
 	case cs.lockNote != "":
 		return cs.lockNote, "notice"
-	case notice != "":
-		return notice, "notice"
 	case cs.st.Active:
 		return f.Header(), "focus"
 	}
@@ -901,14 +904,14 @@ func (c *Client) cmcpHintText(f *cmcpui.Frame, cs *cmcpScr, notice string) (stri
 }
 
 // cmcpWithHint returns the frame's grid with one more row at the bottom holding the hint line.
-func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, notice string, w, h int) *layout.Grid {
+func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, note string, nk cmcpui.NoticeKind, alert string, w, h int) *layout.Grid {
 	src := f.Grid
 	if src.H >= h {
 		return src
 	}
 	g := layout.NewGrid(w, h)
 	copy(g.Cells, src.Cells)
-	txt, kind := c.cmcpHintText(f, cs, notice)
+	txt, kind := c.cmcpHintText(f, cs)
 	a := layout.Attr{FG: layout.Color{R: 200, G: 200, B: 205, Kind: layout.RGB}, BG: layout.Color{R: 30, G: 30, B: 38, Kind: layout.RGB}}
 	switch kind {
 	case "focus":
@@ -917,6 +920,27 @@ func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, notice string, w, h 
 		a = layout.Attr{FG: layout.Color{R: 0, G: 0, B: 0, Kind: layout.RGB}, BG: layout.Color{R: 255, G: 200, B: 40, Kind: layout.RGB}, Bold: true}
 	case "notice":
 		a.Bold = true
+	}
+	if note != "" && f.Text.Y > 0 {
+		// the notice line: the top row of the screen, the same in every theme
+		na := layout.Attr{FG: layout.Color{R: 0, G: 0, B: 0, Kind: layout.RGB}, BG: layout.Color{R: 170, G: 200, B: 235, Kind: layout.RGB}, Bold: true}
+		switch nk {
+		case cmcpui.NoticeProgress:
+			na.BG = layout.Color{R: 120, G: 170, B: 255, Kind: layout.RGB}
+		case cmcpui.NoticeDone:
+			na.BG = layout.Color{R: 110, G: 215, B: 130, Kind: layout.RGB}
+		case cmcpui.NoticeFail:
+			na.BG = layout.Color{R: 255, G: 90, B: 80, Kind: layout.RGB}
+		}
+		for x := 0; x < w; x++ {
+			g.Set(x, 0, layout.Cell{R: ' ', A: na})
+		}
+		for i, r := range []rune(" " + note) {
+			if i >= w {
+				break
+			}
+			g.Set(i, 0, layout.Cell{R: r, A: na})
+		}
 	}
 	y := h - 1
 	for x := 0; x < w; x++ {
@@ -928,7 +952,35 @@ func (c *Client) cmcpWithHint(f *cmcpui.Frame, cs *cmcpScr, notice string, w, h 
 		}
 		g.Set(i, y, layout.Cell{R: r, A: a})
 	}
+	if al := strings.ToLower(alert); al == "red" || al == "yellow" {
+		// the alert is always said in words on gtf's own line, whatever the theme does with colour
+		lab := " " + strings.ToUpper(al) + " ALERT "
+		bg := layout.Color{R: 255, G: 60, B: 50, Kind: layout.RGB}
+		if al == "yellow" {
+			bg = layout.Color{R: 255, G: 200, B: 40, Kind: layout.RGB}
+		}
+		aa := layout.Attr{FG: layout.Color{R: 0, G: 0, B: 0, Kind: layout.RGB}, BG: bg, Bold: true}
+		for i, r := range []rune(lab) {
+			if x := w - len(lab) + i; x >= 0 {
+				g.Set(x, y, layout.Cell{R: r, A: aa})
+			}
+		}
+	}
 	return g
+}
+
+// cmcpAlertRecolour is %cmcp_alert_recolour: theme (default: the theme's own, edge for romulan and
+// ferengi until the reference themes carry it), full, edge or off.
+func (c *Client) cmcpAlertRecolour(th cmcpui.Theme) string {
+	switch v := strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_alert_recolour"))); v {
+	case "full", "edge", "off":
+		return v
+	}
+	switch th.Style {
+	case "romulan", "ferengi":
+		return "edge"
+	}
+	return "full"
 }
 
 // cmcpDropStale forgets pack and theme questions that belong to another ship: the consent question
