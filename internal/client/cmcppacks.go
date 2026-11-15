@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,8 @@ import (
 	"github.com/itsnotyoutoday/cmcp/msg"
 	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/cmcp/session"
+	"github.com/itsnotyoutoday/cmcp/theme"
+	"github.com/itsnotyoutoday/gtf/internal/cmcpui"
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
@@ -147,8 +150,12 @@ func (c *Client) packStart(s *Session, j *packJob) {
 		return
 	}
 	j.state = "asking"
-	line := fmt.Sprintf("%% %s offers a layout pack %q %s (%d KiB). Use it? /cmcp pack allow | deny   (screen keys: y / n)",
-		host, j.ref.ID, j.ref.Version, (j.ref.Size+1023)/1024)
+	kind := "layout pack"
+	if j.ref.Kind == "theme" {
+		kind = "theme pack"
+	}
+	line := fmt.Sprintf("%% %s offers a %s %q %s (%d KiB). Use it? /cmcp pack allow | deny   (screen keys: y / n)",
+		host, kind, j.ref.ID, j.ref.Version, (j.ref.Size+1023)/1024)
 	c.echoTo(s.scr, "", line)
 	c.cmcpNotice(s, "pack "+j.ref.ID+": y = allow, n = refuse")
 }
@@ -278,6 +285,10 @@ func (c *Client) packInstall(s *Session, j *packJob, raw []byte, store bool) {
 			opt.Commands[n] = struct{}{}
 		}
 	}
+	if j.ref.Kind == "theme" {
+		c.themeInstall(s, j, raw, store)
+		return
+	}
 	p, err := pack.Parse(raw, opt)
 	if err != nil {
 		ps.cache.Remove(host, j.ref.SHA256)
@@ -316,7 +327,7 @@ var _ = time.Second
 // cmcpPackWanted starts getting a pack the core announced as wanted (the active ship, screen or context
 // names it, or WantPack asked): layout packs only; sound and theme packs are not used by gtf.
 func (c *Client) cmcpPackWanted(s *Session, ref msg.PackRef) {
-	if ref.Kind != "" && ref.Kind != "layout" {
+	if ref.Kind != "" && ref.Kind != "layout" && ref.Kind != "theme" {
 		return
 	}
 	cs := s.cmScr()
@@ -329,4 +340,138 @@ func (c *Client) cmcpPackWanted(s *Session, ref msg.PackRef) {
 	j := &packJob{ref: ref}
 	cs.jobs[ref.SHA256] = j
 	c.packStart(s, j)
+}
+
+// themeInstall validates a downloaded theme pack (theme.Parse: schema, limits, the cell rendition's
+// floors) and keeps it for the session; a pack with no cell part is not selectable by a cell client
+// (spec 19.8), so selection falls back to the built-in theme of the same id, then plain.
+func (c *Client) themeInstall(s *Session, j *packJob, raw []byte, store bool) {
+	ps := c.packStore()
+	host := s.World.Host
+	tp, err := theme.Parse(raw)
+	if err != nil {
+		ps.cache.Remove(host, j.ref.SHA256)
+		c.packFailed(s, j, "theme: "+err.Error())
+		return
+	}
+	if store {
+		ps.cache.Put(host, fetch.Meta{ID: j.ref.ID, Version: j.ref.Version, Kind: "theme", SHA256: j.ref.SHA256, Size: len(raw), Fetched: c.cfg.Now(), Host: host}, raw)
+	}
+	ps.keyring.Accept(host, j.ref)
+	ps.save()
+	cs := s.cmScr()
+	if cs.themes == nil {
+		cs.themes = map[string]*theme.Pack{}
+	}
+	if old := cs.themes[tp.ID]; old == nil || semverGT(tp.Version, old.Version) {
+		cs.themes[tp.ID] = tp
+	}
+	j.state = "ready"
+	c.scheduleRender()
+}
+
+// semverParts splits "1.10.0-rc.1" into numbers and the pre-release identifiers.
+func semverParts(v string) (nums [3]int, pre []string) {
+	core, rest, _ := strings.Cut(v, "-")
+	for i, x := range strings.SplitN(core, ".", 3) {
+		n, _ := strconv.Atoi(x)
+		nums[i] = n
+	}
+	if rest != "" {
+		pre = strings.Split(rest, ".")
+	}
+	return
+}
+
+// semverGT reports a > b by semver 2.0 precedence (spec 19.10): numeric major.minor.patch, a
+// pre-release below its release, identifiers left to right (numeric below alphanumeric).
+func semverGT(a, b string) bool {
+	an, ap := semverParts(a)
+	bn, bp := semverParts(b)
+	for i := range an {
+		if an[i] != bn[i] {
+			return an[i] > bn[i]
+		}
+	}
+	switch {
+	case len(ap) == 0 && len(bp) == 0:
+		return false
+	case len(ap) == 0:
+		return true
+	case len(bp) == 0:
+		return false
+	}
+	for i := 0; i < len(ap) && i < len(bp); i++ {
+		x, ex := strconv.Atoi(ap[i])
+		y, ey := strconv.Atoi(bp[i])
+		switch {
+		case ex == nil && ey == nil && x != y:
+			return x > y
+		case ex == nil && ey != nil:
+			return false
+		case ex != nil && ey == nil:
+			return true
+		case ex != nil && ey != nil && ap[i] != bp[i]:
+			return ap[i] > bp[i]
+		}
+	}
+	return len(ap) > len(bp)
+}
+
+// cmcpResolveTheme applies the fallback chain of spec 19.10 to a selected theme id: a downloaded pack
+// (verified, consented, with a cell part) when it beats the embedded copy (higher version, or
+// %cmcp_dev_force_theme_download), else the embedded theme of that id, else plain. It asks the core to
+// fetch the announced pack the first time the selection needs it.
+func (c *Client) cmcpResolveTheme(s *Session, u *session.UI, id string) cmcpui.Theme {
+	cs := s.cmScr()
+	builtin := theme.Builtin(id)
+	force := onVar(c.in.Var("cmcp_dev_force_theme_download"))
+	if u.Welcome != nil {
+		for _, p := range u.Welcome.Packs {
+			if p.Kind == "theme" && strings.EqualFold(p.ID, id) && cs.themes[id] == nil && !cs.themeAsked[id] {
+				if builtin == nil || force || semverGT(p.Version, builtin.Version) {
+					if cs.themeAsked == nil {
+						cs.themeAsked = map[string]bool{}
+					}
+					cs.themeAsked[id] = true
+					s.cm.WantTheme(id)
+					c.cmcpPump(s)
+				}
+			}
+		}
+	}
+	if dl := cs.themes[id]; dl != nil && (builtin == nil || force || semverGT(dl.Version, builtin.Version)) {
+		return cmcpui.ThemeFromPack(dl)
+	}
+	return cmcpui.ThemeByName(id)
+}
+
+// cmcpThemesList is /cmcp themes: the embedded themes, the announced theme packs and which one is used.
+func (c *Client) cmcpThemesList(s *Session) []string {
+	out := []string{"% embedded: " + strings.Join(theme.BuiltinIDs(), " ")}
+	if s == nil || s.cm == nil {
+		return out
+	}
+	u := s.cm.UI()
+	cs := s.cmScr()
+	if u.Welcome != nil {
+		for _, p := range u.Welcome.Packs {
+			if p.Kind == "theme" {
+				st := "announced"
+				if cs.themes[p.ID] != nil {
+					st = "downloaded"
+				}
+				out = append(out, fmt.Sprintf("%% announced: %s %s (%s)", p.ID, p.Version, st))
+			}
+		}
+	}
+	id := c.cmcpThemeFor(s, u, "")
+	src := "embedded"
+	if dl := cs.themes[id]; dl != nil {
+		src = "downloaded " + dl.Version
+	} else if theme.Builtin(id) == nil {
+		src = "plain (no such theme)"
+	}
+	out = append(out, "% active: "+id+" ("+src+"); %cmcp_theme_mode="+orStr(c.in.Var("cmcp_theme_mode"), "ship"))
+	return out
 }

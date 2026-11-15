@@ -107,6 +107,10 @@ func cmcpThemeNames() []string {
 func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest string) bool {
 	echo := in.Host.Echo
 	switch sub {
+	case "themes":
+		for _, l := range c.cmcpThemesList(s) {
+			echo(l)
+		}
 	case "packs":
 		for _, l := range c.cmcpPacksList(s) {
 			echo(l)

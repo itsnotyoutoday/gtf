@@ -97,6 +97,9 @@ func ThemeByName(name string) Theme {
 	return themes["plain"]
 }
 
+// ThemeFromPack builds a Theme from a (downloaded) theme pack in its normal palette set.
+func ThemeFromPack(p *theme.Pack) Theme { return themeFromPack(p, "normal") }
+
 // themeFromPack builds a Theme from a theme pack and one of its palette sets (spec 19.3: the token
 // mapping color.accent = p, accent2 = k, text = s, dim = t, bg = bg, ok = x, warn = r, alert = the
 // red set's r).

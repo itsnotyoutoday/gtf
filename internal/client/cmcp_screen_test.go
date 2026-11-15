@@ -130,6 +130,17 @@ func newScreenFixture(t *testing.T, w, h int) *screenFixture {
 	return newScreenFixtureOpt(t, w, h, t.TempDir(), nil)
 }
 
+// newThemeFixture is a fixture whose server also announces the given theme pack in Welcome.packs.
+func newThemeFixture(t *testing.T, packs map[string][]byte, ref msg.PackRef) *screenFixture {
+	t.Helper()
+	themeAnnounce = []msg.PackRef{ref}
+	t.Cleanup(func() { themeAnnounce = nil })
+	return newScreenFixtureOpt(t, 120, 40, t.TempDir(), packs)
+}
+
+// themeAnnounce is added to the test server's Welcome.packs.
+var themeAnnounce []msg.PackRef
+
 func newScreenFixtureOpt(t *testing.T, w, h int, home string, packs map[string][]byte) *screenFixture {
 	t.Helper()
 	return newScreenFixtureSetup(t, w, h, home, packs)
@@ -143,7 +154,7 @@ func newScreenFixtureSetup(t *testing.T, w, h int, home string, packs map[string
 	readJSON(t, "commands.catalogue.json", &cat)
 	g := &fakeGame{docs: loadDocs(t), epoch: 1}
 	cfg := session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536, Commands: cat, Backend: g,
-		Packages: []string{"Space.Power", "Space.Ship.Status"}}
+		Packages: []string{"Space.Power", "Space.Ship.Status"}, Packs: themeAnnounce}
 	term := &recTerm{Screen: vt.New(w, h)}
 	d := &cmcpDialer{t: t, cfg: cfg, packs: packs}
 	var c *Client

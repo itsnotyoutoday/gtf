@@ -157,3 +157,60 @@ func TestCmcpHostilePackAndFrames(t *testing.T) {
 	f.render()
 	f.contain(t, "console: operations", "showing std.operations")
 }
+
+func TestSemverPrecedence(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		gt   bool
+	}{{"1.0.1", "1.0.0", true}, {"1.10.0", "1.9.0", true}, {"1.0.0", "1.0.0", false}, {"1.0.1", "1.0.1-rc.1", true},
+		{"1.0.1-rc.1", "1.0.1", false}, {"1.0.0-alpha.10", "1.0.0-alpha.2", true}, {"1.0.0-alpha.1", "1.0.0-alpha", true}} {
+		if got := semverGT(c.a, c.b); got != c.gt {
+			t.Errorf("%s > %s = %v", c.a, c.b, got)
+		}
+	}
+}
+
+// The theme download path: the ship suggests `klingon`; the server announces a klingon 1.0.1 theme
+// pack (higher than the embedded 1.0.0); gtf asks for it, the player is consulted (always, here),
+// the pack is verified and parsed, and its frame replaces the embedded one. With the pack withheld
+// the embedded theme stays.
+func TestCmcpThemePackOverridesEmbedded(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "cmcp", "klingon-1.0.1.theme.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	ref := msg.PackRef{ID: "klingon", Kind: "theme", Version: "1.0.1", SHA256: hex.EncodeToString(sum[:]), Size: len(raw), Inline: true}
+	f := newThemeFixture(t, map[string][]byte{ref.SHA256: raw}, ref)
+	exec(f.c, "/set cmcp_pack_consent=always")
+	f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = "klingon" })
+	cmEventually(t, "downloaded theme installed", func() (ok bool) {
+		f.c.Do(func(*gtfparser.Interp) { ok = f.c.fg.cs != nil && f.c.fg.cs.themes["klingon"] != nil })
+		return
+	})
+	exec(f.c, "/cmcp themes")
+	f.render()
+	f.contain(t, "downloaded 1.0.1", "active: klingon (downloaded 1.0.1)")
+}
+
+// One theme per ship: the ship's theme is chosen once, so a console whose own message carries no theme
+// (or a pack screen that suggests another) does not change it until the ship changes.
+func TestCmcpOneThemePerShip(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	id := func() (th string) {
+		f.c.Do(func(*gtfparser.Interp) { th = f.c.cmcpThemeFor(f.c.fg, f.c.fg.cm.UI(), "tng") })
+		return
+	}
+	f.console("std.sensors", "science", func(c *msg.Console) { c.Ship.Theme = "klingon" })
+	if got := id(); got != "klingon" {
+		t.Fatalf("first console: %s", got)
+	}
+	f.console("std.power", "", func(c *msg.Console) { c.Ship.Theme = ""; c.Theme = "" })
+	if got := id(); got != "klingon" {
+		t.Fatalf("second console of the same ship changed the theme to %s", got)
+	}
+	f.console("std.damage", "", func(c *msg.Console) { c.Ship.Theme = "romulan"; c.Ship.ID = "other-ship" })
+	if got := id(); got != "romulan" {
+		t.Fatalf("after a ship hop: %s", got)
+	}
+}

@@ -28,24 +28,28 @@ import (
 
 // cmcpScr is the per-connection screen state.
 type cmcpScr struct {
-	st        *cmcpui.State
-	states    map[string]*cmcpui.State // $ui, focus and cursors per screen: leaving a context keeps them (spec 3.3, 16.6)
-	gen       int
-	frame     *cmcpui.Frame
-	override  string // a client-local {"show":...} screen, until the server names another
-	lastSrv   string
-	notice    string
-	noticeEnd time.Time
-	effects   []cmcpui.Effect
-	sprites   *raster.Cache
-	packs     map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
-	zonesFor  map[string][]string
-	jobs      map[string]*packJob
-	view      *textport.View  // the shared LOG / screen-off / textport_default state machine (cmcp/go/textport)
-	tween     tweenState      // the F3 animation in progress
-	told      bool            // the one-line CMCP notice was shown
-	reenter   bool            // a screen switch from the menu keeps the keyboard focus on the new screen
-	auto      map[string]bool // group pickers that already got their first group selected
+	st           *cmcpui.State
+	states       map[string]*cmcpui.State // $ui, focus and cursors per screen: leaving a context keeps them (spec 3.3, 16.6)
+	gen          int
+	frame        *cmcpui.Frame
+	override     string // a client-local {"show":...} screen, until the server names another
+	lastSrv      string
+	notice       string
+	noticeEnd    time.Time
+	effects      []cmcpui.Effect
+	sprites      *raster.Cache
+	packs        map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
+	zonesFor     map[string][]string
+	jobs         map[string]*packJob
+	view         *textport.View         // the shared LOG / screen-off / textport_default state machine (cmcp/go/textport)
+	tween        tweenState             // the F3 animation in progress
+	themes       map[string]*theme.Pack // downloaded theme packs (verified, consented)
+	themeAsked   map[string]bool
+	shipTheme    string // the one theme of this ship (theme_mode ship), until the next ship hop
+	shipThemeGen int
+	told         bool            // the one-line CMCP notice was shown
+	reenter      bool            // a screen switch from the menu keeps the keyboard focus on the new screen
+	auto         map[string]bool // group pickers that already got their first group selected
 }
 
 func (s *Session) cmScr() *cmcpScr {
@@ -78,9 +82,11 @@ func onVar(v string) bool {
 
 // cmcpThemeFor resolves the theme by spec 6.6: the player's explicit choice; else, with "use the
 // ship's theme" on, the console's, the ship's, then the screen's suggestion; else plain.
-func (c *Client) cmcpThemeFor(u *session.UI, suggest string) string {
-	// theme_mode: "ship" (the default) follows the ship's suggested theme (console, ship, screen), "fixed"
-	// keeps the player's %cmcp_theme; %cmcp_theme alone also fixes it when the mode is not set.
+func (c *Client) cmcpThemeFor(s *Session, u *session.UI, suggest string) string {
+	// theme_mode: "ship" (the default) follows ONE theme per ship: the ship's suggestion (Cobra.Console
+	// ship.theme), then the console's, then the loaded pack screen's; it is chosen once per ship (a hop
+	// is a new Generation) so a ship never mixes themes when some consoles fall back to built-in
+	// screens. "fixed" keeps the player's %cmcp_theme; %cmcp_theme alone also fixes it.
 	fixed := strings.TrimSpace(c.in.Var("cmcp_theme"))
 	mode := strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_theme_mode")))
 	if mode == "" && onVar(c.in.Var("cmcp_ship_theme")) {
@@ -92,15 +98,28 @@ func (c *Client) cmcpThemeFor(u *session.UI, suggest string) string {
 		}
 		return "tng"
 	}
-	for _, t := range []string{u.ConsoleTheme, u.ShipTheme, suggest} {
-		if t != "" && theme.Builtin(t) != nil {
-			return t
+	cs := s.cmScr()
+	if cs.shipThemeGen == u.Generation && cs.shipTheme != "" {
+		return cs.shipTheme
+	}
+	pick := ""
+	for _, t := range []string{u.ShipTheme, u.ConsoleTheme, suggest} {
+		if t != "" {
+			pick = t // an announced theme pack need not be embedded: cmcpResolveTheme falls back
+			break
 		}
 	}
-	if fixed != "" && fixed != "auto" {
-		return fixed
+	if pick == "" {
+		if fixed != "" && fixed != "auto" {
+			pick = fixed
+		} else {
+			pick = "tng" // nothing suggested: the default
+		}
 	}
-	return "tng" // nothing suggested: the default
+	if u.ShipTheme != "" || u.ConsoleTheme != "" || suggest != "" {
+		cs.shipTheme, cs.shipThemeGen = pick, u.Generation
+	}
+	return pick
 }
 
 // cmcpScreenFor finds the screen to draw (a pack screen, a built-in one, or a client-local override).
@@ -257,7 +276,7 @@ func (c *Client) cmcpSyncSurface() {
 			cmcpui.Dispatch(&cmcpui.Frame{}, cs.st, cmcpui.FocusKeyName(c.in.Var("cmcp_key_focus")), true, now)
 		}
 	}
-	th := cmcpui.ThemeByName(c.cmcpThemeFor(u, scr.SuggestTheme))
+	th := c.cmcpResolveTheme(s, u, c.cmcpThemeFor(s, u, scr.SuggestTheme))
 	hdr := scr.Title
 	if hdr == "" {
 		hdr = id

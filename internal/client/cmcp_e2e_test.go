@@ -179,7 +179,7 @@ func TestCmcpEvenniaEmpires(t *testing.T) {
 		c.Do(func(*gtfparser.Interp) {
 			u := c.fg.cm.UI()
 			scr, fb = u.Screen.Resolved, u.Screen.Fallback
-			th = c.cmcpThemeFor(u, "")
+			th = c.cmcpThemeFor(c.fg, u, "")
 		})
 		t.Logf("%s: screen %s fallback=%v theme=%s\n%s", ship, scr, fb, th, term.Dump())
 		f.dump("empire-" + ship)
