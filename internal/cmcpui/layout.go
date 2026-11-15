@@ -83,10 +83,10 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		if env.Builtin && inner.W >= 70 && inner.H >= 14 {
 			mode = "console" // the built-in screens are arranged by the theme (docs/CMCP-THEMES.md)
 			switch {
-			case env.Theme.isCellTheme() && jmap(jmap(cellDoc(env.Theme), "arrange"), env.ScreenID) != nil:
-				mode = "cell" // the theme's own fractions (spec 19.8)
-			case !env.Theme.isCellTheme() && w >= 120:
-				mode = "side"
+			case w < 120 && env.Theme.isCellTheme() && jmap(jmap(cellDoc(env.Theme), "arrange"), env.ScreenID) != nil:
+				mode = "cell" // narrower terminals: the theme's own fractions (spec 19.8)
+			case w >= 120:
+				mode = "side" // the owner's layout for every theme: output left, widgets in a column on the right
 			}
 		}
 	}
@@ -109,6 +109,7 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		side := max(40, min(56, inner.W*4/10))
 		if rest := stripText(root); rest != nil {
 			rest = pictureFirst(rest)
+			a.orderPictures(rest, env.Theme, env.ScreenID)
 			a.sidebar = true
 			colX, textX := w-side, inner.X
 			if mirror {
@@ -813,4 +814,41 @@ func (d *drawer) summaryLine(root *pack.BoundNode, r Rect) {
 	}
 	d.c.fill(r, ' ', th.blank())
 	d.c.text(r.X+1, r.Y, line, th.attr(th.RGB("color.accent")), r.W-2)
+}
+
+// orderPictures orders the leading pictures of the right-hand column by the theme's arrangement for the
+// screen (spec 19.8 fractions: left to right, then top to bottom), so each theme keeps its own emphasis
+// (klingon puts the radar first, ferengi the viewscreen) while the side is the same for every theme.
+func (a *arranger) orderPictures(col *pack.BoundNode, th Theme, screen string) {
+	arr := jmap(jmap(cellDoc(th), "arrange"), screen)
+	if arr == nil {
+		return
+	}
+	counts := map[string]int{}
+	type kv struct {
+		b   *pack.BoundNode
+		key float64
+	}
+	var pics []kv
+	n := 0
+	for _, k := range col.Children {
+		if !pictureWidget(k.Widget) {
+			break
+		}
+		n++
+		key := 10.0
+		if r := fracRect(arr, k.Widget+"#"+itoa(counts[k.Widget])); r != nil {
+			key = r[0] + r[1]/10
+		}
+		counts[k.Widget]++
+		pics = append(pics, kv{k, key})
+	}
+	for i := 1; i < len(pics); i++ {
+		for j := i; j > 0 && pics[j].key < pics[j-1].key; j-- {
+			pics[j], pics[j-1] = pics[j-1], pics[j]
+		}
+	}
+	for i, p := range pics {
+		col.Children[i] = p.b
+	}
 }
