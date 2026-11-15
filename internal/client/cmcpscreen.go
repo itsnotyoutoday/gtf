@@ -209,11 +209,9 @@ func (c *Client) cmcpSyncSurface() {
 		cs.states = map[string]*cmcpui.State{}
 	}
 	if st := cs.states[id]; st != nil {
-		st.Active = cs.st.Active
 		cs.st = st
 	} else {
 		st := cmcpui.NewState()
-		st.Active = cs.st.Active
 		cs.states[id], cs.st = st, st
 	}
 	w, h := c.ui.W, c.ui.OutRows()
@@ -222,6 +220,7 @@ func (c *Client) cmcpSyncSurface() {
 	budget := 4096
 	env.Budget = &budget
 	tree := scr.Bind(env, cmcpCaps)
+	plan := c.cmcpPlan(cs, tree)
 	th := cmcpui.ThemeByName(c.cmcpThemeFor(u, scr.SuggestTheme))
 	hdr := scr.Title
 	if hdr == "" {
@@ -250,7 +249,7 @@ func (c *Client) cmcpSyncSurface() {
 		}
 	}
 	cs.effects = live
-	ce := cmcpui.Env{Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	ce := cmcpui.Env{Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -259,6 +258,7 @@ func (c *Client) cmcpSyncSurface() {
 		budget = 4096
 		env.Budget = &budget
 		tree = scr.Bind(env, cmcpCaps)
+		ce.Mnemonics = c.cmcpPlan(cs, tree).Mnemonics
 		ce.Assets = &cmAssets{c: c, s: s, p: p, env: env, th: th}
 		f = cmcpui.Draw(tree, w, h, ce, cs.st)
 	}
@@ -275,108 +275,65 @@ func (c *Client) cmcpNotice(s *Session, text string) {
 
 // ---- keys ----
 
-var keyNames = map[string]cmcpui.Key{
-	"\x1b[A": "up", "\x1b[B": "down", "\x1b[C": "right", "\x1b[D": "left",
-	"\x1bOA": "up", "\x1bOB": "down", "\x1bOC": "right", "\x1bOD": "left",
-	"\t": "tab", "\x1b[Z": "btab", "\r": "enter", "\n": "enter", " ": "space", "\x1b": "esc",
-	"\x1b[H": "home", "\x1b[F": "end", "\x1bOH": "home", "\x1bOF": "end", "\x1b[5~": "pgup", "\x1b[6~": "pgdn",
-	"+": "+", "-": "-", "=": "=", "0": "0",
+// cmcpPlan builds the focus plan of the bound screen (core: focusable widgets in the cell class's
+// order, automatic mnemonics) and gives it to the screen's shared focus model.
+func (c *Client) cmcpPlan(cs *cmcpScr, tree *pack.BoundNode) cmcpui.Plan {
+	panels, mn, _ := tree.FocusPlan(nil)
+	p := cmcpui.Plan{Panels: panels, Mnemonics: mn}
+	cs.st.SetupModel(p, cmcpui.FocusKeyName(c.in.Var("cmcp_key_focus")))
+	return p
 }
 
-// focusKeySeq turns the %cmcp_key_focus setting into the raw bytes of the key: "^I" (control
-// letter), "^[OQ" (escape sequence, as in /bind), "F2".."F4", or a literal character. The default
-// is Tab, which only takes effect while the input line is empty (tf's completion key otherwise).
-func (c *Client) focusKeySeq() string {
-	v := strings.TrimSpace(c.in.Var("cmcp_key_focus"))
-	switch {
-	case v == "":
-		return "\t"
-	case strings.HasPrefix(v, "^[") && len(v) > 2:
-		return "\x1b" + v[2:]
-	case len(v) == 2 && v[0] == '^':
-		return string(rune(v[1] & 0x1f))
-	case v == "F2":
-		return "\x1bOQ"
-	case v == "F3":
-		return "\x1bOR"
-	case v == "F4":
-		return "\x1bOS"
-	}
-	return v
-}
-
-// cmcpKeys offers raw terminal bytes to the screen. It returns true when it took them.
-//
-// Keyboard first: on an empty input line the focus key (Tab by default, %cmcp_key_focus; F2 always;
-// /cmcp focus for a /bind) moves the focus into the screen. Inside, Tab and Shift-Tab move between
-// panels (past the last or first one they return to the input line), the arrows work inside a
-// list, table or slider, Enter or Space activates, an underlined letter presses its button, Esc
-// returns to the input line. Everything else, and every key while the input line has text, is the
-// input line's: it always works.
+// cmcpKeys offers raw terminal bytes to the screen and returns true when it took them. The
+// keyboard model is the shared one (cmcp/go/focus, spec 6.12): Tab on an empty input line enters
+// the screen (a rebound key, %cmcp_key_focus, always does); inside, Tab and Shift-Tab move
+// between panels (wrapping), arrows work inside lists and on sliders, Enter activates, a mnemonic
+// letter presses its button (a hold_ms one three times in two seconds), Esc or any other printable
+// key returns to the input line (and is typed there). The input line always works.
 func (c *Client) cmcpKeys(raw string) bool {
 	s := c.fg
-	if s == nil || s.cm == nil || s.cs == nil || s.cs.frame == nil || c.ui.Surf == nil {
+	if s == nil || s.cm == nil || s.cs == nil || s.cs.frame == nil || c.ui.Surf == nil || s.cs.st.Model == nil {
 		return false
 	}
 	cs := s.cs
-	empty := c.in.Input().Text() == ""
-	if raw == "\x1bOQ" || raw == "\x1b[12~" || raw == "\x1b[1;2Q" {
-		cs.st.Active = !cs.st.Active
-		c.scheduleRender()
-		return true
-	}
-	if !cs.st.Active {
-		if raw == c.focusKeySeq() && empty && len(cs.frame.Items) > 0 {
-			cs.st.Active = true
-			c.scheduleRender()
-			return true
-		}
-		return false
-	}
-	if !empty {
-		return false
-	}
-	if raw == "y" || raw == "n" {
-		if c.packDecide(s, "", raw == "y") {
-			c.cmcpNotice(s, "")
-			return true
-		}
-	}
-	k, ok := keyNames[raw]
-	if !ok && len([]rune(raw)) == 1 {
-		k, ok = cmcpui.Key(raw), true
-	}
+	name, ok := cmcpui.KeyName(raw)
 	if !ok {
 		return false
 	}
-	if k == "tab" || k == "btab" {
-		d := 1
-		if k == "btab" {
-			d = -1
-		}
-		if cs.frame.AtEdge(cs.st, d) {
-			cs.st.Active = false // Tab past the last panel: back to the input line
-			c.scheduleRender()
-			return true
-		}
-	}
-	evs, used := cs.frame.HandleKey(cs.st, k)
-	if !used && k == "esc" {
-		cs.st.Active = false
-		used = true
-	}
-	if !used {
-		if r := []rune(raw); len(r) == 1 && r[0] >= 0x20 && r[0] != 0x7f {
-			cs.st.Active = false // a character the screen does not want: the player is typing
-			c.scheduleRender()
-		}
+	empty := c.in.Input().Text() == ""
+	if cs.st.Active && !empty {
+		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now()) // the player is typing
+		c.scheduleRender()
 		return false
 	}
-	for _, ev := range evs {
+	if cs.st.Active && (raw == "y" || raw == "n") && c.packDecide(s, "", raw == "y") {
+		c.cmcpNotice(s, "")
+		return true
+	}
+	r := cmcpui.Dispatch(cs.frame, cs.st, name, empty, c.cfg.Now())
+	for _, ev := range r.Events {
 		c.cmcpPerform(s, ev)
 	}
+	if r.Hold != "" {
+		_, n, _ := strings.Cut(r.Hold, ":")
+		c.cmcpNotice(s, "press again to confirm ("+n+"/3)")
+	}
 	c.scheduleRender()
-	return true
+	return !r.Input
+}
+
+// cmcpToggleFocus is /cmcp focus: enter the screen's focus mode, or leave it.
+func (c *Client) cmcpToggleFocus(s *Session) {
+	if s == nil || s.cs == nil || s.cs.frame == nil || s.cs.st.Model == nil {
+		return
+	}
+	cs := s.cs
+	if cs.st.Active {
+		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now())
+	} else {
+		cmcpui.Dispatch(cs.frame, cs.st, cmcpui.FocusKeyName(c.in.Var("cmcp_key_focus")), true, c.cfg.Now())
+	}
+	c.scheduleRender()
 }
 
 // cmcpPerform runs a widget event through the core: actions become commands (with the echo of the

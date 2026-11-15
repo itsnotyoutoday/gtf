@@ -5,7 +5,8 @@ package cmcpui
 
 import (
 	"time"
-	"unicode"
+
+	"github.com/itsnotyoutoday/cmcp/focus"
 
 	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
@@ -46,6 +47,9 @@ type Env struct {
 	Alert string
 	// Effects are recent Cobra.Event happenings for the viewscreen.
 	Effects []Effect
+	// Mnemonics maps Node.Path to the mnemonic letter of a button or toggle (focus.AssignMnemonics
+	// through pack FocusPlan); the renderer underlines it.
+	Mnemonics map[string]string
 	// Header is the title shown on row 0; Notice replaces the key hint there for a while.
 	Header string
 	Notice string
@@ -80,7 +84,9 @@ type State struct {
 	Focus string // Path of the focused node ("" = none yet)
 	// Active says the screen has keyboard focus (the player toggled it): only then are keys taken.
 	Active bool
-	w      map[string]*wstate
+	// Model is the shared keyboard focus model of this screen (cmcp/go/focus); the client owns it.
+	Model *focus.Model
+	w     map[string]*wstate
 }
 
 // NewState returns an empty state.
@@ -122,17 +128,6 @@ type Frame struct {
 	Hint string
 }
 
-// focusOrder returns the indexes of items that can take focus.
-func (f *Frame) focusOrder() []int {
-	var o []int
-	for i, it := range f.Items {
-		if !it.Disabled && it.key != nil {
-			o = append(o, i)
-		}
-	}
-	return o
-}
-
 func (f *Frame) index(path string) int {
 	for i, it := range f.Items {
 		if it.Node.Node.Path == path {
@@ -142,73 +137,40 @@ func (f *Frame) index(path string) int {
 	return -1
 }
 
-// Move shifts the focus by d items (wrapping).
-func (f *Frame) Move(st *State, d int) {
-	o := f.focusOrder()
-	if len(o) == 0 {
-		return
-	}
-	cur := -1
-	for k, i := range o {
-		if f.Items[i].Node.Node.Path == st.Focus {
-			cur = k
-		}
-	}
-	if cur < 0 {
-		if d < 0 {
-			cur = 0
-		} else {
-			cur = len(o) - 1
-		}
-	}
-	n := ((cur+d)%len(o) + len(o)) % len(o)
-	st.Focus = f.Items[o[n]].Node.Node.Path
-}
-
-// HandleKey offers a key to the focused widget. It returns the events to perform and whether the
-// key was used. Tab and Shift-Tab (and the arrows a widget does not need) move the focus.
-func (f *Frame) HandleKey(st *State, k Key) ([]Event, bool) {
-	if len(f.focusOrder()) == 0 {
-		return nil, false
-	}
-	if r := []rune(string(k)); len(r) == 1 && (unicode.IsLetter(r[0]) || unicode.IsDigit(r[0])) {
-		// a mnemonic letter: focus that button and press it
-		u := unicode.ToUpper(r[0])
-		for _, i := range f.focusOrder() {
-			if f.Items[i].Mnemonic == u {
-				st.Focus = f.Items[i].Node.Node.Path
-				return f.Items[i].key("enter")
-			}
-		}
-	}
-	if i := f.index(st.Focus); i >= 0 && f.Items[i].key != nil && !f.Items[i].Disabled {
-		if ev, used := f.Items[i].key(k); used {
-			return ev, true
-		}
-	}
-	switch k {
-	case "tab", "down", "right":
-		f.Move(st, 1)
-		return nil, true
-	case "btab", "up", "left":
-		f.Move(st, -1)
-		return nil, true
+// Press offers a key to the widget with the given Node.Path (the shared focus model decides which
+// widget and which key; this is the widget's own handling of it: cursor moves, slider steps,
+// team and helm editing). It returns the events to perform and whether the widget used the key.
+func (f *Frame) Press(path string, k Key) ([]Event, bool) {
+	if i := f.index(path); i >= 0 && f.Items[i].key != nil && !f.Items[i].Disabled {
+		return f.Items[i].key(k)
 	}
 	return nil, false
 }
 
-// AtEdge reports whether moving the focus by d (Tab = +1, Shift-Tab = -1) would leave the
-// screen: the focus is on the last (first) operable item, so the key returns to the input line.
-func (f *Frame) AtEdge(st *State, d int) bool {
-	o := f.focusOrder()
-	if len(o) == 0 {
-		return true
+// Activate is the activation a pressed mnemonic, or the confirmed third press of a hold_ms button,
+// performs: a button's click, a toggle's change.
+func (f *Frame) Activate(path string) []Event {
+	i := f.index(path)
+	if i < 0 || f.Items[i].Disabled {
+		return nil
 	}
-	if i := f.index(st.Focus); i >= 0 {
-		if d > 0 {
-			return i == o[len(o)-1]
-		}
-		return i == o[0]
+	b := f.Items[i].Node
+	switch b.Widget {
+	case "button":
+		return []Event{{Node: b.Node, Name: "click"}}
+	case "toggle":
+		return []Event{{Node: b.Node, Name: "change", Value: !boolProp(b, "value")}}
 	}
-	return false
+	ev, _ := f.Items[i].key("enter")
+	return ev
+}
+
+// Plan is the focus plan of a bound screen (pack BoundNode.FocusPlan).
+type Plan struct {
+	Panels    []focus.Panel
+	Mnemonics map[string]string
+}
+
+func newModel(p Plan, focusKey string) *focus.Model {
+	return focus.New(p.Panels, p.Mnemonics, focusKey)
 }

@@ -73,13 +73,6 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	for _, p := range a.leaves {
 		d.collect(p)
 	}
-	// focus: keep a valid one
-	if i := f.index(st.Focus); i < 0 || f.Items[i].Disabled {
-		st.Focus = ""
-		if o := f.focusOrder(); len(o) > 0 {
-			st.Focus = f.Items[o[0]].Node.Node.Path
-		}
-	}
 	for _, p := range a.leaves {
 		d.draw(p)
 	}
@@ -215,6 +208,39 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 		fixed += float64(ext[i])
 	}
 	gaps := gap * (len(kids) - 1)
+	if !horiz && prot >= 0 && isText(kids[prot]) {
+		// The text pane takes everything the widgets above it do not need: the game's output fills
+		// the free area (with the player's wrap), instead of widgets stretching over empty space.
+		// Every other child is as tall as its content (a fixed size is kept), at most what leaves
+		// the pane its minimum.
+		fixed, wsum = 0, 0
+		for i, k := range kids {
+			wt[i] = 0
+			if i == prot {
+				ext[i] = 0
+				continue
+			}
+			if !k.Layout.HasSize {
+				_, ih := intrinsic(k, r.W)
+				ext[i] = ih
+			}
+			fixed += float64(ext[i])
+		}
+		wt[prot], wsum = 1, 1
+		over := int(fixed) + gaps + a.need - total
+		for i := len(kids) - 1; i >= 0 && over > 0; i-- {
+			if i == prot {
+				continue
+			}
+			cut := min(ext[i], over)
+			ext[i] -= cut
+			over -= cut
+		}
+		fixed = 0
+		for _, e := range ext {
+			fixed += float64(e)
+		}
+	}
 	avail := total - gaps - int(fixed)
 	if avail < 0 {
 		// over-full: shrink the fixed extents that are not the text pane first, last child first

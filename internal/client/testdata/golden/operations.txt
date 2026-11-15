@@ -8,22 +8,22 @@ Transponder: On  FCGR7043               Destination: not set                    
 Hatch: CLOSED                           [ LOCK ] [ ENGAGE ] [ RESET ]             5   40 Eridani A     094+33  0.87AU
 Docking doors: not_present                                                        17  UFP40EA1         108+22  1.09AU
 [ HATCH ]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                                                                                 [ SRS ] [ LRS ] [ PASSIVE ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

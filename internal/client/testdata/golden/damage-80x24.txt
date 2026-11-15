@@ -1,15 +1,15 @@
  Damage Control  -  SS Booty King                              Tab: screen keys
 DAMAGE CONTROL  -  hull 806.16 / 875.00
-TEAMS                               ▀ ▄▄                    Damage statistics
-  T1  crew 10  Hull             ▄▄▄▀▀▀▀▀▀▄▄▄▄▄                Port_Nacel ██████░
-ASSIGN TO                       ▀▀▀▀▀▀▀▀▀▀▀▀▀▀                Starboard_ ██████░
-  Hull                              ▀ ▀▀
-Enter: choose a tea zone: hull
-Hull integrity
-                                                                               ▆
-                                                                               █
-                                                                               █
+TEAMS                                                       Damage statistics
+  T1  crew 10  Hull             ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄               Port_Nacel ██████░
+  T2  crew 10  Hull            ▄▄▄▄   ▀▀                      Starboard_ ██████░
+  T3  crew 10  Hull        ▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄
+ASSIGN TO                ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  Hull                     ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  Port_Nacelle                 ▀▀▀▀   ▀▀
+  Starboard_Nacelle             ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄
 
+Enter: choose a tea zone: hull
 
 
 

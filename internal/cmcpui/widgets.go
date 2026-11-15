@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/itsnotyoutoday/cmcp/pack"
@@ -96,11 +95,11 @@ func (d *drawer) collect(p placed) {
 	switch b.Widget {
 	case "button":
 		it.key = d.buttonKeys(b)
-		it.Mnemonic = d.mnemonic(b)
+		it.Mnemonic = d.mnemonicOf(b)
 		it.Disabled = !b.Enabled || boolProp(b, "enabled") == false && b.Props["enabled"] != nil
 	case "toggle":
 		it.key = d.toggleKeys(b)
-		it.Mnemonic = d.mnemonic(b)
+		it.Mnemonic = d.mnemonicOf(b)
 		it.Disabled = !b.Enabled
 	case "slider":
 		it.key = d.sliderKeys(b)
@@ -133,33 +132,9 @@ func (d *drawer) collect(p placed) {
 	d.f.Items = append(d.f.Items, it)
 }
 
-// mnemonic assigns the control's letter by spec 6.12.1: an explicit `key` prop first, else the
-// first letter or digit of its text not yet used on the screen, else the first free of a-z0-9.
-func (d *drawer) mnemonic(b *pack.BoundNode) rune {
-	if !b.Enabled {
-		return 0
-	}
-	free := func(r rune) bool {
-		for _, it := range d.f.Items {
-			if it.Mnemonic == r {
-				return false
-			}
-		}
-		return true
-	}
-	alnum := func(r rune) bool { return (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') }
-	if k := []rune(strings.ToUpper(str(prop(b, "key")))); len(k) == 1 && alnum(k[0]) && free(k[0]) {
-		return k[0]
-	}
-	for _, r := range strings.ToUpper(str(prop(b, "text"))) {
-		if alnum(r) && free(r) {
-			return r
-		}
-	}
-	for _, r := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" {
-		if free(r) {
-			return r
-		}
+func (d *drawer) mnemonicOf(b *pack.BoundNode) rune {
+	if l := []rune(strings.ToUpper(d.env.Mnemonics[b.Node.Path])); len(l) == 1 {
+		return l[0]
 	}
 	return 0
 }
@@ -435,10 +410,6 @@ func (d *drawer) button(b *pack.BoundNode, r Rect, foc bool) {
 	if dis {
 		a = th.dim()
 	}
-	ws := d.st.ws(b.Node.Path)
-	if !ws.armed.IsZero() && d.env.Now.Sub(ws.armed) < 2*time.Second {
-		txt = fmt.Sprintf("%s %d/3", txt, ws.stage)
-	}
 	if foc {
 		a = focused(a)
 	}
@@ -466,19 +437,6 @@ func (d *drawer) buttonKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
 	return func(k Key) ([]Event, bool) {
 		if k != "enter" && k != "space" {
 			return nil, false
-		}
-		ws := d.st.ws(b.Node.Path)
-		if hold := numOr(prop(b, "hold_ms"), 0); hold > 0 {
-			// a terminal has no key-up: a hold_ms control (the transporter's energize) is pressed
-			// three times within two seconds (spec 6.12)
-			if ws.armed.IsZero() || d.env.Now.Sub(ws.armed) >= 2*time.Second {
-				ws.armed, ws.stage = d.env.Now, 0
-			}
-			ws.stage++
-			if ws.stage < 3 {
-				return nil, true
-			}
-			ws.armed, ws.stage = time.Time{}, 0
 		}
 		return []Event{{Node: b.Node, Name: "click"}}, true
 	}

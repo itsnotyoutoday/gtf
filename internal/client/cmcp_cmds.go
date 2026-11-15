@@ -143,10 +143,7 @@ func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest stri
 	case "send":
 		return c.cmcpSend(in, s, rest)
 	case "focus":
-		if s != nil && s.cs != nil {
-			s.cs.st.Active = !s.cs.st.Active
-			c.scheduleRender()
-		}
+		c.cmcpToggleFocus(s)
 	default:
 		return false
 	}

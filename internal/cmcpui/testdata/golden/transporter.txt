@@ -9,10 +9,6 @@ Power a ◀────●─────▶ 40 │Pad 1     │     │Pad 2   
 
 
 
-
-
-
-
                         Energizing ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ IDLE
                         [ ENERGIZE DOWN ] [ ENERGIZE UP ] [ LOCK ] [ ABORT ] [ ASSIGN PAD ]
 Power  ██████▍░░░░░░░░░                                                                        Pattern ███████░░░ 70/100
@@ -28,6 +24,10 @@ DESTINATIONS (in range first)                                           AWAY TEA
 
 
                                                                         [ RECALL TEAM ]
+
+
+
+
 
 
 

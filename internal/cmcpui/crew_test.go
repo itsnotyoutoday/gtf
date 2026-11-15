@@ -58,8 +58,10 @@ func draw(t testing.TB, scr *pack.Screen, docs map[string]any, w, h int, st *Sta
 		st = NewState()
 	}
 	env := &pack.Env{Docs: docs, UI: st.UI, CanSend: func(string) bool { return true }}
-	tree := scr.Bind(env, pack.Caps{Has: func(w string) bool { return w != "joystick" && w != "scope" && w != "lights" }})
-	return Draw(tree, w, h, Env{Theme: ThemeByName(th), Now: now, Header: scr.Title}, st)
+	tree := scr.Bind(env, pack.Caps{Class: "cell"})
+	panels, mn, _ := tree.FocusPlan(nil)
+	st.SetupModel(Plan{Panels: panels, Mnemonics: mn}, "tab")
+	return Draw(tree, w, h, Env{Theme: ThemeByName(th), Now: now, Header: scr.Title, Mnemonics: mn}, st)
 }
 
 func golden(t *testing.T, name, got string) {
@@ -108,30 +110,39 @@ func TestTransporterGolden(t *testing.T) {
 	}
 }
 
-// The energize control has hold_ms: a terminal has no key release, so it takes two presses.
+// The energize control has hold_ms: a terminal has no key release, so its mnemonic (or Enter) is
+// pressed three times within two seconds; the shared focus model counts, the frame activates.
 func TestHoldButtonNeedsThreePresses(t *testing.T) {
 	p := loadPack(t)
 	st := NewState()
-	st.Active = true
 	docs := loadDocs(t)
 	f := draw(t, p.Screens["transporter"], docs, 120, 40, st, "plain")
-	var target string
+	var mn rune
 	for _, it := range f.Items {
 		if it.Kind == "button" && str(it.Node.Props["text"]) == "ENERGIZE DOWN" {
-			target = it.Node.Node.Path
+			mn = it.Mnemonic
 		}
 	}
-	if target == "" {
-		t.Fatal("no energize button")
+	if mn == 0 {
+		t.Fatal("no mnemonic for the energize button")
 	}
-	st.Focus = target
-	f = draw(t, p.Screens["transporter"], docs, 120, 40, st, "plain")
+	if r := Dispatch(f, st, "tab", true, now); !st.Active || !r.Used {
+		t.Fatalf("Tab did not enter focus mode: %+v", r)
+	}
+	key := strings.ToLower(string(mn))
 	for i := 1; i <= 2; i++ {
-		if ev, _ := f.HandleKey(st, "enter"); len(ev) != 0 {
-			t.Fatalf("fired on press %d: %+v", i, ev)
+		if r := Dispatch(f, st, key, true, now.Add(time.Duration(i)*100*time.Millisecond)); len(r.Events) != 0 || r.Hold == "" {
+			t.Fatalf("press %d: %+v", i, r)
 		}
 	}
-	if ev, _ := f.HandleKey(st, "enter"); len(ev) != 1 || ev[0].Name != "click" {
-		t.Fatalf("no click on the third press: %+v", ev)
+	if r := Dispatch(f, st, key, true, now.Add(time.Second)); len(r.Events) != 1 || r.Events[0].Name != "click" {
+		t.Fatalf("third press: %+v", r)
+	}
+	// too slow: the count starts over
+	for i := 0; i < 2; i++ {
+		Dispatch(f, st, key, true, now.Add(10*time.Second+time.Duration(i)*time.Second))
+	}
+	if r := Dispatch(f, st, key, true, now.Add(13*time.Second)); len(r.Events) != 0 {
+		t.Fatalf("a slow third press fired: %+v", r)
 	}
 }

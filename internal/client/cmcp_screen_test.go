@@ -276,7 +276,6 @@ func (f *screenFixture) keys(seq ...string) {
 }
 
 const (
-	kF2    = "\x1bOQ"
 	kEnter = "\r"
 	kDown  = "\x1b[B"
 	kUp    = "\x1b[A"
@@ -289,7 +288,7 @@ const (
 func TestCmcpDamageAssignByKeyboard(t *testing.T) {
 	f := newScreenFixture(t, 120, 40)
 	f.console("std.damage", "operations", nil)
-	f.keys(kF2, kEnter, kDown, kEnter) // focus on; pick team 1; move to Port_Nacelle; assign
+	f.keys(kTab, kEnter, kDown, kEnter) // focus on; pick team 1; move to Port_Nacelle; assign
 	cmEventually(t, "command ran", func() bool { return len(f.game.commands()) == 1 })
 	if got := f.game.commands()[0]; got != `dmg.assign {"system":"Port_Nacelle","team":1}` {
 		t.Fatalf("ran %q", got)
@@ -324,7 +323,7 @@ func (f *screenFixture) inputText() (s string) {
 func TestCmcpReadOnlyOffersNoCommands(t *testing.T) {
 	f := newScreenFixture(t, 120, 40)
 	f.console("std.operations", "", func(c *msg.Console) { c.Readonly = true; c.Reason = "ai_on"; c.Commands = nil; c.Ship.AI = true })
-	f.keys(kF2, kEnter) // would click HATCH
+	f.keys(kTab, kEnter) // would click HATCH
 	time.Sleep(100 * time.Millisecond)
 	if n := len(f.game.commands()); n != 0 {
 		t.Fatalf("sent while read-only: %v", f.game.commands())
@@ -433,8 +432,8 @@ func TestCmcpHelmControlsSendCommands(t *testing.T) {
 	f := newScreenFixture(t, 120, 40)
 	f.console("std.helm", "navigation", nil)
 	f.contain(t, "HELM CONTROLS", "azimuth", "[ STOP ]")
-	f.lack(t, "thr ")                         // no stick
-	f.keys(kF2, kDown, kDown, kRight, kEnter) // speed row, +10, send
+	f.lack(t, "thr ")                          // no stick
+	f.keys(kTab, kDown, kDown, kRight, kEnter) // speed row, +10, send
 	cmEventually(t, "speed sent", func() bool { return len(f.game.commands()) == 1 })
 	if got := f.game.commands()[0]; got != `helm.speed {"pct":10}` {
 		t.Fatalf("ran %q", got)
@@ -484,19 +483,18 @@ func TestCmcpKeyboardFocusOrderAndReturn(t *testing.T) {
 	if f.focusPath() != first {
 		t.Fatal("Shift-Tab did not return to the first panel")
 	}
-	f.keys("\x1b[Z") // Shift-Tab on the first panel: back to the input line
-	if f.active() {
-		t.Fatal("Shift-Tab before the first panel did not return to the input line")
+	f.keys("\x1b[Z") // Shift-Tab on the first panel wraps to the last; focus mode stays on
+	if !f.active() || f.focusPath() == first {
+		t.Fatal("Shift-Tab did not wrap to the last panel")
 	}
-	f.keys(kTab) // enter again, walk to the end
-	for i := 0; i < 40 && f.active(); i++ {
-		f.keys(kTab)
+	// Shift+Arrow and Alt+Arrow are never bound: swallowed, nothing happens
+	before := f.focusPath()
+	f.keys("\x1b[1;2A", "\x1b[1;3D")
+	if f.focusPath() != before || len(f.game.commands()) != 0 || !f.active() {
+		t.Fatal("a modified arrow did something")
 	}
-	if f.active() {
-		t.Fatal("Tab past the last panel did not return to the input line")
-	}
-	// Esc returns, and typing works
-	f.keys(kTab, "\x1b")
+	// Esc returns to the input line, which works
+	f.keys("\x1b")
 	if f.active() {
 		t.Fatal("Esc did not return to the input line")
 	}
@@ -507,6 +505,20 @@ func TestCmcpKeyboardFocusOrderAndReturn(t *testing.T) {
 	f.keys(kTab) // the line has text: Tab is the engine's (completion), not the screen's
 	if f.active() {
 		t.Fatal("Tab took focus away from a line being typed")
+	}
+}
+
+// Any unbound printable key leaves focus mode and is typed in the input line.
+func TestCmcpKeyboardUnboundKeyTypes(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	f.keys(kTab, "z") // no button starts with or is assigned z? it may be: use a digit that is not free
+	f.keys("~")
+	if f.active() {
+		t.Fatal("still in focus mode after an unbound key")
+	}
+	if got := f.inputText(); !strings.HasSuffix(got, "~") {
+		t.Fatalf("the key was not typed: %q", got)
 	}
 }
 
