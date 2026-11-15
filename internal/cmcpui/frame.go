@@ -96,8 +96,14 @@ func (d *drawer) tngBands() {
 	if topRows < 4 {
 		elbowW = 6
 	}
-	cv.RoundRect(0, 0, elbowW, hh, float64(hh), "tl", d.bandColor(0), 1)
-	cv.Rect(elbowW-3, 0, 3, hh, d.bandColor(0), 1, true)
+	lw := th.leftCols(g.W)
+	if lw > 0 {
+		elbowW = lw
+	}
+	if lw == 0 {
+		cv.RoundRect(0, 0, elbowW, hh, float64(hh), "tl", d.bandColor(0), 1)
+		cv.Rect(elbowW-3, 0, 3, hh, d.bandColor(0), 1, true)
+	}
 	// segments
 	title := strings.ToUpper(d.env.Title)
 	if title == "" {
@@ -141,6 +147,15 @@ func (d *drawer) tngBands() {
 	cv.RoundRect(w-rightW, 0, rightW, hh-2, float64(hh-2)/2, "tr br", right.col, 1)
 	cv.Text(w-rightW+2, tr, keys, layout.Attr{FG: dark, BG: right.col, Bold: true})
 	d.blitRows(cv.Block(bg), 0, 0, topRows)
+	if lw > 0 {
+		// the elbow: a large corner with a long, anti-aliased curve, one piece with the column below it
+		er := topRows + 4
+		ce := layout.NewCanvas(lw, er)
+		ce.RoundRect(0, 0, lw, er*2, 22, "tl", d.bandColor(0), 1)
+		ce.Rect(lw-4, 0, 4, hh-2, d.bandColor(0), 1, true)
+		ce.RoundRect(lw-6, hh-2, 6, 3, 0, "", bg, 1) // a notch under the band, where the first segment starts
+		d.blitRows(ce.Block(bg), 0, 0, er)
+	}
 	d.tngColumn(topRows, botRows)
 	// ---- bottom band: 2 rows, a segment strip with the focused widget's hint
 	cb := layout.NewCanvas(w, botRows)
@@ -191,11 +206,12 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 	}
 	th := d.env.Theme
 	bg := th.RGB("color.bg")
-	rows := g.H - topRows - botRows
+	start := topRows + 4 // the elbow takes the rows above
+	rows := g.H - start - botRows
 	cv := layout.NewCanvas(lw, rows)
 	ph := cv.H
 	cur := consoleTab(d.env.Title)
-	y := 1
+	y := 0
 	for i, n := range consoleNames {
 		col := d.bandColor(i)
 		if i == cur {
@@ -211,12 +227,23 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 			break
 		}
 	}
-	// the soft block under the pills, ending in the bottom band's curve
-	if ph-y*2 > 4 {
-		cv.RoundRect(0, y*2, lw-1, ph-y*2, 4, "bl", d.bandColor(4), 0.85)
-		cv.Gradient(0, y*2, lw-1, ph-y*2-3, d.bandColor(4), th.RGB("color.bg"), true)
+	// the soft blocks under the pills: stacked, rounded, each its own colour, curving into the bottom band
+	rest := ph - y*2
+	if rest > 4 {
+		seg := max(rest/3, 4)
+		yy := y * 2
+		for k := 0; yy < ph; k++ {
+			h2 := min(seg-1, ph-yy)
+			round := ""
+			if yy+seg >= ph {
+				round = "bl"
+				h2 = ph - yy
+			}
+			cv.RoundRect(0, yy, lw-1, h2, 8, round, d.bandColor(4+k), 0.9)
+			yy += seg
+		}
 	}
-	d.blitRows(cv.Block(bg), 0, topRows, rows)
+	d.blitRows(cv.Block(bg), 0, start, rows)
 }
 
 // textBorder draws the thin frame around the game's output panel, with its label in the top

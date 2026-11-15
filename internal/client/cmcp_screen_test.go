@@ -629,12 +629,47 @@ func TestCmcpTextPaneGeometry(t *testing.T) {
 	}
 }
 
-// %cmcp_start_collapsed starts with the screen off.
+// %cmcp_start_collapsed starts with the screen off: the text view has the whole area until F4.
 func TestCmcpStartCollapsed(t *testing.T) {
-	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil)
-	exec(f.c, "/set cmcp_start_collapsed=on")
+	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_start_collapsed=on")
 	f.console("std.operations", "", nil)
-	var hidden bool
-	f.c.Do(func(*gtfparser.Interp) { hidden = f.c.fg.cmScr().hidden })
-	_ = hidden // set at session creation: the variable is read when the screen state is first made
+	r, w, h := f.pane()
+	if r.W != w || r.H != h {
+		t.Fatalf("collapsed start: text pane %dx%d of %dx%d", r.W, r.H, w, h)
+	}
+	if s := f.surface(); s != "" {
+		t.Fatalf("screen drawn while collapsed:\n%s", s)
+	}
+	f.c.Do(func(*gtfparser.Interp) {
+		if got := f.c.fg.cm.UI().Docs["Space.Ship.Status"]; got == nil {
+			t.Error("data stopped streaming while the screen was off")
+		}
+	})
+	f.keys("\x1bOS") // F4 brings it back
+	if r, _, _ = f.pane(); r.W == w && r.H == h {
+		t.Fatal("F4 did not bring the screen back")
+	}
+	f.contain(t, "OPERATIONS")
+}
+
+// A red alert recolours the whole frame: the bands turn red and the status strip says so.
+func TestCmcpRedAlertRecolours(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
+	f.console("std.sensors", "science", nil)
+	f.contain(t, "RED ALERT")
+	var bad []string
+	f.c.Do(func(*gtfparser.Interp) {
+		g := f.c.ui.Surf.Grid
+		for _, p := range [][2]int{{20, 1}, {40, 1}, {80, 1}} { // title, ship and tag segments of the top band
+			c := g.At(p[0], p[1])
+			if c.A.BG.Kind != layout.RGB || int(c.A.BG.R) < 120 || int(c.A.BG.G) > 110 {
+				bad = append(bad, fmt.Sprintf("%v %+v", p, c.A.BG))
+			}
+		}
+	})
+	if len(bad) > 0 {
+		t.Fatalf("band not red under a red alert: %v", bad)
+	}
+	f.dump("redalert-sensors")
 }

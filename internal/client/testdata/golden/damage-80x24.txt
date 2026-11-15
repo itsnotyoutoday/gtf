@@ -8,7 +8,7 @@
                                   ▄▄▄▄▀▀▀▄▄▄▄▄
                                  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 zone: hull
-                                                  DAMAGE CONTROL  -  hull 806.16
+                                                  DAMAGE CONTROL  -  hull 806.1…
                                                   TEAMS
                                                   Enter: choose a team
                                                   Damage statistics

@@ -138,6 +138,9 @@ type Frame struct {
 	Text    Rect
 	Compact bool
 	Items   []Item
+	// Boxes are the rectangles of every widget drawn (for the geometry tests: none overlaps another,
+	// the text pane or the frame).
+	Boxes []Rect
 	// Hint describes the focused item for the status line.
 	Hint string
 }

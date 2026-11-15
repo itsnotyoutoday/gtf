@@ -30,10 +30,15 @@ func kindOf(iff string) string {
 // radarPalette is the theme's dish colouring.
 func (d *drawer) radarPalette() layout.RadarPalette {
 	th := d.env.Theme
-	if th.Style == "" {
+	if th.Style == "" || d.env.Alert != "red" {
+		// the /lcars dish: green-teal rings and sweep (a red alert turns it red below)
+		if th.Style != "" {
+			return layout.RadarPalette{Sweep: rgbC(30, 240, 190), Head: rgbC(200, 255, 235), Ring: rgbC(0, 100, 85),
+				Outer: rgbC(0, 200, 160), Grid: rgbC(0, 70, 60), Centre: rgbC(150, 255, 220), Set: true}
+		}
 		return layout.RadarPalette{}
 	}
-	a, b := th.RGB("color.accent"), th.RGB("color.accent2")
+	a, b := rgbC(220, 50, 50), rgbC(255, 110, 80)
 	dim := func(c layout.Color, f float64) layout.Color {
 		return rgbC(uint8(float64(c.R)*f), uint8(float64(c.G)*f), uint8(float64(c.B)*f))
 	}
@@ -80,6 +85,19 @@ func (d *drawer) radar(b *pack.BoundNode, r Rect, foc bool) {
 	blk := layout.RenderRadar(layout.RadarOpts{W: dw, H: dh, Sweep: math.Mod(float64(d.env.Now.UnixMilli())/6000, 1) * 360,
 		Contacts: cs, BG: th.blank().BG, Palette: d.radarPalette()})
 	d.blit(blk, ox, r.Y)
+	if dw >= 20 && dmax > 0 {
+		// range labels on the rings, along the right-hand radius: what each ring is worth
+		cx, cy := ox+dw/2, r.Y+dh/2
+		for k := 1; k <= 3; k++ {
+			rng := math.Pow(10, float64(k)/3*math.Log10(1+dmax)) - 1
+			lbl := fmtRange(rng)
+			x := cx + int(float64(dw)/2*float64(k)/3) - runeLen(lbl)/2
+			if k == 3 {
+				x = cx + dw/2 - runeLen(lbl) - 1
+			}
+			d.c.text(x, cy, lbl, layout.Attr{FG: rgbC(120, 220, 200), BG: th.blank().BG}, runeLen(lbl))
+		}
+	}
 	if info {
 		line := "no contacts"
 		if len(bl) > 0 {
@@ -149,17 +167,42 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 			nx := (float64(x) + shift) / 28
 			n1 := noise(nx, float64(y)/16, seed)
 			n2 := noise(nx*2.1+5, float64(y)/9, seed+1)
-			cv.Add(x, y, acc, math.Max(0, n1*n2*2-0.5)*0.12)
-			cv.Add(x, y, warm, math.Max(0, n2-0.7)*0.08)
+			cv.Add(x, y, acc, math.Max(0, n1*n2*2-0.55)*0.07)
+			cv.Add(x, y, warm, math.Max(0, n2-0.72)*0.05)
 		}
 	}
-	for i := 0; i < pw*ph/40; i++ {
-		sx, sy := int(math.Mod(hash01(seed+i*3)*float64(pw*3)-shift+float64(pw*9), float64(pw*3))), int(hash01(seed+i*3+1)*float64(ph))
-		if sx >= pw {
-			continue
+	// a distant sun low in the corner gives the sky depth; three star layers drift at different rates
+	sunx, suny := float64(pw)*(0.15+0.7*hash01(seed+99)), float64(ph)*(0.15+0.5*hash01(seed+98))
+	cv.Glow(sunx, suny, float64(pw)*0.45, rgbC(255, 200, 150), 0.10)
+	cv.Glow(sunx, suny, float64(pw)*0.10, rgbC(255, 235, 210), 0.35)
+	tw := float64(d.env.Now.UnixMilli()) / 1700
+	for layer := 0; layer < 3; layer++ {
+		rate := []float64{0.35, 1, 2.2}[layer]
+		count := []int{pw * ph / 26, pw * ph / 55, pw * ph / 160}[layer]
+		for i := 0; i < count; i++ {
+			k := seed + layer*7919 + i*3
+			sx := int(math.Mod(hash01(k)*float64(pw*3)-shift*rate+float64(pw*30), float64(pw*3)))
+			if sx >= pw {
+				continue
+			}
+			sy := int(hash01(k+1) * float64(ph))
+			br := math.Pow(hash01(k+2), 2.2)*0.9 + 0.08
+			br *= 0.85 + 0.15*math.Sin(tw+hash01(k+4)*6.28)
+			tint := rgbC(200, 215, 255)
+			switch int(hash01(k+5) * 4) {
+			case 0:
+				tint = rgbC(255, 220, 190)
+			case 1:
+				tint = rgbC(170, 200, 255)
+			}
+			cv.Add(sx, sy, tint, br*[]float64{0.5, 0.8, 1}[layer])
+			if layer == 2 && br > 0.6 {
+				cv.Add(sx+1, sy, tint, br*0.3)
+				cv.Add(sx-1, sy, tint, br*0.3)
+				cv.Add(sx, sy+1, tint, br*0.2)
+				cv.Add(sx, sy-1, tint, br*0.2)
+			}
 		}
-		br := math.Pow(hash01(seed+i*3+2), 3) // most stars are faint, a few bright
-		cv.Add(sx, sy, rgbC(190, 205, 255), 0.12+0.7*br)
 	}
 	fov := 60.0
 	scene := str(prop(b, "scene"))
@@ -167,7 +210,7 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 		x, y int
 		b    blip
 	}
-	var ships []shipAt
+	var ships, labels []shipAt
 	for _, x := range d.blips(b) {
 		rel := asMap(x.raw["rel"])
 		if rel == nil {
@@ -184,11 +227,16 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 		px, py := fx*float64(pw), fy*float64(ph)
 		switch x.typ {
 		case "Planet", "Star":
-			rad := math.Max(3, math.Min(float64(ph)*0.45, 10/math.Max(0.7, math.Log10(1+x.d)-5.5)))
+			rad := math.Max(3, math.Min(float64(ph)*0.3, 10/math.Max(0.7, math.Log10(1+x.d)-5.5)))
 			lo, hi := planetPalette(str(x.raw["class"]), x.name)
 			if x.typ == "Star" {
 				lo, hi = [3]float64{255, 150, 40}, [3]float64{255, 245, 200}
 				cv.Glow(px, py, rad*3, rgbC(255, 190, 90), 0.8)
+			}
+			atm := rgbC(110, 170, 255)
+			_ = atm
+			if x.typ != "Star" {
+				cv.Glow(px, py, rad*1.35, atm, 0.28) // atmosphere haze around the limb
 			}
 			for yy := int(py - rad - 1); yy <= int(py+rad+1); yy++ {
 				for xx := int(px - rad - 1); xx <= int(px+rad+1); xx++ {
@@ -202,13 +250,27 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 					lit := math.Max(0, -0.55*dx-0.6*dy+z*0.55)
 					t := math.Min(1, lit*1.1)
 					sh := 0.25 + 0.85*lit
-					col := rgbC(clamp8((lo[0]+(hi[0]-lo[0])*t)*sh), clamp8((lo[1]+(hi[1]-lo[1])*t)*sh), clamp8((lo[2]+(hi[2]-lo[2])*t)*sh))
-					cv.Blend(xx, yy, col, cov)
+					cr, cg, cb := (lo[0]+(hi[0]-lo[0])*t)*sh, (lo[1]+(hi[1]-lo[1])*t)*sh, (lo[2]+(hi[2]-lo[2])*t)*sh
+					if x.typ != "Star" {
+						// cloud bands, lit like the ground, and a blue rim of atmosphere at the limb
+						cl := math.Max(0, noise(dx*3+float64(seed%7), dy*5, seed)*1.6-0.7) * (0.35 + 0.65*lit)
+						cr, cg, cb = cr+(255-cr)*cl*0.8, cg+(255-cg)*cl*0.8, cb+(255-cb)*cl*0.8
+						rim := math.Pow(1-z, 2.5) * 0.7 * (0.3 + 0.7*lit)
+						cr, cg, cb = cr+float64(atm.R)*rim, cg+float64(atm.G)*rim, cb+float64(atm.B)*rim
+					}
+					cv.Blend(xx, yy, rgbC(clamp8(cr), clamp8(cg), clamp8(cb)), cov)
 				}
 			}
 		case "Ship":
-			cv.Glow(px, py, 5, rgbC(150, 190, 255), 0.35)
-			ships = append(ships, shipAt{int(px), int(py), x})
+			if d.artFor(scene, x.raw, 6, 3) == nil {
+				// no scene art for this class: a generic ship drawn with the canvas, sized by its apparent width
+				wpx := math.Max(10, pack.ApparentFraction(numOr(x.raw["size_m"], 100), x.d, fov)*float64(pw))
+				drawShip(cv, px, py, math.Min(wpx, float64(pw)/3), iffRGB(x.iff))
+			} else {
+				cv.Glow(px, py, 5, rgbC(150, 190, 255), 0.35)
+				ships = append(ships, shipAt{int(px), int(py), x})
+			}
+			labels = append(labels, shipAt{int(px), int(py), x})
 		default:
 			cv.Add(int(px), int(py), rgbC(210, 210, 230), 0.9)
 		}
@@ -241,6 +303,15 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 	cv.Text(1, 0, "FORWARD VIEWSCREEN", ta)
 	cv.Text(max(r.W-runeLen(head)-1, 20), 0, head, ta)
 	d.blit(cv.Block(layout.Color{}), r.X, r.Y)
+	for _, s := range labels {
+		at := th.attr(iffColor(th, s.b.iff))
+		if s.b.iff == "" {
+			at = th.text()
+		}
+		sy := r.Y + s.y/2
+		nm := strings.ToUpper(s.b.name)
+		d.c.text(r.X+s.x-runeLen(nm)/2, min(sy+3, r.Y+r.H-1), nm, at, r.X+r.W-(r.X+s.x-runeLen(nm)/2))
+	}
 	for _, s := range ships {
 		x := s.b
 		wc := max(int(pack.ApparentFraction(numOr(x.raw["size_m"], 0), x.d, fov)*float64(r.W)), 6)
@@ -266,8 +337,59 @@ func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
 		} else {
 			d.c.put(r.X+s.x, sy, '▲', at)
 		}
-		d.c.text(r.X+s.x-runeLen(x.name)/2, sy+2, strings.ToUpper(x.name), at, r.X+r.W-(r.X+s.x-runeLen(x.name)/2))
 	}
 }
 
 func clamp8(v float64) uint8 { return uint8(math.Max(0, math.Min(255, math.Round(v)))) }
+
+// R2, G2, B2 give a colour's channels as floats (for blending).
+func colorF(c layout.Color) (float64, float64, float64) {
+	return float64(c.R), float64(c.G), float64(c.B)
+}
+
+// drawShip draws a generic starship seen three-quarters on: a lit saucer, a secondary hull, two
+// nacelles on pylons with glowing engines, tinted by allegiance; wpx is its width in pixels.
+func drawShip(cv *layout.Canvas, px, py, wpx float64, tint layout.Color) {
+	s := wpx / 20
+	hull := layout.Lerp(tint, rgbC(210, 220, 235), 0.65)
+	shade := layout.Lerp(tint, rgbC(40, 50, 80), 0.5)
+	// nacelles behind
+	for _, side := range []float64{-1, 1} {
+		cv.Line(px+side*2*s, py+0.5*s, px+side*6.5*s, py+2*s, math.Max(1, 0.7*s), shade, 0.9)
+		cv.Ellipse(px+side*7*s, py+2*s, 3*s, 0.9*s, layout.Lerp(tint, rgbC(60, 70, 110), 0.3), 1)
+		cv.Glow(px+side*9.6*s, py+2*s, 2.4*s, rgbC(120, 190, 255), 0.7)
+	}
+	// secondary hull and neck
+	cv.Ellipse(px, py+2.2*s, 2.6*s, 1.1*s, shade, 1)
+	cv.Rect(int(px-0.6*s), int(py), int(math.Max(2, 1.2*s)), int(math.Max(1, 2*s)), shade, 1, true)
+	// saucer, lit from above
+	cv.Ellipse(px, py, 6*s, 2.3*s, hull, 1)
+	cv.Ellipse(px, py-0.5*s, 4.2*s, 1.4*s, layout.Lerp(hull, rgbC(255, 255, 255), 0.4), 0.9)
+	cv.Disc(px, py-1*s, math.Max(0.8, 0.7*s), rgbC(180, 230, 255), 0.9)
+}
+
+// fmtRange formats a distance in metres for a ring label: m, km, Mm, AU.
+func fmtRange(m float64) string {
+	switch {
+	case m < 1000:
+		return fmt.Sprintf("%.0fm", m)
+	case m < 1e6:
+		return fmt.Sprintf("%.0fkm", m/1000)
+	case m < 1.4e10:
+		return fmt.Sprintf("%.0fMm", m/1e6)
+	}
+	return fmt.Sprintf("%.1fAU", m/1.496e11)
+}
+
+// iffRGB is the colour of a contact by allegiance.
+func iffRGB(iff string) layout.Color {
+	switch iff {
+	case "friend", "friendly":
+		return rgbC(90, 230, 130)
+	case "hostile", "enemy":
+		return rgbC(255, 70, 60)
+	case "neutral":
+		return rgbC(90, 180, 255)
+	}
+	return rgbC(255, 210, 90)
+}

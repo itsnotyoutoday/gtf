@@ -246,18 +246,20 @@ func (d *drawer) table(b *pack.BoundNode, r Rect, foc bool) {
 	for _, c := range cs {
 		total += c.w + 1
 	}
-	for total > r.W && len(cs) > 0 { // too wide: shrink the widest columns
+	for total > r.W && len(cs) > 1 { // too wide: shorten the widest columns, then drop the last ones
 		wi := 0
 		for i, c := range cs {
 			if c.w > cs[wi].w {
 				wi = i
 			}
 		}
-		if cs[wi].w <= 3 {
-			break
+		if cs[wi].w > 11 {
+			cs[wi].w--
+			total--
+			continue
 		}
-		cs[wi].w--
-		total--
+		total -= cs[len(cs)-1].w + 1
+		cs = cs[:len(cs)-1]
 	}
 	hdr := th.accent()
 	hdr.Bold = true

@@ -6,6 +6,7 @@ package cmcpui
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,6 +159,51 @@ func TestASCIIMode(t *testing.T) {
 	for _, c := range f.Grid.Cells {
 		if c.R >= 0x80 {
 			t.Fatalf("non-ASCII %q in ASCII mode", c.R)
+		}
+	}
+}
+
+func overlap(a, b Rect) bool {
+	return a.X < b.X+b.W && b.X < a.X+a.W && a.Y < b.Y+b.H && b.Y < a.Y+a.H
+}
+
+// Widget-on-widget geometry: at every size no widget overlaps another, the text pane (and its
+// border), or the frame's strips; all stay inside the output area; the pane keeps its floor.
+func TestNoOverlapAtSizes(t *testing.T) {
+	docs := loadDocs(t)
+	for _, th := range []string{"tng", "plain"} {
+		for _, sz := range [][2]int{{80, 20}, {120, 36}, {200, 46}} {
+			for _, id := range pack.BuiltinScreenIDs() {
+				scr := pack.Builtin(id)
+				st := NewState()
+				env := &pack.Env{Docs: docs, UI: st.UI, CanSend: func(string) bool { return true }}
+				tree := scr.Bind(env, pack.Caps{Class: "cell"})
+				panels, mn, _ := tree.FocusPlan(nil)
+				st.SetupModel(Plan{Panels: panels, Mnemonics: mn}, "tab")
+				f := Draw(tree, sz[0], sz[1], Env{Theme: ThemeByName(th), Now: now, Builtin: true, Title: scr.Title, Mnemonics: mn}, st)
+				name := fmt.Sprintf("%s %dx%d %s", th, sz[0], sz[1], id)
+				if f.Compact {
+					continue
+				}
+				top, bottom := ThemeByName(th).margins(sz[1])
+				left := ThemeByName(th).leftCols(sz[0])
+				for i, a := range f.Boxes {
+					if a.X < left || a.Y < top || a.X+a.W > sz[0] || a.Y+a.H > sz[1]-bottom {
+						t.Errorf("%s: widget %d %+v outside the content area", name, i, a)
+					}
+					if overlap(a, f.Text) {
+						t.Errorf("%s: widget %d %+v overlaps the text pane %+v", name, i, a, f.Text)
+					}
+					for j := i + 1; j < len(f.Boxes); j++ {
+						if overlap(a, f.Boxes[j]) {
+							t.Errorf("%s: widgets %d %+v and %d %+v overlap", name, i, a, j, f.Boxes[j])
+						}
+					}
+				}
+				if f.Text.H < 8 && sz[1] >= 20 {
+					t.Errorf("%s: text pane %+v under the floor", name, f.Text)
+				}
+			}
 		}
 	}
 }

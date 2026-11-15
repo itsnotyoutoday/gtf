@@ -24,12 +24,13 @@ type placed struct {
 }
 
 type arranger struct {
-	leaves  []placed
-	text    Rect
-	hasTxt  bool
-	summary Rect // the one-line strip of the expanded (log) view
-	sidebar bool // widgets stacked in a right-hand column; every child is as tall as its content
-	need    int  // rows the text pane must keep: 8 or a quarter of the height (spec 6.13)
+	leaves   []placed
+	text     Rect
+	hasTxt   bool
+	noWeight bool // inside a stacked row: no flexible children
+	summary  Rect // the one-line strip of the expanded (log) view
+	sidebar  bool // widgets stacked in a right-hand column; every child is as tall as its content
+	need     int  // rows the text pane must keep: 8 or a quarter of the height (spec 6.13)
 }
 
 // Draw lays the bound tree out in a w x h cell area, draws it and returns the frame. The text
@@ -114,6 +115,7 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	d.frameTop()
 	for _, p := range a.leaves {
 		d.collect(p)
+		f.Boxes = append(f.Boxes, p.r)
 	}
 	if a.summary.W > 0 {
 		d.c.clip = a.summary
@@ -207,11 +209,18 @@ func (a *arranger) arrange(b *pack.BoundNode, r Rect, top bool) {
 				if x > r.X && x+kw > r.X+r.W {
 					x, y = r.X, y+1
 				}
+				if y >= r.Y+r.H {
+					break
+				}
 				a.arrange(k, Rect{X: x, Y: y, W: min(kw, r.W), H: 1}, false)
 				x += kw + g
 			}
 		} else if need > r.W && len(kids) > 1 {
+			// a stacked row: its children are as tall as their content, weights no longer apply
+			old := a.noWeight
+			a.noWeight = true
 			a.flow(kids, r, false, gapY(b.Layout.Gap))
+			a.noWeight = old
 		} else {
 			a.flow(kids, r, true, g)
 		}
@@ -261,6 +270,9 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 	prot := -1
 	for i, k := range kids {
 		w := k.Layout.Weight
+		if a.noWeight && !horiz {
+			w = 0
+		}
 		switch {
 		case k.Layout.HasSize && !horiz && isContainer(k) && k.Layout.Dir == "row" && minWidth(k) > r.W:
 			// a fixed-height row that had to be stacked is as tall as its children together
@@ -376,7 +388,15 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 	if horiz {
 		pos = r.X
 	}
+	end := r.Y + r.H
+	if horiz {
+		end = r.X + r.W
+	}
 	for i, k := range kids {
+		if pos >= end {
+			break // no room left: what does not fit is dropped, never drawn over a sibling
+		}
+		ext[i] = min(ext[i], end-pos)
 		var kr Rect
 		if horiz {
 			kr = Rect{X: pos, Y: r.Y, W: ext[i], H: r.H}

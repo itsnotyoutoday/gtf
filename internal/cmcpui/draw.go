@@ -38,17 +38,21 @@ func (c *canvas) put(x, y int, r rune, a layout.Attr) {
 	c.g.Set(x, y, layout.Cell{R: r, A: a})
 }
 
-// text draws s at x,y (at most maxw cells) and returns the cells used.
+// text draws s at x,y (at most maxw cells) and returns the cells used. A string that does not
+// fit is cut with an ellipsis, never clipped mid-word without a sign.
 func (c *canvas) text(x, y int, s string, a layout.Attr, maxw int) int {
-	n := 0
-	for _, r := range clean(s) {
-		if maxw >= 0 && n >= maxw {
-			break
+	rs := []rune(clean(s))
+	if maxw >= 0 && len(rs) > maxw {
+		if maxw >= 2 {
+			rs = append(rs[:maxw-1], '…')
+		} else {
+			rs = rs[:max(maxw, 0)]
 		}
-		c.put(x+n, y, r, a)
-		n++
 	}
-	return n
+	for i, r := range rs {
+		c.put(x+i, y, r, a)
+	}
+	return len(rs)
 }
 
 func (c *canvas) fill(r Rect, ch rune, a layout.Attr) {

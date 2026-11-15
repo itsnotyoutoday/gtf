@@ -7,14 +7,14 @@
                                                   Class: Marauder
                                                   Transponder: On  FCGR7043
                                                   Hatch: CLOSED
-                                                  ◖ TRACTOR BEAM ◗o▔▔▔▔▔▔▔▔▔▔▔▔▔
+                                                  ◖ TRACTOR BEAM ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔
                                                   Integrity ████████████ 100/100
                                                   Lock: none
                                                   Destination: not set
                                                   ◖ LOCK ◗ ◖ ENGAGE ◗ ◖ RESET ◗
                                                   ◖ CONTACTS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
-                                                    11  AST5716          258-89
-                                                    3   Vulcan           333+22
-                                                    15  UFPTRukh         337+26
+                                                    11  AST5716          258-89…
+                                                    3   Vulcan           333+22…
+                                                    15  UFPTRukh         337+26…
                                                   ◖ SRS ◗ ◖ LRS ◗ ◖ PASSIVE ◗
 ▀▀▀▀▀▀▀▀▀▀HULL 92%▀▀▀▀▀▀SHIELDS 95%▀▀▀▀▀▀CORE 60%▀▀▀▀▀▀LOCK -▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀

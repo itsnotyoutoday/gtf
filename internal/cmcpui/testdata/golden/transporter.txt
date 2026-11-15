@@ -2,7 +2,7 @@
 TRANSPORTER  -  READY   range 40 km
 
 POWER                   ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐        PATTERN
-Power a ◀────●─────▶ 40 │Pad 1     │     │Pad 2     │     │Pad 3     │     │Pad 4     │        Pattern  ◀───────●───▶ 65
+Power … ◀────●─────▶ 40 │Pad 1     │     │Pad 2     │     │Pad 3     │     │Pad 4     │        Pattern… ◀───────●───▶ 65
                         │Lt. Ok +1 │     │          │     │          │     │          │
                         └──────────┘     └──────────┘     └──────────┘     └──────────┘
 
@@ -11,8 +11,8 @@ Power a ◀────●─────▶ 40 │Pad 1     │     │Pad 2   
 
                         Energizing ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ IDLE
                         [ ENERGIZE DOWN ] [ ENERGIZE UP ] [ LOCK ] [ ABORT ] [ ASSIGN PAD ]
-Power  ██████▍░░░░░░░░░                                                                        Pattern ███████░░░ 70/100
-Lock qualit ◖███▎◗  82%                                                                        Pattern █████████▌ 96/100
+Power… ██████▍░░░░░░░░░                                                                        Patter… ███████░░░ 70/100
+Lock quali… ◖███▎◗  82%                                                                        Patter… █████████▌ 96/100
 DESTINATIONS (in range first)                                           AWAY TEAMS
   DESTINATION DIST m       STATUS  BLOCKED BY                             TEAM            N STATE
   AST5716     797.80       ready                                          Away Team Alpha 3 away

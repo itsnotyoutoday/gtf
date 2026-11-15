@@ -110,8 +110,18 @@ func (c *Client) cmcpScreenFor(s *Session, u *session.UI) (*pack.Screen, *pack.P
 			id = "std." + u.Console.ID
 		}
 	}
-	return pack.Builtin(id), pack.BuiltinPack(), id
+	sc := pack.Builtin(id)
+	if sc == nil {
+		// the core resolves a missing pack to "std.<console id>", but a console id is not always a
+		// built-in screen id (navigation is the helm, science the sensors)
+		if alt, ok := consoleScreens[strings.TrimPrefix(id, "std.")]; ok {
+			id, sc = "std."+alt, pack.Builtin("std."+alt)
+		}
+	}
+	return sc, pack.BuiltinPack(), id
 }
+
+var consoleScreens = map[string]string{"navigation": "helm", "science": "sensors", "comms": "communications", "ops": "operations"}
 
 type cmAssets struct {
 	c   *Client
