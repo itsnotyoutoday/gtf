@@ -11,12 +11,14 @@ import (
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
-const cmcpUsage = `usage: /cmcp [status | packs | screen [id] | send <verb> [k=v ...] | focus | on | off]
+const cmcpUsage = `usage: /cmcp [status | packs | screen [id] | send <verb> [k=v ...] | focus | log | hide | show | on | off]
   status        the CMCP state of the foreground world: handshake, ship, console, screen, subscriptions
   packs         layout packs known for this world and their consent state
   screen [id]   show the console screen (id: std.operations, <pack>/<screen>); no id: say which is shown
   send V k=v..  send a catalogue verb (like clicking its button); the equivalent text is echoed
-  focus         toggle keyboard focus on the screen (also F2)
+  focus         enter the screen's keyboard focus (Tab on an empty line)
+  log           toggle the log view: output at ~80% of the height (F3)
+  hide, show    switch the whole screen off or on (F4); %cmcp_start_collapsed starts it off
 Settings (variables): %cmcp (on/off) %cmcp_theme %cmcp_ship_theme (off) %cmcp_bell (off) %cmcp_era (tng)
 %cmcp_sounds_dir (stored, unused) %cmcp_pack_consent (ask|always|never) %cmcp_debug`
 
@@ -142,6 +144,16 @@ func (c *Client) cmcpSubcommand(in *gtfparser.Interp, s *Session, sub, rest stri
 		c.scheduleRender()
 	case "send":
 		return c.cmcpSend(in, s, rest)
+	case "log":
+		if s != nil && s.cm != nil {
+			c.cmcpToggleLog(s)
+		}
+	case "hide", "show":
+		if s != nil && s.cm != nil {
+			cs := s.cmScr()
+			cs.hidden = sub == "hide"
+			c.scheduleRender()
+		}
 	case "focus":
 		c.cmcpToggleFocus(s)
 	default:

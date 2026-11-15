@@ -155,5 +155,5 @@ func TestCmcpHostilePackAndFrames(t *testing.T) {
 	cmEventually(t, "session still works", func() bool { return len(f.game.commands()) == 1 })
 	exec(f.c, "/cmcp status")
 	f.render()
-	f.contain(t, "console: operations", "until the pack is available")
+	f.contain(t, "console: operations", "showing std.operations")
 }

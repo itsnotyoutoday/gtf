@@ -1,19 +1,20 @@
- Operations  -  SS Booty King                                  Tab: screen keys
-OPERATIONS  -  SS BOOTY KING
+▀▀▀▀▀▀▀▀▀▀OPERATIONS▀▀▀▀▀▀SS BOOTY KING▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀TAB: SCREEN KEYS▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                  OPERATIONS  -  SS BOOTY KING
 
-VESSEL
-Name: SS Booty King
-Class: Marauder
-TRACTOR BEAM On  FCGR7043
-IntegrityO██████████████████████████████████████████████████████████████ 100/100
-Lock: noneors: not_present
-CONTACTSion: not set
-  11  AST5716          258-89  797.8m
-[ SRS ] [ LRS ] [ PASSIVE ]
-
-
-
-
-
-
-
+                                                  ◖ VESSEL ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+                                                  Name: SS Booty King
+                                                  Class: Marauder
+                                                  Transponder: On  FCGR7043
+                                                  Hatch: CLOSED
+                                                  ◖ TRACTOR BEAM ◗o▔▔▔▔▔▔▔▔▔▔▔▔▔
+                                                  Integrity ████████████ 100/100
+                                                  Lock: none
+                                                  Destination: not set
+                                                  ◖ LOCK ◗ ◖ ENGAGE ◗ ◖ RESET ◗
+                                                  ◖ CONTACTS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+                                                    11  AST5716          258-89
+                                                    3   Vulcan           333+22
+                                                    15  UFPTRukh         337+26
+                                                  ◖ SRS ◗ ◖ LRS ◗ ◖ PASSIVE ◗
+▀▀▀▀▀▀▀▀▀▀HULL 92%▀▀▀▀▀▀SHIELDS 95%▀▀▀▀▀▀CORE 60%▀▀▀▀▀▀LOCK -▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀

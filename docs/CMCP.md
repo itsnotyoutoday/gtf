@@ -7,14 +7,26 @@ gtf adds only rendering, keys and platform glue.
 
 A game that does not offer CMCP, or a gtf with `%cmcp off`, is plain text as always. Nothing CMCP is sent before gtf declared it.
 
-## Layout
+## Layout and themes
 
-The default is a **band over the output**: the screen's widgets are laid out as the pack arranges them (a viewscreen and radar side by
-side, controls, tables), each only as tall as its content, and the real text pane takes everything below, never less than 8 rows or a
-quarter of the height. A row whose parts do not fit the width is stacked into a column (spec 6.13), long lists scroll in their region,
-and a pack's `layout.cell` hints (order, hidden, dir, weight...) are applied through the core. `%cmcp_layout side` is the alternative:
-the output on the whole left side and every widget stacked in a column on the right. `%cmcp_ascii` (on, off, auto: on when the locale
-is not UTF-8) draws only ASCII characters (bars `#`, radar and starfield as dots).
+This is primarily a text game: **the output stays big**. The default theme is `tng` (an LCARS-style frame; `%cmcp_theme plain`
+turns the frame off and draws plain text widgets). On a built-in `std.*` screen the theme arranges the screen: a band of pictures
+across the top (the viewscreen or schematic, the radar dish on the right), under it the framed **game output** on the left and a
+column of data and pill buttons on the right, a switch column (decoration) down the left side, a title band at the top and a status
+strip (hull, shields, core, lock, alert) at the bottom. A red alert recolours the frame and the controls. A pack screen is arranged
+by the pack's own tree and its `layout.cell` hints. Rules the layout keeps: the output gets at least 45% of the height or 60% of
+the width (tested at 80x24, 120x40 and 200x50), never less than 8 rows, rows restack or wrap when they do not fit, long lists
+scroll, nothing is drawn on the text pane or the input line.
+
+* **F3** (`%cmcp_key_log`, `/cmcp log`): the log view. The output grows to about 80% of the height and every other panel becomes
+  one summary line. Press again to go back; remembered for the session.
+* **F4** (`%cmcp_key_hide`, `/cmcp hide`, `/cmcp show`): the screen off. The text view gets the whole area, data keeps streaming,
+  the same key brings the screen back. `%cmcp_start_collapsed on` starts with it off.
+* `%cmcp_layout side` is an alternative arrangement (output on the whole left, widgets stacked on the right) for packs and built-ins.
+* `%cmcp_ascii` (on, off, auto: on when the locale is not UTF-8) draws only ASCII.
+
+Other themes (`klingon`, `romulan`, `ferengi`, `tos`, `soft`, `ops`) currently change only the palette; their frames wait for the
+theme-pack format (docs/CMCP-THEMES.md).
 
 ## What you see
 
@@ -81,7 +93,9 @@ AI, someone else took the console) nothing is offered.
 |---|---|---|
 | `%cmcp` | on | declare `Cobra 1` to servers |
 | `%cmcp_key_focus` | `^I` (Tab) | the key that enters the screen (see Keyboard) |
-| `%cmcp_layout` | auto (band) | `side` stacks the widgets in a right-hand column |
+| `%cmcp_layout` | auto | `side` stacks the widgets in a right-hand column |
+| `%cmcp_key_log`, `%cmcp_key_hide` | F3, F4 | the log view and the screen-off keys |
+| `%cmcp_start_collapsed` | off | start with the screen off |
 | `%cmcp_ascii` | auto | ASCII-only drawing |
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
 | `%cmcp_theme` | (plain) | `plain`, `tng`, `klingon`, `romulan`, `ferengi`: palette tokens; plain leaves colours to the terminal |

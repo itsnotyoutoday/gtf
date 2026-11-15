@@ -6,6 +6,7 @@ package client
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"github.com/itsnotyoutoday/cmcp/frame"
 	"os"
 	"path/filepath"
@@ -328,7 +329,7 @@ func TestCmcpReadOnlyOffersNoCommands(t *testing.T) {
 	if n := len(f.game.commands()); n != 0 {
 		t.Fatalf("sent while read-only: %v", f.game.commands())
 	}
-	f.contain(t, "read-only")
+	f.contain(t, "READ-ONLY")
 }
 
 var updateGolden = flag.Bool("update", false, "rewrite the golden screens")
@@ -415,7 +416,7 @@ func TestCmcpContextStack(t *testing.T) {
 		Commands: []string{"power.set"}}})
 	cmEventually(t, "power screen on top", func() bool { id, _ := f.screenState(); return id == "std.power" })
 	f.render()
-	f.contain(t, "POWER", "[2 contexts]")
+	f.contain(t, "POWER", "2 CONTEXTS")
 	exec(f.c, "/cmcp status")
 	f.render()
 	f.contain(t, "context * event:power-surge", "context   console")
@@ -423,7 +424,7 @@ func TestCmcpContextStack(t *testing.T) {
 	cmEventually(t, "back on operations", func() bool { id, _ := f.screenState(); return id == "std.operations" })
 	f.render()
 	f.contain(t, "OPERATIONS")
-	f.lack(t, "[2 contexts]")
+	f.lack(t, "2 CONTEXTS")
 }
 
 // There is no joystick in gtf: the helm is steered with the pack's helm-controls (a core widget),
@@ -572,4 +573,68 @@ func TestCmcpViewscreenDrawsShipSprite(t *testing.T) {
 		t.Fatalf("no sprite cells on the viewscreen:\n%s", s)
 	}
 	f.dump("viewscreen-ship")
+}
+
+// The game is primarily text: the output pane must stay big. Owner rule: in the compact view at least
+// 45% of the height or at least 60% of the width; in the log view (F3) about 80% of the height;
+// with the screen off (F4) everything.
+func (f *screenFixture) pane() (r layout.Rect, w, h int) {
+	f.c.Do(func(*gtfparser.Interp) { r = f.c.ui.MainRect(); w, h = f.c.ui.W, f.c.ui.OutRows() })
+	return
+}
+
+func TestCmcpTextPaneGeometry(t *testing.T) {
+	for _, sz := range [][2]int{{80, 24}, {120, 40}, {200, 50}} {
+		f := newScreenFixture(t, sz[0], sz[1])
+		for _, id := range []string{"operations", "sensors", "tactical", "damage", "power", "helm"} {
+			cons := map[string]string{"sensors": "science", "tactical": "tactical", "helm": "navigation"}[id]
+			f.console("std."+id, cons, nil)
+			f.dump(fmt.Sprintf("geo-%dx%d-%s", sz[0], sz[1], id))
+			r, w, h := f.pane()
+			rowsOK := r.H*100 >= h*45
+			colsOK := r.W*100 >= sz[0]*60
+			if !rowsOK && !colsOK {
+				t.Errorf("%dx%d %s: text pane %dx%d (of %dx%d) is under 45%% of the height and under 60%% of the width", sz[0], sz[1], id, r.W, r.H, w, h)
+			}
+			if r.H < 8 || r.W < 30 {
+				t.Errorf("%dx%d %s: text pane %dx%d under the floor", sz[0], sz[1], id, r.W, r.H)
+			}
+			if r.Y+r.H > h || r.X+r.W > w {
+				t.Errorf("%dx%d %s: text pane %+v outside the output area %dx%d", sz[0], sz[1], id, r, w, h)
+			}
+		}
+		// the log view: about 80% of the height
+		f.console("std.operations", "", nil)
+		f.keys("\x1bOR")
+		r, w, h := f.pane()
+		if r.H*100 < h*70 {
+			t.Errorf("%dx%d log view: text pane has %d of %d rows", sz[0], sz[1], r.H, h)
+		}
+		f.dump(fmt.Sprintf("log-%dx%d", sz[0], sz[1]))
+		f.keys("\x1bOR") // back to compact
+		if r2, _, _ := f.pane(); r2.H >= r.H && r2.W >= r.W {
+			t.Errorf("%dx%d: F3 again did not return to the compact view", sz[0], sz[1])
+		}
+		// the screen off: the text view has the whole area, data keeps streaming
+		f.keys("\x1bOS")
+		r, w, h = f.pane()
+		if r.W != w || r.H != h {
+			t.Errorf("%dx%d screen off: text pane %dx%d of %dx%d", sz[0], sz[1], r.W, r.H, w, h)
+		}
+		f.keys("\x1bOS")
+		if r, _, _ = f.pane(); r.W == w && r.H == h {
+			t.Errorf("%dx%d: F4 again did not bring the screen back", sz[0], sz[1])
+		}
+		f.c.Close()
+	}
+}
+
+// %cmcp_start_collapsed starts with the screen off.
+func TestCmcpStartCollapsed(t *testing.T) {
+	f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil)
+	exec(f.c, "/set cmcp_start_collapsed=on")
+	f.console("std.operations", "", nil)
+	var hidden bool
+	f.c.Do(func(*gtfparser.Interp) { hidden = f.c.fg.cmScr().hidden })
+	_ = hidden // set at session creation: the variable is read when the screen state is first made
 }

@@ -38,12 +38,14 @@ type cmcpScr struct {
 	packs     map[string]*pack.Pack // layout packs verified, validated and consented (cmcppacks.go)
 	zonesFor  map[string][]string
 	jobs      map[string]*packJob
+	expanded  bool            // the log view: the output takes ~80% of the height (F3)
+	hidden    bool            // the whole screen is off: the text view has the full area (F4)
 	auto      map[string]bool // group pickers that already got their first group selected
 }
 
 func (s *Session) cmScr() *cmcpScr {
 	if s.cs == nil {
-		s.cs = &cmcpScr{st: cmcpui.NewState(), sprites: raster.NewCache(32), packs: map[string]*pack.Pack{}, zonesFor: map[string][]string{}}
+		s.cs = &cmcpScr{hidden: onVar(s.c.in.Var("cmcp_start_collapsed")), st: cmcpui.NewState(), sprites: raster.NewCache(32), packs: map[string]*pack.Pack{}, zonesFor: map[string][]string{}}
 	}
 	return s.cs
 }
@@ -82,7 +84,7 @@ func (c *Client) cmcpThemeFor(u *session.UI, suggest string) string {
 			}
 		}
 	}
-	return "plain"
+	return "tng" // the default when nothing is chosen or suggested; %cmcp_theme plain turns the frame off
 }
 
 // cmcpScreenFor finds the screen to draw (a pack screen, a built-in one, or a client-local override).
@@ -194,8 +196,8 @@ func (c *Client) cmcpSyncSurface() {
 		return
 	}
 	u := s.cm.UI()
-	if u.State != session.StateReady {
-		return
+	if u.State != session.StateReady || s.cmScr().hidden {
+		return // the screen is off: data keeps streaming, the text view has the whole area
 	}
 	cs := s.cmScr()
 	if u.Generation != cs.gen {
@@ -251,7 +253,14 @@ func (c *Client) cmcpSyncSurface() {
 		}
 	}
 	cs.effects = live
-	ce := cmcpui.Env{ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
+	tags := []string{}
+	if len(u.Stack) > 1 {
+		tags = append(tags, fmt.Sprintf("%d contexts", len(u.Stack)))
+	}
+	if u.Readonly {
+		tags = append(tags, "read-only")
+	}
+	ce := cmcpui.Env{Status: c.cmcpStatusStrip(u), Expanded: cs.expanded, Builtin: p != nil && p.Builtin, Title: scr.Title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, Header: hdr, Notice: notice, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
@@ -294,14 +303,28 @@ func (c *Client) cmcpPlan(cs *cmcpScr, tree *pack.BoundNode) cmcpui.Plan {
 // key returns to the input line (and is typed there). The input line always works.
 func (c *Client) cmcpKeys(raw string) bool {
 	s := c.fg
-	if s == nil || s.cm == nil || s.cs == nil || s.cs.frame == nil || c.ui.Surf == nil || s.cs.st.Model == nil {
+	if s == nil || s.cm == nil {
 		return false
 	}
-	cs := s.cs
 	name, ok := cmcpui.KeyName(raw)
 	if !ok {
 		return false
 	}
+	// two screen-wide keys that work from the input line too: the log view (F3) and the screen off (F4)
+	if c.cmcpScreensOn() {
+		switch name {
+		case cmcpui.FocusKeyName(orStr(c.in.Var("cmcp_key_log"), "F3")):
+			c.cmcpToggleLog(s)
+			return true
+		case cmcpui.FocusKeyName(orStr(c.in.Var("cmcp_key_hide"), "F4")):
+			c.cmcpToggleHide(s)
+			return true
+		}
+	}
+	if s.cs == nil || s.cs.frame == nil || c.ui.Surf == nil || s.cs.st.Model == nil {
+		return false
+	}
+	cs := s.cs
 	empty := c.in.Input().Text() == ""
 	if cs.st.Active && !empty {
 		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now()) // the player is typing
@@ -471,4 +494,82 @@ func (c *Client) cmcpASCII() bool {
 		}
 	}
 	return false
+}
+
+func orStr(s, d string) string {
+	if strings.TrimSpace(s) == "" {
+		return d
+	}
+	return s
+}
+
+// cmcpToggleLog switches between the compact view and the log view, where the output grows to
+// about 80% of the height and the other panels become one summary line. Remembered per session.
+func (c *Client) cmcpToggleLog(s *Session) {
+	cs := s.cmScr()
+	cs.expanded = !cs.expanded
+	if cs.expanded {
+		if cs.st.Active && cs.st.Model != nil && cs.frame != nil {
+			cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now())
+		}
+	}
+	c.scheduleRender()
+}
+
+// cmcpToggleHide hides the whole screen (the text view gets the full area back) or restores it.
+func (c *Client) cmcpToggleHide(s *Session) {
+	cs := s.cmScr()
+	cs.hidden = !cs.hidden
+	if cs.hidden && cs.st.Active && cs.st.Model != nil && cs.frame != nil {
+		cmcpui.Dispatch(cs.frame, cs.st, "esc", true, c.cfg.Now())
+	}
+	c.scheduleRender()
+}
+
+// cmcpStatusStrip is the frame's bottom strip: hull, shields, core, lock and the alert state,
+// from the documents the console already subscribes to (a missing one is left out).
+func (c *Client) cmcpStatusStrip(u *session.UI) []string {
+	var out []string
+	if m, _ := u.Docs["Space.Damage.Stat"].(map[string]any); m != nil {
+		if h, _ := m["hull"].(map[string]any); h != nil {
+			if cur, ok1 := h["cur"].(float64); ok1 {
+				if mx, ok2 := h["max"].(float64); ok2 && mx > 0 {
+					out = append(out, fmt.Sprintf("HULL %.0f%%", cur/mx*100))
+				}
+			}
+		}
+	}
+	if m, _ := u.Docs["Space.Shields"].(map[string]any); m != nil {
+		if fc, _ := m["facings"].(map[string]any); len(fc) > 0 {
+			sum, n := 0.0, 0.0
+			for _, v := range fc {
+				if f, _ := v.(map[string]any); f != nil {
+					if p, ok := f["pct"].(float64); ok {
+						sum, n = sum+p, n+1
+					}
+				}
+			}
+			if n > 0 {
+				out = append(out, fmt.Sprintf("SHIELDS %.0f%%", sum/n))
+			}
+		}
+	}
+	if m, _ := u.Docs["Space.Power"].(map[string]any); m != nil {
+		if cm, _ := m["components"].(map[string]any); cm != nil {
+			if p, ok := cm["pct"].(float64); ok {
+				out = append(out, fmt.Sprintf("CORE %.0f%%", p))
+			}
+		}
+	}
+	lock := "LOCK -"
+	if m, _ := u.Docs["Ship.Target"].(map[string]any); m != nil {
+		if cid, ok := m["cid"].(float64); ok {
+			lock = fmt.Sprintf("LOCK %.0f", cid)
+		}
+	}
+	out = append(out, lock)
+	if u.Alert != "" {
+		out = append(out, strings.ToUpper(u.Alert)+" ALERT")
+	}
+	return out
 }

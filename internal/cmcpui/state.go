@@ -54,10 +54,19 @@ type Env struct {
 	// through pack FocusPlan); the renderer underlines it.
 	Mnemonics map[string]string
 	// Header is the title shown on row 0; Notice replaces the key hint there for a while.
-	ASCII  bool   // draw with ASCII characters only
-	Layout string // "auto" (default), "side" or "top"
-	Header string
-	Notice string
+	// Builtin is true for a std.* screen: the theme arranges it (packs arrange their own).
+	Builtin bool
+	// Expanded is the log view: the output grows to about 80% of the height and the panels
+	// collapse to one summary line.
+	Expanded bool
+	// Title, Ship and Tags fill the frame's strips; Alert is green, yellow or red.
+	Title, Ship string
+	Tags        []string
+	Status      []string // the status strip: hull, shields, core, lock, alert
+	ASCII       bool     // draw with ASCII characters only
+	Layout      string   // "auto" (default), "side" or "top"
+	Header      string
+	Notice      string
 }
 
 // Effect is a transient viewscreen effect (spec 7.8): fire, hit, destroyed.

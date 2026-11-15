@@ -174,7 +174,11 @@ func (d *drawer) rowBar(r Rect, y, x int, v any) {
 	if bw < 3 {
 		bw, tw = r.X+r.W-x, 0
 	}
-	d.c.bar(x, y, bw, frac, th.attr(col), th.dim())
+	if th.Style != "" {
+		d.c.gradBar(x, y, bw, frac, layout.Lerp(col, rgbC(0, 0, 0), 0.5), col, rgbC(26, 26, 38), th.blank().BG)
+	} else {
+		d.c.bar(x, y, bw, frac, th.attr(col), th.dim())
+	}
 	if tw > 0 {
 		d.c.text(x+bw+1, y, txt, th.text(), tw-1)
 	}
@@ -502,7 +506,7 @@ func (d *drawer) radarKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
 	}
 }
 
-func (d *drawer) radar(b *pack.BoundNode, r Rect, foc bool) {
+func (d *drawer) radarText(b *pack.BoundNode, r Rect, foc bool) {
 	th := d.env.Theme
 	ws := d.st.ws(b.Node.Path)
 	bl := d.blips(b)
@@ -589,7 +593,7 @@ func hash(i int) uint32 {
 	return x
 }
 
-func (d *drawer) viewscreen(b *pack.BoundNode, r Rect) {
+func (d *drawer) viewscreenText(b *pack.BoundNode, r Rect) {
 	th := d.env.Theme
 	seed := 0
 	for _, c := range str(prop(b, "scene")) {

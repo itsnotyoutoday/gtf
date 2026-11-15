@@ -14,10 +14,11 @@ import (
 )
 
 type drawer struct {
-	f   *Frame
-	env Env
-	st  *State
-	c   *canvas
+	f     *Frame
+	env   Env
+	st    *State
+	c     *canvas
+	pillN int // buttons and tabs drawn so far: the next colour of the theme's rainbow
 }
 
 func prop(b *pack.BoundNode, k string) any { return b.Props[k] }
@@ -185,9 +186,17 @@ func (d *drawer) draw(p placed) {
 	case "helm-controls":
 		d.helmControls(b, r, foc)
 	case "radar", "scope":
-		d.radar(b, r, foc)
+		if d.env.ASCII {
+			d.radarText(b, r, foc)
+		} else {
+			d.radar(b, r, foc)
+		}
 	case "viewscreen":
-		d.viewscreen(b, r)
+		if d.env.ASCII {
+			d.viewscreenText(b, r)
+		} else {
+			d.viewscreen(b, r)
+		}
 	case "schematic":
 		d.schematic(b, r, foc)
 	case "contact-picker":
@@ -283,7 +292,12 @@ func (d *drawer) label(b *pack.BoundNode, r Rect) {
 	case "alert":
 		a = th.attr(th.Token("color.alert"))
 	}
-	for i, ln := range strings.Split(str(prop(b, "text")), "\n") {
+	txt := str(prop(b, "text"))
+	if th.Style != "" && isTab(txt) && r.H >= 1 {
+		d.tab(txt, r)
+		return
+	}
+	for i, ln := range strings.Split(txt, "\n") {
 		if i >= r.H {
 			break
 		}
@@ -326,8 +340,18 @@ func (d *drawer) barw(b *pack.BoundNode, r Rect) {
 	if bw < 4 {
 		tw, bw = 0, r.W-lw
 	}
-	fill := th.attr(d.autoTone(b, frac))
-	d.c.bar(r.X+lw, r.Y, bw, frac, fill, th.dim())
+	if th.Style != "" {
+		from, to := d.bandColor(d.pillN), d.bandColor(d.pillN+2)
+		d.pillN++
+		if t := str(prop(b, "tone")); t != "" {
+			to = th.tone(t)
+			from = layout.Lerp(to, rgbC(0, 0, 0), 0.45)
+		}
+		d.c.gradBar(r.X+lw, r.Y, bw, frac, from, to, rgbC(26, 26, 38), th.blank().BG)
+	} else {
+		fill := th.attr(d.autoTone(b, frac))
+		d.c.bar(r.X+lw, r.Y, bw, frac, fill, th.dim())
+	}
 	if tw > 0 {
 		d.c.text(r.X+r.W-tw+1, r.Y, txt, th.text(), tw-1)
 	}
@@ -411,8 +435,12 @@ func (d *drawer) graph(b *pack.BoundNode, r Rect) {
 func (d *drawer) button(b *pack.BoundNode, r Rect, foc bool) {
 	th := d.env.Theme
 	txt := str(prop(b, "text"))
-	a := th.attr(th.tone(str(prop(b, "tone"))))
 	dis := !b.Enabled || (b.Props["enabled"] != nil && !boolProp(b, "enabled"))
+	if th.Style != "" {
+		d.pill(b, r, txt, foc, dis)
+		return
+	}
+	a := th.attr(th.tone(str(prop(b, "tone"))))
 	if dis {
 		a = th.dim()
 	}
@@ -423,8 +451,7 @@ func (d *drawer) button(b *pack.BoundNode, r Rect, foc bool) {
 	if runeLen(s) > r.W {
 		s = "[" + txt + "]"
 	}
-	n := d.c.text(r.X, r.Y, s, a, r.W)
-	_ = n
+	d.c.text(r.X, r.Y, s, a, r.W)
 	if i := d.f.index(b.Node.Path); i >= 0 && d.f.Items[i].Mnemonic != 0 {
 		// the mnemonic letter is underlined
 		m := d.f.Items[i].Mnemonic
@@ -439,13 +466,46 @@ func (d *drawer) button(b *pack.BoundNode, r Rect, foc bool) {
 	}
 }
 
-func (d *drawer) buttonKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
-	return func(k Key) ([]Event, bool) {
-		if k != "enter" && k != "space" {
-			return nil, false
-		}
-		return []Event{{Node: b.Node, Name: "click"}}, true
+// pill draws a themed button: a filled, rounded-ended bar in the next colour of the theme's
+// rainbow (tone buttons keep their tone), dark bold text, the mnemonic letter underlined; the
+// focused one is brighter with a white edge.
+func (d *drawer) pill(b *pack.BoundNode, r Rect, txt string, foc, dis bool) {
+	th := d.env.Theme
+	col := d.bandColor(d.pillN)
+	d.pillN++
+	switch strings.ToLower(str(prop(b, "tone"))) {
+	case "alert", "danger":
+		col = th.RGB("color.alert")
+	case "warn":
+		col = th.RGB("color.warn")
 	}
+	fg := dark
+	if dis {
+		col, fg = rgbC(60, 62, 74), rgbC(120, 124, 140)
+	}
+	if foc {
+		col = layout.Lerp(col, rgbC(255, 255, 255), 0.45)
+	}
+	bg := th.blank().BG
+	body := " " + txt + " "
+	if runeLen(body)+2 > r.W {
+		body = " " + string([]rune(clean(txt))[:max(r.W-4, 0)]) + " "
+	}
+	x := r.X
+	d.c.put(x, r.Y, '◖', layout.Attr{FG: col, BG: bg})
+	m := rune(0)
+	if i := d.f.index(b.Node.Path); i >= 0 {
+		m = d.f.Items[i].Mnemonic
+	}
+	used := false
+	for k, ch := range []rune(clean(body)) {
+		a := layout.Attr{FG: fg, BG: col, Bold: true}
+		if !used && m != 0 && unicode.ToUpper(ch) == m && k >= 1 {
+			a.Underline, used = true, true
+		}
+		d.c.put(x+1+k, r.Y, ch, a)
+	}
+	d.c.put(x+1+runeLen(body), r.Y, '◗', layout.Attr{FG: col, BG: bg})
 }
 
 func (d *drawer) toggle(b *pack.BoundNode, r Rect, foc bool) {
@@ -548,3 +608,59 @@ func focusedIf(a layout.Attr, f bool) layout.Attr {
 }
 
 // ---- row widgets ----
+
+// isTab says whether a label is a section heading: short, upper case, no value in it.
+func isTab(s string) bool {
+	if s == "" || runeLen(s) > 28 || strings.ContainsAny(s, ":\n") || strings.Contains(s, " - ") || strings.Contains(s, "  ") {
+		return false
+	}
+	return s == strings.ToUpper(s) && strings.IndexFunc(s, unicode.IsLetter) >= 0
+}
+
+// tab draws a section heading as a coloured tab with a thin rule running on to the edge.
+func (d *drawer) tab(txt string, r Rect) {
+	th := d.env.Theme
+	col := d.bandColor(d.pillN)
+	d.pillN++
+	bg := th.blank().BG
+	n := runeLen(txt) + 2
+	d.c.put(r.X, r.Y, '◖', layout.Attr{FG: col, BG: bg})
+	for k, ch := range []rune(clean(" " + txt + " ")) {
+		d.c.put(r.X+1+k, r.Y, ch, layout.Attr{FG: dark, BG: col, Bold: true})
+	}
+	d.c.put(r.X+1+n, r.Y, '◗', layout.Attr{FG: col, BG: bg})
+	for x := r.X + n + 3; x < r.X+r.W; x++ {
+		d.c.put(x, r.Y, '▔', layout.Attr{FG: layout.Lerp(col, rgbC(0, 0, 0), 0.55), BG: bg})
+	}
+}
+
+// gradBar draws a bar whose fill runs through a colour ramp in truecolor, on a dark track.
+func (c *canvas) gradBar(x, y, w int, frac float64, from, to, track, bg layout.Color) {
+	if w <= 0 {
+		return
+	}
+	frac = math.Max(0, math.Min(1, frac))
+	full := frac * float64(w)
+	n := int(full)
+	part := int((full - float64(n)) * 8)
+	for i := 0; i < w; i++ {
+		col := layout.Lerp(from, to, float64(i)/float64(max(w-1, 1)))
+		switch {
+		case i < n:
+			c.put(x+i, y, '█', layout.Attr{FG: col, BG: bg})
+		case i == n && part > 0:
+			c.put(x+i, y, eighths[part], layout.Attr{FG: col, BG: track})
+		default:
+			c.put(x+i, y, ' ', layout.Attr{BG: track})
+		}
+	}
+}
+
+func (d *drawer) buttonKeys(b *pack.BoundNode) func(Key) ([]Event, bool) {
+	return func(k Key) ([]Event, bool) {
+		if k != "enter" && k != "space" {
+			return nil, false
+		}
+		return []Event{{Node: b.Node, Name: "click"}}, true
+	}
+}

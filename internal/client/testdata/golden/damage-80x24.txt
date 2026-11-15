@@ -1,19 +1,20 @@
- Damage Control  -  SS Booty King                              Tab: screen keys
-DAMAGE CONTROL  -  hull 806.16 / 875.00
-TEAMS                                                       Damage statistics
-  T1  crew 10  Hull             ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄               Port_Nacel ██████░
-  T2  crew 10  Hull            ▄▄▄▄   ▀▀                      Starboard_ ██████░
-  T3  crew 10  Hull        ▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄
-ASSIGN TO                ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-  Hull                     ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-  Port_Nacelle                 ▀▀▀▀   ▀▀
-  Starboard_Nacelle             ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄
-
-Enter: choose a tea zone: hull
-
-
-
-
-
-
-
+▀▀▀▀▀▀▀▀▀▀DAMAGE CONTROL▀▀▀▀▀▀SS BOOTY KING▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀TAB: SCREEN KEYS▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                 ▄▄▄▄▄▄▄▄▄▄▄▄▄
+                                  ▀▀▀▀▀▀▀▀▀▀▀▀▀
+                             ▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄▄▄
+                           ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                             ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                  ▄▄▄▄▀▀▀▄▄▄▄▄
+                                 ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+zone: hull
+                                                  DAMAGE CONTROL  -  hull 806.16
+                                                  TEAMS
+                                                  Enter: choose a team
+                                                  Damage statistics
+                                                    Port_Nacelle    ██████████▎▼
+                                                  Hull integrity
+                                                                               ▆
+                                                                               █
+                                                                               █
+▀▀▀▀▀▀▀▀▀▀HULL 92%▀▀▀▀▀▀SHIELDS 95%▀▀▀▀▀▀CORE 60%▀▀▀▀▀▀LOCK -▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀

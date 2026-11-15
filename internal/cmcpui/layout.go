@@ -4,7 +4,9 @@
 package cmcpui
 
 import (
+	"fmt"
 	"math"
+	"strings"
 
 	"github.com/itsnotyoutoday/cmcp/pack"
 	"github.com/itsnotyoutoday/gtf/internal/layout"
@@ -25,6 +27,7 @@ type arranger struct {
 	leaves  []placed
 	text    Rect
 	hasTxt  bool
+	summary Rect // the one-line strip of the expanded (log) view
 	sidebar bool // widgets stacked in a right-hand column; every child is as tall as its content
 	need    int  // rows the text pane must keep: 8 or a quarter of the height (spec 6.13)
 }
@@ -48,19 +51,40 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		f.Compact = true
 		return f
 	}
-	a := &arranger{need: max(8, h/4)}
-	if side := sidebarWidth(env.Layout, w, h); side > 0 {
-		// Wide terminal: the game's output gets the whole left side at full height and every widget
-		// is stacked in a column on the right (spec 6.13: the cell class reflows the screen).
-		if rest := stripText(root); rest != nil && (env.Layout == "side" || contentFits(rest, side, h-1)) {
+	a := &arranger{need: max(8, h*45/100)} // the output stays big: 45% of the height (spec, owner rule)
+	top, bottom := env.Theme.margins(h)
+	left := env.Theme.leftCols(w)
+	inner := Rect{X: left, Y: top, W: w - left, H: h - top - bottom}
+	mode := env.Layout
+	if env.Expanded {
+		// the log view: the output takes about 80% of the height; every other panel is one summary line
+		mode = "expanded"
+	} else if mode == "" || mode == "auto" {
+		mode = "tree"
+		if env.Builtin && inner.W >= 70 && inner.H >= 14 {
+			mode = "console" // the built-in screens are arranged by the theme (docs/CMCP-THEMES.md)
+		}
+	}
+	switch {
+	case mode == "expanded":
+		a.text, a.hasTxt = Rect{X: inner.X, Y: inner.Y + 1, W: inner.W, H: inner.H - 1}, true
+		a.summary = Rect{X: 0, Y: inner.Y, W: w, H: 1}
+	case mode == "console":
+		if rest := stripText(root); rest != nil {
+			a.console(rest, inner)
+		}
+	case mode == "side" && inner.W >= 80 && inner.H >= 14:
+		side := max(40, min(56, w*4/10))
+		if rest := stripText(root); rest != nil {
+			rest = pictureFirst(rest)
 			a.sidebar = true
-			a.arrange(rest, Rect{X: w - side, Y: 1, W: side, H: h - 1}, true)
-			a.text, a.hasTxt = Rect{X: 0, Y: 1, W: w - side - 1, H: h - 1}, true
+			a.arrange(rest, Rect{X: w - side, Y: inner.Y, W: side, H: inner.H}, true)
+			a.text, a.hasTxt = Rect{X: 0, Y: inner.Y, W: w - side - 1, H: inner.H}, true
 		}
 	}
 	if !a.hasTxt {
 		a.leaves = nil
-		a.arrange(root, Rect{X: 0, Y: 1, W: w, H: h - 1}, true) // row 0 is the header
+		a.arrange(root, inner, true)
 	}
 	if !a.hasTxt {
 		a.text = Rect{} // a screen must have a textport; without one, drop the screen
@@ -74,6 +98,11 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		}
 		return f
 	}
+	outer := a.text
+	if env.Theme.Style != "" && h >= 28 && a.text.W > minTextCols+2 && a.text.H > minTextRows+2 {
+		// a framed panel: the border ring is outside the text pane's rectangle, never on it
+		a.text = Rect{X: a.text.X + 1, Y: a.text.Y + 1, W: a.text.W - 2, H: a.text.H - 2}
+	}
 	f.Text = a.text
 	// the text pane is the UI's: blank it with default attributes
 	for y := a.text.Y; y < a.text.Y+a.text.H; y++ {
@@ -82,9 +111,13 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 		}
 	}
 	d := &drawer{f: f, env: env, st: st, c: &canvas{g: g, clip: Rect{W: w, H: h}}}
-	d.header()
+	d.frameTop()
 	for _, p := range a.leaves {
 		d.collect(p)
+	}
+	if a.summary.W > 0 {
+		d.c.clip = a.summary
+		d.summaryLine(root, a.summary)
 	}
 	for _, p := range a.leaves {
 		d.draw(p)
@@ -92,6 +125,10 @@ func Draw(root *pack.BoundNode, w, h int, env Env, st *State) *Frame {
 	if i := f.index(st.Focus); i >= 0 {
 		f.Hint = d.hint(f.Items[i])
 	}
+	if outer != f.Text {
+		d.textBorder(outer)
+	}
+	d.frameBottom()
 	if env.ASCII {
 		asciify(g)
 	}
@@ -162,7 +199,18 @@ func (a *arranger) arrange(b *pack.BoundNode, r Rect, top bool) {
 				need += g
 			}
 		}
-		if need > r.W && len(kids) > 1 {
+		if need > r.W && len(kids) > 1 && smallControls(kids) {
+			// a row of buttons wraps onto more lines instead of becoming a tall column
+			x, y := r.X, r.Y
+			for _, k := range kids {
+				kw, _ := intrinsic(k, r.W)
+				if x > r.X && x+kw > r.X+r.W {
+					x, y = r.X, y+1
+				}
+				a.arrange(k, Rect{X: x, Y: y, W: min(kw, r.W), H: 1}, false)
+				x += kw + g
+			}
+		} else if need > r.W && len(kids) > 1 {
 			a.flow(kids, r, false, gapY(b.Layout.Gap))
 		} else {
 			a.flow(kids, r, true, g)
@@ -361,6 +409,18 @@ func intrinsic(b *pack.BoundNode, w int) (int, int) {
 		px, py := cellsX(b.Layout.Pad), cellsY(b.Layout.Pad)
 		var iw, ih int
 		dir := b.Layout.Dir
+		if dir == "row" && w > 0 && len(kids) > 1 && minWidth(b) > w && smallControls(kids) {
+			// wrapped lines of controls
+			x, lines := 0, 1
+			for _, k := range kids {
+				kw, _ := intrinsic(k, w)
+				if x > 0 && x+kw > w {
+					x, lines = 0, lines+1
+				}
+				x += kw + gapX(b.Layout.Gap)
+			}
+			return w, lines + 2*cellsY(b.Layout.Pad)
+		}
 		if dir == "row" && w > 0 && len(kids) > 1 && minWidth(b) > w {
 			dir = "col" // the row is stacked (spec 6.13), so it is as tall as its children together
 		}
@@ -437,15 +497,73 @@ func minWidth(b *pack.BoundNode) int {
 	return min(iw, 14)
 }
 
-// sidebarWidth is the width of the widget column of the optional side layout (%cmcp_layout side:
-// the output on the whole left, every widget stacked on the right), 0 for the default top layout:
-// a compact band of widgets (viewscreen, radar, controls as the pack arranges them) over a text
-// pane that takes all the remaining area.
+// sidebarWidth is the width of the widget column of the side layout, 0 for the top band layout.
+// Side is the default on a wide terminal (the game's output keeps the whole left side at full
+// height, the widgets stack on the right: pictures first, the data below them); "top" forces the
+// band over the output, "side" forces the column even on a narrow terminal.
 func sidebarWidth(mode string, w, h int) int {
-	if mode != "side" || w < 80 || h < 16 {
+	switch mode {
+	case "top":
 		return 0
+	case "side":
+		if w < 80 || h < 16 {
+			return 0
+		}
+	default:
+		if w < 100 || h < 20 {
+			return 0
+		}
 	}
-	return max(36, min(52, w*4/10))
+	return max(40, min(56, w*4/10))
+}
+
+// pictureWidget says whether a widget is a picture (viewscreen, radar...) that leads the column.
+func pictureWidget(w string) bool {
+	switch w {
+	case "viewscreen", "radar", "scope", "schematic", "sector-map":
+		return true
+	}
+	return false
+}
+
+// pictureFirst returns the tree with its pictures moved to the front of a single column: the
+// radar or viewscreen on top, the sensor and weapon data below it.
+func pictureFirst(rest *pack.BoundNode) *pack.BoundNode {
+	var pics []*pack.BoundNode
+	var strip func(b *pack.BoundNode) *pack.BoundNode
+	strip = func(b *pack.BoundNode) *pack.BoundNode {
+		if !isContainer(b) {
+			if pictureWidget(b.Widget) {
+				pics = append(pics, b)
+				return nil
+			}
+			return b
+		}
+		c := *b
+		c.Children = nil
+		for _, k := range b.Children {
+			if s := strip(k); s != nil {
+				c.Children = append(c.Children, s)
+			}
+		}
+		if len(c.Children) == 0 {
+			return nil
+		}
+		return &c
+	}
+	body := strip(rest)
+	col := *rest
+	col.Layout = pack.Layout{Dir: "col", Gap: rest.Layout.Gap}
+	col.Children = nil
+	for _, p := range pics {
+		q := *p
+		q.Layout.Weight, q.Layout.HasSize = 0, false
+		col.Children = append(col.Children, &q)
+	}
+	if body != nil {
+		col.Children = append(col.Children, body)
+	}
+	return &col
 }
 
 // stripText returns a copy of the tree without its textport (nil if nothing is left).
@@ -476,5 +594,156 @@ func stripText(b *pack.BoundNode) *pack.BoundNode {
 // size once the big pictures shrink to a minimum: otherwise the top layout is better.
 func contentFits(rest *pack.BoundNode, w, h int) bool {
 	_, ih := intrinsic(rest, w)
-	return ih <= h
+	return ih <= h*4/3
+}
+
+// smallControls reports whether every child is a button, toggle or short label (a row of them wraps).
+func smallControls(kids []*pack.BoundNode) bool {
+	for _, k := range kids {
+		if isContainer(k) {
+			return false
+		}
+		switch k.Widget {
+		case "button", "toggle", "label":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// console is the theme's arrangement of a built-in screen: a band of pictures across the top (the
+// viewscreen or schematic on the left, the radar on the right), under it the game's output on
+// the left and a column of data and controls on the right. A screen without a main picture puts
+// its radar at the head of the column; one without data gives the output the whole width.
+func (a *arranger) console(rest *pack.BoundNode, in Rect) {
+	var pics []*pack.BoundNode
+	var strip func(b *pack.BoundNode) *pack.BoundNode
+	strip = func(b *pack.BoundNode) *pack.BoundNode {
+		if !isContainer(b) {
+			if pictureWidget(b.Widget) {
+				pics = append(pics, b)
+				return nil
+			}
+			return b
+		}
+		c := *b
+		c.Children = nil
+		for _, k := range b.Children {
+			if s := strip(k); s != nil {
+				c.Children = append(c.Children, s)
+			}
+		}
+		if len(c.Children) == 0 {
+			return nil
+		}
+		return &c
+	}
+	body := strip(rest)
+	var main, side []*pack.BoundNode
+	for _, p := range pics {
+		switch p.Widget {
+		case "viewscreen", "schematic", "sector-map":
+			main = append(main, p)
+		default:
+			side = append(side, p)
+		}
+	}
+	bandH := 0
+	if len(main) > 0 {
+		bandH = min(max(11, in.H*36/100), 18)
+		bandH = min(bandH, in.H-a.need)
+		if bandH < 8 {
+			bandH = 0
+		}
+	}
+	y0 := in.Y + bandH
+	dataW := 0
+	if body != nil || (len(main) == 0 || bandH == 0) && len(side) > 0 {
+		dataW = max(30, min(50, in.W*36/100))
+		if in.W-dataW-1 < minTextCols {
+			dataW = 0
+		}
+	}
+	if bandH > 0 {
+		radarW := 0
+		if len(side) > 0 {
+			radarW = min(bandH*2, in.W/3)
+		}
+		mainW := in.W - radarW
+		if radarW > 0 {
+			mainW--
+		}
+		x := in.X
+		share := mainW / len(main)
+		for _, p := range main {
+			q := *p
+			a.leaves = append(a.leaves, placed{&q, Rect{X: x, Y: in.Y, W: share, H: bandH}})
+			x += share
+		}
+		if radarW > 0 {
+			q := *side[0]
+			a.leaves = append(a.leaves, placed{&q, Rect{X: in.X + in.W - radarW, Y: in.Y, W: radarW, H: bandH}})
+			side = side[1:]
+		}
+	}
+	col := Rect{X: in.X + in.W - dataW, Y: y0, W: dataW, H: in.H - bandH}
+	if dataW > 0 {
+		kids := []*pack.BoundNode{}
+		for _, p := range side { // pictures with no place in the band lead the column
+			q := *p
+			q.Layout.Weight, q.Layout.HasSize = 0, false
+			kids = append(kids, &q)
+		}
+		if bandH == 0 {
+			for _, p := range main {
+				q := *p
+				q.Layout.Weight, q.Layout.HasSize = 0, false
+				kids = append(kids, &q)
+			}
+		}
+		if body != nil {
+			kids = append(kids, body)
+		}
+		colNode := *rest
+		colNode.Layout = pack.Layout{Dir: "col", Gap: rest.Layout.Gap}
+		colNode.Children = kids
+		a.sidebar = true
+		a.arrange(&colNode, col, true)
+		a.text = Rect{X: in.X, Y: y0, W: in.W - dataW - 1, H: in.H - bandH}
+	} else {
+		a.text = Rect{X: in.X, Y: y0, W: in.W, H: in.H - bandH}
+	}
+	a.hasTxt = true
+}
+
+// summaryLine is the expanded view's strip: the bars and gauges of the screen as "label value".
+func (d *drawer) summaryLine(root *pack.BoundNode, r Rect) {
+	th := d.env.Theme
+	var parts []string
+	root.Walk(func(b *pack.BoundNode) {
+		if !b.Visible {
+			return
+		}
+		switch b.Widget {
+		case "bar", "gauge":
+			v, m, frac := fracOf(b)
+			lab := str(prop(b, "label"))
+			if lab == "" {
+				lab = "level"
+			}
+			_ = v
+			_ = m
+			parts = append(parts, fmt.Sprintf("%s %.0f%%", lab, frac*100))
+		}
+	})
+	line := strings.Join(parts, "   ")
+	if len(d.env.Tags) > 0 {
+		line = strings.Join(d.env.Tags, " ") + "   " + line
+	}
+	if line == "" {
+		line = d.env.Title
+	}
+	d.c.fill(r, ' ', th.blank())
+	d.c.text(r.X+1, r.Y, line, th.attr(th.RGB("color.accent")), r.W-2)
 }
