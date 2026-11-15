@@ -155,7 +155,7 @@ func (c *Client) packStart(s *Session, j *packJob) {
 	if j.ref.Kind == "theme" {
 		kind = "theme pack"
 	}
-	line := fmt.Sprintf("%% %s offers a %s %q %s (%d KiB). Use it? /cmcp pack allow | deny   (screen keys: y / n)",
+	line := fmt.Sprintf("%% %s offers a %s %q %s (%d KiB). Use it? /cmcp pack allow | deny   (or F5 / F6)",
 		host, kind, j.ref.ID, j.ref.Version, (j.ref.Size+1023)/1024)
 	c.echoTo(s.scr, "", line)
 	c.cmcpNotice(s, "pack "+j.ref.ID+": y = allow, n = refuse")

@@ -36,7 +36,9 @@ def hint():
     return ""
 drain(2)
 for line in ["connect bob cobalt-fern-52", "board resolute", "man science"]: send(line + "\r", 2.0)
-drain(2)
+send("/cmcp pack allow\r", 3.0)
+send("man science\r", 2.0)
+drain(1)
 bad = []
 def step(key, name, want):
     send(key, 1.5); h = hint(); ok = want in h
