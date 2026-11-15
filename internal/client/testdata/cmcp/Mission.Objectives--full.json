@@ -1,0 +1,45 @@
+{
+  "package": "Mission.Objectives",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "mission": {
+        "id": "m-salvage",
+        "title": "Salvage run",
+        "briefing": "Recover the beacon from the asteroid AST5716 and return."
+      },
+      "objectives": {
+        "o1": {
+          "id": "o1",
+          "title": "Reach AST5716",
+          "text": "Fly to the asteroid and match speed",
+          "state": "done",
+          "optional": false
+        },
+        "o2": {
+          "id": "o2",
+          "title": "Recover the beacon",
+          "text": "Send an away team",
+          "state": "active",
+          "optional": false,
+          "progress": {
+            "cur": 1,
+            "max": 3
+          },
+          "waypoint": "wp1"
+        },
+        "o3": {
+          "id": "o3",
+          "title": "Avoid detection",
+          "text": "Stay under Yellow alert",
+          "state": "active",
+          "optional": true
+        }
+      },
+      "tracked": "o2"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+ Transporter Room                                                                                              F2: keys
+TRANSPORTER  -  READY   range 40 km
+
+POWER                   ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐        PATTERN
+Power a ◀────●─────▶ 40 │Pad 1     │     │Pad 2     │     │Pad 3     │     │Pad 4     │        Pattern  ◀───────●───▶ 65
+                        │Lt. Ok +1 │     │          │     │          │     │          │
+                        └──────────┘     └──────────┘     └──────────┘     └──────────┘
+
+
+
+
+
+
+
+
+
+
+
+                        Energizing ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ IDLE
+                        [ ENERGIZE DOWN ] [ ENERGIZE UP ] [ LOCK ] [ ABORT ] [ ASSIGN PAD ]
+Power  ██████▍░░░░░░░░░                                                                        Pattern ███████░░░ 70/100
+Lock qualit ◖███▎◗  82%                                                                        Pattern █████████▌ 96/100
+DESTINATIONS (in range first)                                           AWAY TEAMS
+  DESTINATION DIST m       STATUS  BLOCKED BY                             TEAM            N STATE
+  AST5716     797.80       ready                                          Away Team Alpha 3 away
+  UFPTRukh    775968000    blocked range,shields
+  UFP40EA1    163000000000 blocked range
+
+
+
+
+
+                                                                        [ RECALL TEAM ]
+
+
+
+
+
+

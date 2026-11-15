@@ -1,0 +1,36 @@
+{
+  "package": "Ship.Log",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "entries": {
+        "1": {
+          "id": 1,
+          "t": 1794674040000,
+          "kind": "system",
+          "text": "Red alert cleared",
+          "severity": "info"
+        },
+        "2": {
+          "id": 2,
+          "t": 1794674100000,
+          "kind": "order",
+          "text": "Captain to tactical: hold fire until they cross the line",
+          "from": "captain",
+          "severity": "info"
+        },
+        "3": {
+          "id": 3,
+          "t": 1794674105000,
+          "kind": "request",
+          "text": "Tactical asks engineering for 60% power to Weapons",
+          "from": "tactical",
+          "severity": "info"
+        }
+      }
+    }
+  }
+}

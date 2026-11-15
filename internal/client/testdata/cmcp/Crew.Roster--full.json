@@ -1,0 +1,107 @@
+{
+  "package": "Crew.Roster",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "roles": {
+        "captain": {
+          "console": "command",
+          "holder": "Mara",
+          "ai": false,
+          "ai_mode": "off",
+          "efficiency": 1.0,
+          "status": "ok"
+        },
+        "helm": {
+          "console": "navigation",
+          "holder": null,
+          "ai": true,
+          "ai_mode": "auto",
+          "efficiency": 0.85,
+          "status": "ok"
+        },
+        "tactical": {
+          "console": "tactical",
+          "holder": "Ilex",
+          "ai": false,
+          "ai_mode": "advise",
+          "efficiency": 1.0,
+          "status": "ok"
+        },
+        "operations": {
+          "console": "operations",
+          "holder": "Dov",
+          "ai": false,
+          "ai_mode": "auto",
+          "efficiency": 0.9,
+          "status": "degraded"
+        },
+        "engineering": {
+          "console": "engineering",
+          "holder": null,
+          "ai": true,
+          "ai_mode": "auto",
+          "efficiency": 0.8,
+          "status": "ok"
+        },
+        "science": {
+          "console": "science",
+          "holder": null,
+          "ai": true,
+          "ai_mode": "advise",
+          "efficiency": 0.8,
+          "status": "ok"
+        },
+        "communications": {
+          "console": "communications",
+          "holder": null,
+          "ai": true,
+          "ai_mode": "auto",
+          "efficiency": 0.8,
+          "status": "ok"
+        },
+        "medical": {
+          "console": "medical",
+          "holder": null,
+          "ai": true,
+          "ai_mode": "auto",
+          "efficiency": 0.8,
+          "status": "ok"
+        },
+        "security": {
+          "console": "security",
+          "holder": null,
+          "ai": false,
+          "ai_mode": "off",
+          "efficiency": 0.0,
+          "status": "vacant"
+        }
+      },
+      "crew": {
+        "c1": {
+          "name": "Lt. Okonkwo",
+          "role": "engineering",
+          "deck": "deck2",
+          "status": "ok",
+          "efficiency": 0.9
+        },
+        "c2": {
+          "name": "Ens. Pell",
+          "role": "operations",
+          "deck": "deck1",
+          "status": "injured",
+          "efficiency": 0.6
+        }
+      },
+      "totals": {
+        "aboard": 24,
+        "injured": 2,
+        "dead": 0,
+        "away": 0
+      }
+    }
+  }
+}

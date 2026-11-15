@@ -1,0 +1,39 @@
+{
+  "package": "Ship.Cargo",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "bays": {
+        "bay1": {
+          "name": "Main bay",
+          "capacity": 2000,
+          "used": 740,
+          "items": {
+            "rations": {
+              "name": "Rations",
+              "qty": 300,
+              "kind": "supply",
+              "mass": 150
+            },
+            "probe": {
+              "name": "Sensor probes",
+              "qty": 6,
+              "kind": "equipment",
+              "mass": 60
+            }
+          }
+        },
+        "bay2": {
+          "name": "Aft bay",
+          "capacity": 800,
+          "used": 0,
+          "items": {}
+        }
+      },
+      "jettison_ok": true
+    }
+  }
+}

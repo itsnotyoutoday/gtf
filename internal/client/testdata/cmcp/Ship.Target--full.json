@@ -1,0 +1,22 @@
+{
+  "package": "Ship.Target",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "designated": {
+        "cid": 17,
+        "by": "science",
+        "t": 1794674100000,
+        "note": "Port shield is thin"
+      },
+      "secondary": {
+        "11": {
+          "by": "tactical"
+        }
+      }
+    }
+  }
+}

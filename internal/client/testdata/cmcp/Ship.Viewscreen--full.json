@@ -1,0 +1,15 @@
+{
+  "package": "Ship.Viewscreen",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "mode": "target",
+      "cid": 17,
+      "by": "captain",
+      "hail": null
+    }
+  }
+}

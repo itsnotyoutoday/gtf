@@ -1,0 +1,78 @@
+{
+  "package": "Crew.Security",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "decks": {
+        "deck1": {
+          "name": "Bridge deck",
+          "integrity": 100,
+          "sealed": false,
+          "intruders": 0,
+          "atmosphere": "ok"
+        },
+        "deck2": {
+          "name": "Engineering",
+          "integrity": 92,
+          "sealed": false,
+          "intruders": 0,
+          "atmosphere": "ok"
+        },
+        "deck3": {
+          "name": "Crew quarters",
+          "integrity": 70,
+          "sealed": true,
+          "intruders": 3,
+          "atmosphere": "ok"
+        },
+        "deck4": {
+          "name": "Cargo",
+          "integrity": 100,
+          "sealed": false,
+          "intruders": 0,
+          "atmosphere": "ok"
+        }
+      },
+      "intruders": {
+        "i1": {
+          "deck": "deck3",
+          "count": 3,
+          "state": "engaged",
+          "armed": true
+        }
+      },
+      "teams": {
+        "sec1": {
+          "name": "Security Alpha",
+          "size": 4,
+          "state": "engaged",
+          "deck": "deck3",
+          "order": "repel",
+          "arm": "armed"
+        },
+        "sec2": {
+          "name": "Security Bravo",
+          "size": 4,
+          "state": "standby",
+          "deck": null,
+          "order": "guard",
+          "arm": "standby"
+        }
+      },
+      "cells": {
+        "cell1": {
+          "occupant": null,
+          "state": "empty"
+        },
+        "cell2": {
+          "occupant": "Raider captain",
+          "state": "occupied"
+        }
+      },
+      "lockdown": false
+    }
+  }
+}

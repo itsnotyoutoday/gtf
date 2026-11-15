@@ -179,6 +179,14 @@ func (c *Client) cmcpStatus(s *Session) []string {
 	} else {
 		l = append(l, "% console: none")
 	}
+	for i := len(u.Stack) - 1; i >= 0; i-- {
+		e := u.Stack[i]
+		mark := " "
+		if e.Active {
+			mark = "*"
+		}
+		l = append(l, fmt.Sprintf("%% context %s %s %s priority %d screen %s", mark, e.Key, e.Kind, e.Priority, e.Screen))
+	}
 	if u.Screen.ID != "" {
 		x := u.Screen.ID
 		if u.Screen.Fallback {

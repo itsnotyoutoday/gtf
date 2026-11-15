@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/itsnotyoutoday/cmcp/pack"
@@ -788,29 +787,61 @@ func (d *drawer) padDiagram(b *pack.BoundNode, r Rect, foc bool) {
 	pads := asMap(prop(b, "pads"))
 	keys := sortedKeys(pads)
 	ws := d.st.ws(b.Node.Path)
+	ws.cur = max(0, min(ws.cur, len(keys)-1))
 	sel := str(prop(b, "selected"))
+	bh := 4
+	prog := numOr(prop(b, "progress"), -1)
+	hasBar := prog > 0 && r.H > bh+1
+	rows := r.H
+	if hasBar {
+		rows--
+	}
+	cols := max(1, min(len(keys), r.W/13))
+	cw := r.W / cols
 	for i, k := range keys {
 		p := asMap(pads[k])
-		x := r.X + (i%3)*(r.W/3)
-		y := r.Y + (i/3)*3
+		x := r.X + (i%cols)*cw
+		y := r.Y + (i/cols)*bh
+		if y+bh > r.Y+rows {
+			break
+		}
 		a := th.text()
+		switch str(p["state"]) {
+		case "occupied":
+			a = th.attr(th.Token("color.ok"))
+		case "blocked", "fault":
+			a = th.attr(th.Token("color.alert"))
+		case "empty":
+			a = th.dim()
+		}
 		if k == sel {
 			a = th.accent()
+			a.Bold = true
 		}
 		if foc && ws.cur == i {
 			a = focused(a)
 		}
-		if y+2 >= r.Y+r.H {
-			break
+		w := min(cw-1, 12)
+		d.c.text(x, y, "┌"+strings.Repeat("─", w-2)+"┐", a, w)
+		label := str(p["label"])
+		if label == "" {
+			label = "Pad " + k
 		}
-		d.c.text(x, y, "┌─"+k+"─┐", a, r.W/3)
-		d.c.text(x, y+1, "│"+fmt.Sprintf("%-4s", clipN(str(p["occupant"]), 4))+"│", a, r.W/3)
-		d.c.text(x, y+2, "└─────┘", a, r.W/3)
+		d.c.text(x, y+1, "│"+fmt.Sprintf("%-*s", w-2, clipN(label, w-2))+"│", a, w)
+		occ := asMap(p["occupants"])
+		first := ""
+		if ok := sortedKeys(occ); len(ok) > 0 {
+			first = str(asMap(occ[ok[0]])["name"])
+			if len(ok) > 1 {
+				first = fmt.Sprintf("%s +%d", clipN(first, w-6), len(ok)-1)
+			}
+		}
+		d.c.text(x, y+2, "│"+fmt.Sprintf("%-*s", w-2, clipN(first, w-2))+"│", a, w)
+		d.c.text(x, y+3, "└"+strings.Repeat("─", w-2)+"┘", a, w)
 	}
-	if pr := numOr(prop(b, "progress"), -1); pr >= 0 && r.H > 1 {
-		d.c.bar(r.X, r.Y+r.H-1, r.W, pr, th.accent(), th.dim())
+	if hasBar {
+		d.c.bar(r.X, r.Y+r.H-1, r.W, prog/100, th.accent(), th.dim())
 	}
-	_ = strconv.Itoa
 }
 
 func clipN(s string, n int) string {

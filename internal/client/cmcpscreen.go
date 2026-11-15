@@ -8,6 +8,7 @@ package client
 // renderer of internal/cmcpui, and operates it from the keyboard.
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 // cmcpScr is the per-connection screen state.
 type cmcpScr struct {
 	st        *cmcpui.State
+	states    map[string]*cmcpui.State // $ui, focus and cursors per screen: leaving a context keeps them (spec 3.3, 16.6)
 	gen       int
 	frame     *cmcpui.Frame
 	override  string // a client-local {"show":...} screen, until the server names another
@@ -192,11 +194,22 @@ func (c *Client) cmcpSyncSurface() {
 	if u.Generation != cs.gen {
 		cs.gen = u.Generation
 		cs.st.Reset()
-		cs.auto = nil
+		cs.states, cs.auto = nil, nil
 	}
 	scr, p, id := c.cmcpScreenFor(s, u)
 	if scr == nil {
 		return
+	}
+	if cs.states == nil {
+		cs.states = map[string]*cmcpui.State{}
+	}
+	if st := cs.states[id]; st != nil {
+		st.Active = cs.st.Active
+		cs.st = st
+	} else {
+		st := cmcpui.NewState()
+		st.Active = cs.st.Active
+		cs.states[id], cs.st = st, st
 	}
 	w, h := c.ui.W, c.ui.OutRows()
 	now := c.cfg.Now()
@@ -211,6 +224,9 @@ func (c *Client) cmcpSyncSurface() {
 	}
 	if u.Ship.Name != "" {
 		hdr += "  -  " + u.Ship.Name
+	}
+	if n := len(u.Stack); n > 1 {
+		hdr += fmt.Sprintf("  [%d contexts]", n)
 	}
 	if u.Readonly {
 		hdr += "  [read-only]"
@@ -349,7 +365,7 @@ func (c *Client) cmcpAutoSelect(s *Session, f *cmcpui.Frame) bool {
 	did := false
 	for _, it := range f.Items {
 		n := it.Node
-		if n.Widget != "group-picker" || cs.auto[n.Node.Path] || n.Props["selected"] != nil {
+		if n.Widget != "group-picker" || cs.auto[fmt.Sprintf("%p|%s", cs.st, n.Node.Path)] || n.Props["selected"] != nil {
 			continue
 		}
 		acts := n.Node.On["select"]
@@ -363,7 +379,7 @@ func (c *Client) cmcpAutoSelect(s *Session, f *cmcpui.Frame) bool {
 		if !onlySet || len(groups) == 0 {
 			continue
 		}
-		cs.auto[n.Node.Path] = true
+		cs.auto[fmt.Sprintf("%p|%s", cs.st, n.Node.Path)] = true
 		first := cmcpui.FirstKey(groups)
 		n.Node.Perform("select", first, pack.EnvFromUI(s.cm.UI(), cs.st.UI), cs.st.UI, nil, c.cfg.Now())
 		did = true

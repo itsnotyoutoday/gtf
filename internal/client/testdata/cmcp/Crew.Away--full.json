@@ -1,0 +1,25 @@
+{
+  "package": "Crew.Away",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "teams": {
+        "alpha": {
+          "name": "Away Team Alpha",
+          "members": 3,
+          "state": "away",
+          "location": {
+            "cid": 11,
+            "name": "AST5716"
+          },
+          "order": "explore",
+          "health_pct": 100,
+          "report": "Surface scan under way"
+        }
+      }
+    }
+  }
+}

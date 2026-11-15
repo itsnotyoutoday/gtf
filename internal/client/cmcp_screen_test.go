@@ -6,6 +6,7 @@ package client
 import (
 	"encoding/json"
 	"flag"
+	"github.com/itsnotyoutoday/cmcp/frame"
 	"os"
 	"path/filepath"
 	"sort"
@@ -341,4 +342,37 @@ func TestCmcpTinyTerminalKeepsText(t *testing.T) {
 	if r.H < 4 || r.W < 30 {
 		t.Fatalf("text pane %+v", r)
 	}
+}
+
+// sendContext writes a Cobra.Context as the game would (the core's Server has no push API yet).
+func (f *screenFixture) sendContext(c msg.Context) {
+	f.t.Helper()
+	b, err := frame.Encode("Cobra.Context", c)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.d.game.write(b)
+}
+
+// The context stack (spec 3.3): a higher-priority event context takes the screen, the console's
+// data stays live below it, popping it returns the console screen with its own state.
+func TestCmcpContextStack(t *testing.T) {
+	f := newScreenFixture(t, 120, 40)
+	f.console("std.operations", "", nil)
+	prio := 150
+	ship := msg.ContextShip{ID: "ss-booty-king", Epoch: 1}
+	f.sendContext(msg.Context{Rev: 2, Ship: ship, Op: "push", Reason: "event", Context: &msg.ContextEntry{
+		Key: "event:power-surge", Ctx: 7, Kind: "event", ID: "power-surge", Screen: "std.power", Priority: &prio,
+		Commands: []string{"power.set"}}})
+	cmEventually(t, "power screen on top", func() bool { id, _ := f.screenState(); return id == "std.power" })
+	f.render()
+	mustContain(t, f.term.Screen, "POWER", "[2 contexts]")
+	exec(f.c, "/cmcp status")
+	f.render()
+	mustContain(t, f.term.Screen, "context * event:power-surge", "context   console")
+	f.sendContext(msg.Context{Rev: 3, Ship: ship, Op: "pop", Key: "event:power-surge", Ctx: 7})
+	cmEventually(t, "back on operations", func() bool { id, _ := f.screenState(); return id == "std.operations" })
+	f.render()
+	mustContain(t, f.term.Screen, "OPERATIONS")
+	mustNotContain(t, f.term.Screen, "[2 contexts]")
 }

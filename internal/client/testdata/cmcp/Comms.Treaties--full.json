@@ -1,0 +1,22 @@
+{
+  "package": "Comms.Treaties",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "treaties": {
+        "2": {
+          "id": 2,
+          "with": "Federation",
+          "kind": "passage",
+          "state": "active",
+          "terms": "Free passage through the 40 Eridani system",
+          "since_t": 1794670500000,
+          "expires_t": 1794681300000
+        }
+      }
+    }
+  }
+}

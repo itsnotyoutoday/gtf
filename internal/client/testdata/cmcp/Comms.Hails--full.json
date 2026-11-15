@@ -1,0 +1,58 @@
+{
+  "package": "Comms.Hails",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "frequency": 412.5,
+      "hails": {
+        "5": {
+          "id": 5,
+          "cid": 17,
+          "name": "UFP40EA1",
+          "faction": "Federation",
+          "state": "negotiating",
+          "portrait": {
+            "model": "face",
+            "params": {
+              "seed": 12,
+              "tint": "#8fa3ff"
+            },
+            "mood": "friendly"
+          },
+          "lines": {
+            "1": {
+              "from": "them",
+              "text": "Marauder, state your intentions."
+            },
+            "2": {
+              "from": "us",
+              "text": "Passing through. We mean no harm."
+            }
+          },
+          "options": {
+            "o1": {
+              "text": "Request safe passage",
+              "kind": "offer",
+              "enabled": true
+            },
+            "o2": {
+              "text": "Offer trade",
+              "kind": "offer",
+              "enabled": true
+            },
+            "o3": {
+              "text": "Warn them off",
+              "kind": "threat",
+              "enabled": true
+            }
+          },
+          "attitude": 25,
+          "deadline_s": 90
+        }
+      }
+    }
+  }
+}

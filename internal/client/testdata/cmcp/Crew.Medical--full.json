@@ -1,0 +1,53 @@
+{
+  "package": "Crew.Medical",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "sickbay": {
+        "beds": 6,
+        "used": 2
+      },
+      "casualties": {
+        "k1": {
+          "name": "Ens. Pell",
+          "role": "operations",
+          "deck": "deck1",
+          "injury": "serious",
+          "state": "treating",
+          "eta_s": 120,
+          "team": "med1"
+        },
+        "k2": {
+          "name": "Cpl. Voss",
+          "role": "security",
+          "deck": "deck3",
+          "injury": "minor",
+          "state": "untreated",
+          "eta_s": 0,
+          "team": null
+        }
+      },
+      "teams": {
+        "med1": {
+          "size": 3,
+          "assign": "k1",
+          "state": "busy"
+        },
+        "med2": {
+          "size": 2,
+          "assign": null,
+          "state": "ready"
+        }
+      },
+      "quarantine": {
+        "deck4": false
+      },
+      "penalty": {
+        "operations": 0.1
+      }
+    }
+  }
+}

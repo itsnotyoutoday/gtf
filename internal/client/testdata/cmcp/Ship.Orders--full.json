@@ -1,0 +1,39 @@
+{
+  "package": "Ship.Orders",
+  "payload": {
+    "seq": 1,
+    "ship": "ss-booty-king",
+    "epoch": 1,
+    "full": true,
+    "d": {
+      "stance": "balanced",
+      "orders": {
+        "12": {
+          "id": 12,
+          "kind": "order",
+          "from": "captain",
+          "to": "tactical",
+          "priority": "urgent",
+          "text": "Hold fire until they cross the line",
+          "state": "acked",
+          "t": 1794674100000,
+          "expires_t": 1794674400000
+        },
+        "13": {
+          "id": 13,
+          "kind": "request",
+          "from": "tactical",
+          "to": "engineering",
+          "priority": "priority",
+          "text": "Weapons need more power",
+          "state": "issued",
+          "req_kind": "power",
+          "group": "Weapons",
+          "pct": 60,
+          "t": 1794674105000
+        }
+      }
+    },
+    "t": 1794674100000
+  }
+}
