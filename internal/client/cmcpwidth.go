@@ -72,6 +72,9 @@ func (c *Client) cmcpSetWidth(s *Session, arg string) {
 	if cs.frame != nil {
 		cur = cs.frame.Text.W
 	}
+	if n := c.cmcpTextWidth(); n > 0 {
+		cur = n // the width asked for, not the last drawn one: two key presses before a redraw both count
+	}
 	if cs.frame == nil || !cs.frame.Side {
 		c.cmcpNotice(s, "The text width applies in the side layout (a window of 120 columns or more)")
 		if arg == "" {
