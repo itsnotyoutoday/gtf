@@ -150,3 +150,38 @@ func TestCmcpEvenniaScenicViewscreen(t *testing.T) {
 	exec(c, "unman")
 	time.Sleep(time.Second)
 }
+
+// TestCmcpEvenniaEmpires boards the Klingon, Romulan and Ferengi ships of the PoC, downloads their
+// layout packs over the announced loopback http origin (developer flag), and dumps each console
+// screen (GTF_E2E_EVENNIA=1; boarding only moves the throwaway character).
+func TestCmcpEvenniaEmpires(t *testing.T) {
+	if os.Getenv("GTF_E2E_EVENNIA") == "" {
+		t.Skip("set GTF_E2E_EVENNIA=1 with the Evennia PoC running on 127.0.0.1:4101")
+	}
+	term := &recTerm{Screen: vt.New(140, 44)}
+	c, err := New(Config{Term: term, HomeDir: t.TempDir(), NoRC: true, Quiet: true, Interactive: true, NoUpdateCheck: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	f := &screenFixture{t: t, c: c, term: term}
+	exec(c, "/set cmcp_pack_consent=always", "/set cmcp_dev_loopback_http=on", "/set cmcp_debug=1", "/connect 127.0.0.1 4101")
+	cmEventually(t, "handshake", f.clientReady)
+	exec(c, "connect carol violet-oak-38")
+	time.Sleep(1500 * time.Millisecond)
+	for _, ship := range []string{"drakhar", "nhaalveth", "goldenmargin"} {
+		exec(c, "board "+ship, "man sensors")
+		time.Sleep(4 * time.Second)
+		exec(c, "/cmcp packs", "/cmcp status")
+		f.render()
+		var scr, th string
+		var fb bool
+		c.Do(func(*gtfparser.Interp) {
+			u := c.fg.cm.UI()
+			scr, fb = u.Screen.Resolved, u.Screen.Fallback
+			th = c.cmcpThemeFor(u, "")
+		})
+		t.Logf("%s: screen %s fallback=%v theme=%s\n%s", ship, scr, fb, th, term.Dump())
+		f.dump("empire-" + ship)
+	}
+}

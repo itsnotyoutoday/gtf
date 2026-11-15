@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/itsnotyoutoday/cmcp/textport"
+	"github.com/itsnotyoutoday/cmcp/theme"
 	"os"
 	"strings"
 	"time"
@@ -75,17 +76,28 @@ func onVar(v string) bool {
 // cmcpThemeFor resolves the theme by spec 6.6: the player's explicit choice; else, with "use the
 // ship's theme" on, the console's, the ship's, then the screen's suggestion; else plain.
 func (c *Client) cmcpThemeFor(u *session.UI, suggest string) string {
-	if t := strings.TrimSpace(c.in.Var("cmcp_theme")); t != "" && t != "auto" {
-		return t
+	// theme_mode: "ship" (the default) follows the ship's suggested theme (console, ship, screen), "fixed"
+	// keeps the player's %cmcp_theme; %cmcp_theme alone also fixes it when the mode is not set.
+	fixed := strings.TrimSpace(c.in.Var("cmcp_theme"))
+	mode := strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_theme_mode")))
+	if mode == "" && onVar(c.in.Var("cmcp_ship_theme")) {
+		mode = "ship" // the old setting
 	}
-	if onVar(c.in.Var("cmcp_ship_theme")) {
-		for _, t := range []string{u.ConsoleTheme, u.ShipTheme, suggest} {
-			if t != "" {
-				return t
-			}
+	if mode == "fixed" || (mode == "" && fixed != "" && fixed != "auto") {
+		if fixed != "" && fixed != "auto" {
+			return fixed
+		}
+		return "tng"
+	}
+	for _, t := range []string{u.ConsoleTheme, u.ShipTheme, suggest} {
+		if t != "" && theme.Builtin(t) != nil {
+			return t
 		}
 	}
-	return "tng" // the default when nothing is chosen or suggested; %cmcp_theme plain turns the frame off
+	if fixed != "" && fixed != "auto" {
+		return fixed
+	}
+	return "tng" // nothing suggested: the default
 }
 
 // cmcpScreenFor finds the screen to draw (a pack screen, a built-in one, or a client-local override).

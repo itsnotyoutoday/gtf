@@ -206,7 +206,10 @@ func (c *Client) packFetch(s *Session, j *packJob) {
 		s.conn.SendProto("gmcp", msg.PkgPackGet, msg.PackGet{ID: j.ref.ID, Version: j.ref.Version, SHA256: j.ref.SHA256})
 	case u.Welcome != nil && u.Welcome.Assets != nil && u.Welcome.Assets.Origin != "":
 		a := u.Welcome.Assets
-		pol := fetch.Policy{GameHost: host, AllowedOrigins: map[string]bool{}, DevTrustLoopbackTLS: onVar(c.in.Var("cmcp_dev_tls"))}
+		pol := fetch.Policy{GameHost: host, AllowedOrigins: map[string]bool{}, DevTrustLoopbackTLS: onVar(c.in.Var("cmcp_dev_tls")),
+			// developer-only (%cmcp_dev_loopback_http, default off): an http:// origin is accepted only when it is
+			// loopback, equal to the one THIS connection's Welcome announced, and the game host is loopback too
+			DevAllowLoopbackHTTP: onVar(c.in.Var("cmcp_dev_loopback_http")), Announced: a.Origin}
 		for _, o := range strings.Fields(c.in.Var("cmcp_origins")) {
 			pol.AllowedOrigins[strings.ToLower(o)] = true
 		}
@@ -309,3 +312,21 @@ func (c *Client) cmcpPacksList(s *Session) []string {
 }
 
 var _ = time.Second
+
+// cmcpPackWanted starts getting a pack the core announced as wanted (the active ship, screen or context
+// names it, or WantPack asked): layout packs only; sound and theme packs are not used by gtf.
+func (c *Client) cmcpPackWanted(s *Session, ref msg.PackRef) {
+	if ref.Kind != "" && ref.Kind != "layout" {
+		return
+	}
+	cs := s.cmScr()
+	if cs.jobs == nil {
+		cs.jobs = map[string]*packJob{}
+	}
+	if cs.jobs[ref.SHA256] != nil {
+		return
+	}
+	j := &packJob{ref: ref}
+	cs.jobs[ref.SHA256] = j
+	c.packStart(s, j)
+}

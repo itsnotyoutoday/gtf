@@ -135,6 +135,10 @@ func (c *Client) cmcpNote(s *Session, n session.Note) {
 	switch n.Kind {
 	case session.NoteReply, session.NoteCmdTimeout:
 		c.cmcpReply(s, n)
+	case session.NotePackWanted:
+		if n.PackRef != nil {
+			c.cmcpPackWanted(s, *n.PackRef)
+		}
 	case session.NoteBye:
 		c.cmcpDebug("ended: %s", n.Text)
 	case session.NoteError:
