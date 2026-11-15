@@ -15,6 +15,7 @@ package client
 
 import (
 	"fmt"
+	"github.com/itsnotyoutoday/gtf/internal/raster"
 	"io"
 	"os"
 	"path/filepath"
@@ -70,11 +71,13 @@ type Config struct {
 
 // Client is the application.
 type Client struct {
-	cfg  Config
-	in   *gtfparser.Interp
-	run  *gtfparser.Runner
-	ui   *ui.UI
-	base *ui.Screen
+	cfg Config
+	// experimental vector sprites (/sprite): rendered-cell cache
+	spriteCache *raster.Cache
+	in          *gtfparser.Interp
+	run         *gtfparser.Runner
+	ui          *ui.UI
+	base        *ui.Screen
 
 	sessions   map[string]*Session
 	wscreens   map[string]*ui.Screen // each world's screen outlives its socket (tf: world->screen)

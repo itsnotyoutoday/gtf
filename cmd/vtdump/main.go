@@ -120,6 +120,34 @@ func fill(img *image.RGBA, x0, y0, x1, y1 int, c color.RGBA) {
 	draw.Draw(img, image.Rect(x0, y0, x1, y1), &image.Uniform{c}, image.Point{}, draw.Src)
 }
 
+// quadrantRunes is indexed by which quadrants are filled (bit 0 upper left, 1 upper right, 2 lower left, 3 lower right).
+var quadrantRunes = [16]rune{' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█'}
+
+// blockBits returns the fill pattern of a quadrant block, or -1 for any other rune.
+func blockBits(r rune, table []rune) int {
+	if r < 0x2596 || r > 0x259f {
+		return -1
+	}
+	for i, q := range table {
+		if q == r {
+			return i
+		}
+	}
+	return -1
+}
+
+// sextantBits is the 2x3 fill pattern of U+1FB00..U+1FB3B (the table skips the left and right halves).
+func sextantBits(r rune) int {
+	p := int(r-0x1fb00) + 1
+	if p >= 21 {
+		p++
+	}
+	if p >= 42 {
+		p++
+	}
+	return p
+}
+
 func writePNG(s *vt.Screen, path string) error {
 	img := image.NewRGBA(image.Rect(0, 0, s.W*cw, s.H*ch))
 	fill(img, 0, 0, s.W*cw, s.H*ch, color.RGBA{0, 0, 0, 255})
@@ -139,6 +167,26 @@ func writePNG(s *vt.Screen, path string) error {
 				fill(img, px, py, px+cw, py+ch/2, st.fg)
 			case r == '▄':
 				fill(img, px, py+ch/2, px+cw, py+ch, st.fg)
+			case r == '▌':
+				fill(img, px, py, px+cw/2, py+ch, st.fg)
+			case r == '▐':
+				fill(img, px+cw/2, py, px+cw, py+ch, st.fg)
+			case blockBits(r, quadrantRunes[:]) >= 0:
+				bits := blockBits(r, quadrantRunes[:])
+				for i := 0; i < 4; i++ {
+					if bits&(1<<i) != 0 {
+						qx, qy := i%2, i/2
+						fill(img, px+qx*cw/2, py+qy*ch/2, px+(qx+1)*cw/2, py+(qy+1)*ch/2, st.fg)
+					}
+				}
+			case r >= 0x1fb00 && r <= 0x1fb3b:
+				bits := sextantBits(r)
+				for i := 0; i < 6; i++ {
+					if bits&(1<<i) != 0 {
+						qx, qy := i%2, i/2
+						fill(img, px+qx*cw/2, py+qy*ch/3, px+(qx+1)*cw/2, py+(qy+1)*ch/3, st.fg)
+					}
+				}
 			case r >= 0x2800 && r <= 0x28ff:
 				bits := int(r - 0x2800)
 				pos := [8][2]int{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {1, 1}, {1, 2}, {0, 3}, {1, 3}}

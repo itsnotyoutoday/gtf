@@ -1,0 +1,16 @@
+{
+  "viewBox": [0, 0, 120, 80],
+  "layers": [
+    {"transform": "rotate(23 60 40) scale(1.1 0.9)", "shapes": [
+      {"type": "path", "d": "M10 40 A30 18 30 1 1 70 40 A25 12 -15 0 0 110 30 Q90 5 60 10 T20 20 C5 25 5 55 30 60 S60 75 90 65 Z",
+       "fill": {"type": "radial", "cx": 60, "cy": 40, "r": 60, "spread": "reflect", "stops": [[0, "#ff8a3c"], [0.5, "#3c8aff88"], [1, "#101040"]]},
+       "stroke": {"paint": {"type": "linear", "x1": 0, "y1": 0, "x2": 120, "y2": 80, "stops": [[0, "#fff"], [1, "#0f0"]]}, "width": 3.3, "join": "round", "cap": "round"}},
+      {"type": "polyline", "points": [5, 5, 40, 70, 60, 8, 100, 72, 115, 10], "fill": "none", "stroke": {"paint": "#ffee88", "width": 2.5, "join": "miter", "miterLimit": 3}}
+    ]},
+    {"opacity": 0.6, "clip": {"type": "ellipse", "cx": 60, "cy": 40, "rx": 50, "ry": 30, "transform": "rotate(-12 60 40)"}, "shapes": [
+      {"type": "rect", "x": 5, "y": 5, "w": 110, "h": 70, "rx": 12, "fill": "#2a9d8f", "transform": "rotate(7.5 60 40)"},
+      {"type": "line", "x1": 0, "y1": 0, "x2": 120, "y2": 80, "stroke": {"paint": "#e76f51", "width": 6, "cap": "square"}}
+    ]}
+  ],
+  "glows": [{"id": "g", "x": 30, "y": 20, "r": 15, "color": "#88ccff"}]
+}

@@ -1,0 +1,42 @@
+{
+  "viewBox": [0, 0, 100, 100],
+  "layers": [
+    {
+      "id": "atmosphere",
+      "shapes": [
+        {"type": "circle", "cx": 50, "cy": 50, "r": 49,
+         "fill": {"type": "radial", "cx": 50, "cy": 50, "r": 49, "stops": [[0, "#6fb4ff00"], [0.86, "#6fb4ff00"], [0.92, "#7fc4ff88"], [1, "#9fd4ff00"]]}}
+      ]
+    },
+    {
+      "id": "surface",
+      "clip": {"type": "circle", "cx": 50, "cy": 50, "r": 42},
+      "shapes": [
+        {"type": "circle", "cx": 50, "cy": 50, "r": 42,
+         "fill": {"type": "radial", "cx": 38, "cy": 36, "r": 62, "stops": [[0, "#3d86d6"], [0.6, "#1b4f9c"], [1, "#0a1f4a"]]}},
+        {"type": "path", "fillRule": "evenodd", "zone": "land",
+         "d": "M22 30 Q30 20 44 26 Q52 32 46 42 Q40 48 44 56 Q38 62 30 54 Q18 46 22 30 Z M34 36 Q38 34 40 38 Q38 42 34 40 Z",
+         "fill": {"type": "linear", "x1": 20, "y1": 20, "x2": 50, "y2": 62, "stops": [[0, "#7dbb5a"], [1, "#4d7c3a"]]}},
+        {"type": "path", "d": "M58 52 Q70 44 80 54 Q84 66 72 74 Q62 72 58 62 Z", "zone": "land",
+         "fill": {"type": "linear", "x1": 58, "y1": 44, "x2": 80, "y2": 74, "stops": [[0, "#b8b058"], [1, "#6e6a30"]]}},
+        {"type": "ellipse", "cx": 36, "cy": 66, "rx": 16, "ry": 3.2, "opacity": 0.5, "fill": "#ffffff", "transform": "rotate(-18 36 66)"},
+        {"type": "ellipse", "cx": 66, "cy": 32, "rx": 14, "ry": 2.6, "opacity": 0.45, "fill": "#ffffff", "transform": "rotate(12 66 32)"},
+        {"type": "circle", "cx": 35, "cy": 32, "r": 76,
+         "fill": {"type": "radial", "cx": 35, "cy": 32, "r": 76, "stops": [[0, "#02061600"], [0.38, "#02061600"], [1, "#020616f0"]]}}
+      ]
+    },
+    {
+      "id": "rim",
+      "shapes": [
+        {"type": "circle", "cx": 50, "cy": 50, "r": 42, "fill": "none",
+         "stroke": {"paint": {"type": "linear", "x1": 20, "y1": 20, "x2": 80, "y2": 80, "stops": [[0, "#cfeaffcc"], [0.6, "#7fc4ff33"], [1, "#7fc4ff00"]]}, "width": 1.4}}
+      ]
+    }
+  ],
+  "zones": [
+    {"id": "land", "color": "#ff2a10b0"}
+  ],
+  "glows": [
+    {"id": "city", "x": 36, "y": 38, "r": 6, "color": "#ffd070", "intensity": 0.5}
+  ]
+}

@@ -21,7 +21,7 @@ type (
 // here, through the engine's public registration points.
 func (c *Client) install() {
 	in := c.in
-	for n, f := range map[string]cmdf{"panel": c.cmdPanel, "layout": c.cmdLayout, "canvas": c.cmdCanvas, "update": c.cmdUpdate, "version": c.cmdVersion, "restart": c.cmdRestart,
+	for n, f := range map[string]cmdf{"panel": c.cmdPanel, "layout": c.cmdLayout, "canvas": c.cmdCanvas, "sprite": c.cmdSprite, "update": c.cmdUpdate, "version": c.cmdVersion, "restart": c.cmdRestart,
 		"squatter": c.cmdSquatter, "pair": c.cmdPair} {
 		in.RegisterCommand(n, f)
 	}

@@ -76,6 +76,10 @@ func (c *Ctx) widget(w tWidget) {
 		if len(pos) > 0 {
 			c.canvasWidget(pos[0])
 		}
+	case "sprite": // experimental, see sprite.go
+		if len(pos) > 0 {
+			c.spriteWidget(pos[0])
+		}
 	}
 }
 

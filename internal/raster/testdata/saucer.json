@@ -1,0 +1,62 @@
+{
+  "viewBox": [0, 0, 100, 70],
+  "preserveAspect": "xMidYMid meet",
+  "layers": [
+    {
+      "id": "pods",
+      "shapes": [
+        {"type": "rect", "x": 1, "y": 28, "w": 17, "h": 9, "rx": 4.5, "zone": "port",
+         "fill": {"type": "linear", "x1": 0, "y1": 28, "x2": 0, "y2": 37, "stops": [[0, "#7d8fa6"], [1, "#2c3748"]]},
+         "stroke": {"paint": "#1b2230", "width": 0.8}},
+        {"type": "rect", "x": 82, "y": 28, "w": 17, "h": 9, "rx": 4.5, "zone": "starboard",
+         "fill": {"type": "linear", "x1": 0, "y1": 28, "x2": 0, "y2": 37, "stops": [[0, "#7d8fa6"], [1, "#2c3748"]]},
+         "stroke": {"paint": "#1b2230", "width": 0.8}},
+        {"type": "line", "x1": 18, "y1": 32.5, "x2": 30, "y2": 32.5, "stroke": {"paint": "#46566e", "width": 2.2, "cap": "round"}},
+        {"type": "line", "x1": 70, "y1": 32.5, "x2": 82, "y2": 32.5, "stroke": {"paint": "#46566e", "width": 2.2, "cap": "round"}}
+      ]
+    },
+    {
+      "id": "hull",
+      "shapes": [
+        {"type": "ellipse", "cx": 50, "cy": 35, "rx": 42, "ry": 27, "zone": "hull",
+         "fill": {"type": "radial", "cx": 42, "cy": 24, "r": 56, "stops": [[0, "#f2f6fb"], [0.45, "#a9b8cc"], [1, "#46546a"]]},
+         "stroke": {"paint": "#222b3a", "width": 1.2}},
+        {"type": "ellipse", "cx": 50, "cy": 35, "rx": 33, "ry": 20.5, "fill": "none",
+         "stroke": {"paint": "#5f6f86", "width": 0.7}},
+        {"type": "ellipse", "cx": 50, "cy": 35, "rx": 24, "ry": 14.5, "fill": "none",
+         "stroke": {"paint": "#d9e4f2aa", "width": 0.6}},
+        {"type": "group", "id": "windows", "children": [
+          {"type": "circle", "cx": 22, "cy": 38, "r": 1.4, "fill": "#ffe9a8"},
+          {"type": "circle", "cx": 28, "cy": 44, "r": 1.4, "fill": "#ffe9a8"},
+          {"type": "circle", "cx": 36, "cy": 49, "r": 1.4, "fill": "#ffe9a8"},
+          {"type": "circle", "cx": 50, "cy": 51, "r": 1.4, "fill": "#ffe9a8"},
+          {"type": "circle", "cx": 64, "cy": 49, "r": 1.4, "fill": "#ffe9a8"},
+          {"type": "circle", "cx": 72, "cy": 44, "r": 1.4, "fill": "#ffe9a8"},
+          {"type": "circle", "cx": 78, "cy": 38, "r": 1.4, "fill": "#ffe9a8"}
+        ]},
+        {"type": "path", "d": "M50 8 L50 20 M50 50 L50 62 M8 35 L26 35 M74 35 L92 35", "fill": "none",
+         "stroke": {"paint": "#3a4659", "width": 0.6}}
+      ]
+    },
+    {
+      "id": "dome",
+      "shapes": [
+        {"type": "ellipse", "cx": 50, "cy": 31, "rx": 15, "ry": 10.5, "zone": "bridge",
+         "fill": {"type": "radial", "cx": 46, "cy": 27, "r": 17, "stops": [[0, "#e8ffff"], [0.5, "#58c7e8"], [1, "#12466b"]]},
+         "stroke": {"paint": "#0d2d47", "width": 0.9}},
+        {"type": "path", "d": "M41 28 Q50 20 59 28", "fill": "none", "stroke": {"paint": "#ffffffaa", "width": 1, "cap": "round"}}
+      ]
+    }
+  ],
+  "zones": [
+    {"id": "hull", "color": "#ff3a1ec8"},
+    {"id": "port", "color": "#ff3a1ec8"},
+    {"id": "starboard", "color": "#ff3a1ec8"},
+    {"id": "bridge", "color": "#ffd23ce0"}
+  ],
+  "glows": [
+    {"id": "port-engine", "x": 9, "y": 32.5, "r": 11, "color": "#5ad2ff"},
+    {"id": "starboard-engine", "x": 91, "y": 32.5, "r": 11, "color": "#5ad2ff"},
+    {"id": "beacon", "x": 50, "y": 12, "r": 7, "color": "#ff5555", "intensity": 0.8}
+  ]
+}

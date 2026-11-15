@@ -71,6 +71,7 @@ quoted strings; quote references that contain spaces (`"expr:hp * 2"`).
 | `{scope REF width=30 height=3 color=#rrggbb fill=on}` | a multi-row line graph of a numeric binding's recent history (Braille) |
 | `{ansi REF}` | renders a variable holding text with SGR escapes (ESC `[38;2;r;g;bm` truecolor, `\e[48;5;Nm` 256-colour, bold, reverse ...); the two characters `\e` can stand in for ESC |
 | `{canvas NAME}` | shows a `/canvas` drawing surface |
+| `{sprite NAME}` | (experimental) shows a vector sprite rendered with `/sprite FILE -p NAME` |
 | `{bar CUR MAX gradient=#from,#to}` | colours the bar along a ramp |
 
 ## /canvas
@@ -119,6 +120,32 @@ and are quantized to the terminal's depth.
 ```
 
 Reacting from scripts: `/def -hGMCP -t'Char.Vitals *' ~lowhp = /if (gmcp_get("Char.Vitals.hp") < 20) /echo -aBCred LOW HP%; /endif`.
+
+## Sprites (experimental)
+
+`internal/raster` rasterises vector art (layers of paths, polygons, ellipses, rects, strokes with caps and joins,
+solid/linear/radial fills, opacity, transforms, clips, named tint zones and glow anchors in a viewBox) into an
+anti-aliased RGBA buffer at any size and converts it to terminal cells. It knows nothing about the CMCP wire
+format; the JSON form documented on `raster.Sprite` is a stand-in that is easy to map to the final spec. Samples
+are in `internal/raster/testdata/`.
+
+```
+/sprite FILE [W H] [-m half|quad|sext|braille|ascii] [-c tc|256|16|mono] [-b #rrggbb] [-z id=v,..] [-g id=v,..] [-p NAME]
+/sprite -d NAME
+/canvas sprite NAME FILE x y [w h] [zones=id=v,..] [glows=id=v,..]
+```
+
+* Without `-p`, `/sprite` prints the picture into the output (W x H cells, default 40 x 20). With `-p NAME` it is stored
+  for a panel: `/panel ... = {sprite NAME}`. `-d NAME` forgets it.
+* Modes: `half` is half blocks, 1 x 2 pixels per cell (default, works everywhere); `quad` is quadrant blocks, 2 x 2, two
+  colours per cell; `sext` is sextants (U+1FB00..), 2 x 3, needs a recent font; `braille` is 2 x 4 dots; `ascii` is a
+  density ramp. Colours: `tc` 24-bit (default), `256`, `16`, `mono` (no colour codes).
+* `-b` blends anti-aliased edges into the given background colour. Without it, pixels under half coverage are left
+  transparent (the terminal's own background) and the rest drawn opaque, so soft edges become hard.
+* `-z hull=0.5,port=1` tints the named zones toward their colour (damage overlays); `-g engine=0` switches a glow off.
+* `/canvas sprite` rasterises at w x h pixels (default: the canvas) and blits onto a `/canvas` surface at pixel x, y.
+* Input is size-limited (1 MB document, 4096 shapes, 12 levels of nesting, 50 000 path segments, 1M pixels) and the
+  rasteriser has a hard work budget; hostile files give an error, never a hang.
 
 ## Demo
 

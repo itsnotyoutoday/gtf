@@ -23,12 +23,13 @@ type panelState struct {
 	world    map[string]string // per-world layout assignment
 	seen     map[string]string // last values of var:/expr: dependencies
 	c        *Client
-	files    map[string]string         // layout name -> file it was loaded from
-	canvases map[string]*layout.Canvas // /canvas surfaces, shown by {canvas NAME}
+	files    map[string]string            // layout name -> file it was loaded from
+	canvases map[string]*layout.Canvas    // /canvas surfaces, shown by {canvas NAME}
+	sprites  map[string]*layout.CellBlock // /sprite -p NAME, shown by {sprite NAME} (experimental)
 }
 
 func newPanelState() *panelState {
-	return &panelState{layouts: map[string]*layout.Layout{}, world: map[string]string{}, seen: map[string]string{}, canvases: map[string]*layout.Canvas{}}
+	return &panelState{layouts: map[string]*layout.Layout{}, world: map[string]string{}, seen: map[string]string{}, canvases: map[string]*layout.Canvas{}, sprites: map[string]*layout.CellBlock{}}
 }
 
 // layoutNamed returns (creating if asked) a layout.
@@ -81,6 +82,11 @@ func (p *panelState) Resolve(ref string) (any, bool) {
 	case "canvas":
 		if cv, ok := p.canvases[ref[i+1:]]; ok {
 			return cv, true
+		}
+		return nil, false
+	case "sprite":
+		if b, ok := p.sprites[ref[i+1:]]; ok {
+			return b, true
 		}
 		return nil, false
 	case "var":

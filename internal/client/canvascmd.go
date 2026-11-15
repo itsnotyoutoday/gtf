@@ -29,6 +29,7 @@ import (
 //	/canvas stars NAME x y w h count seed [t=PHASE]   a starfield
 //	/canvas grad NAME x y w h color1 color2 [v]
 //	/canvas text NAME cellx celly color text...
+//	/canvas sprite NAME FILE x y [w h] [zones=id=v,..] [glows=id=v,..]   (experimental) rasterise a vector sprite file
 //
 // Any drawing command accepts a=ALPHA (0..1). Colors are #rrggbb, names, or 256:N.
 func (c *Client) cmdCanvas(in *gtfparser.Interp, args string) gtfparser.Value {
@@ -226,6 +227,10 @@ func (c *Client) cmdCanvas(in *gtfparser.Interp, args string) gtfparser.Value {
 			return fail("usage: /canvas grad NAME x y w h color1 color2 [v]")
 		}
 		cv.Gradient(int(n[0]), int(n[1]), int(n[2]), int(n[3]), c1, c2, len(pos) > 6 && pos[6] == "v")
+	case "sprite": // experimental
+		if err := c.canvasSprite(cv, pos, opts); err != nil {
+			return fail("sprite: %v", err)
+		}
 	case "text":
 		n, ok1 := nums(2)
 		col, ok2 := color(2)

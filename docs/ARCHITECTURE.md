@@ -33,6 +33,9 @@ internal/squatter/   squatter daemon + tf bridge built into gtf (SquatClient pai
                      as subdirectories; imports nothing from gtf; only internal/client imports it
                      (docs/SQUATTER.md)
 internal/layout/     panel/layout system: templates, bindings, widgets, layout engine -> cell grids
+internal/raster/     (experimental) vector sprite rasteriser: JSON/path-data art -> anti-aliased RGBA -> terminal cells
+                     (half block, quadrants, sextants, Braille, ASCII; 24-bit/256/16/mono); standard library only,
+                     imported by internal/client; docs in docs/LAYOUTS.md (Sprites)
 gtflib/              embedded TF library: the unmodified real tf library (gtflib/tf/) and gtf-only scripts (gtflib/gtf/layout.tf, gtflib/gtf/layouts/*.layout)
 docs/                this file, PROTOCOLS.md, LAYOUTS.md, COMMAND-STATUS.md
 scripts/             compare_tf.py (screen diff vs real tf), e2e_evennia.py, env.sh
@@ -47,13 +50,14 @@ in gtf and is loaded on top of it.
 
 ```
 cmd/gtf          -> internal/client, gtflib
-internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/update, internal/handoff, gtflib, the engine module
+internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/raster, internal/update, internal/handoff, gtflib, the engine module
 internal/handoff -> nothing internal
 internal/client  -> internal/ui, internal/net(/...), internal/layout, internal/squatter(/...), gtflib, the engine module
 internal/squatter -> itself only (no gtf package, no engine)
 internal/ui      -> internal/layout
 internal/net     -> internal/net/... only
 internal/layout  -> nothing internal
+internal/raster  -> nothing internal
 internal/update  -> nothing internal
 gtflib           -> nothing internal
 ```
@@ -125,7 +129,7 @@ scenarios of `scripts/compare_tf.py`.
 
 ## gtf-only additions (registered through the public API)
 
-* commands `/panel`, `/layout` (see LAYOUTS.md);
+* commands `/panel`, `/layout`, `/canvas`, and the experimental `/sprite` (see LAYOUTS.md);
 * functions `gmcp_get gmcp_json gmcp_has msdp_get mssp_get gmcp_send msdp_send`;
   `gmcp()` and `msdp()` keep real tf's meaning (they *send*);
 * hooks `GMCP`, `MSDP`, `GMCP_LOGIN` (enabled with `EnableHookEvents`).
