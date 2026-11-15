@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,10 +36,11 @@ type cmcpGame struct {
 
 type cmcpDialer struct {
 	packs map[string][]byte // sha256 -> bytes the fake game serves inline
-	gets  int               // Cobra.Pack.Get received
+	gets  atomic.Int32      // Cobra.Pack.Get received
 	t     *testing.T
 	c     **Client
-	game  *cmcpGame
+	gmu   sync.Mutex
+	gm0   *cmcpGame
 	cfg   session.ServerConfig
 }
 
@@ -46,8 +48,10 @@ func (d *cmcpDialer) Dial(ctx context.Context, w World, tr *DialTrace) (*gnet.Co
 	tr.try("127.0.0.1 " + w.Port)
 	a, b := net.Pipe()
 	g := &cmcpGame{t: d.t, conn: b, srv: session.NewServer(d.cfg), dec: frame.NewDecoder(0), done: make(chan struct{})}
-	d.game = g
-	g.packs, g.onGet = d.packs, func() { d.gets++ }
+	d.gmu.Lock()
+	d.gm0 = g
+	d.gmu.Unlock()
+	g.packs, g.onGet = d.packs, func() { d.gets.Add(1) }
 	go g.run()
 	return gnet.NewConn(a, gnet.Options{Env: (*d.c).cmcpEnv()}), nil
 }
@@ -188,11 +192,11 @@ func testServerConfig() session.ServerConfig {
 func TestCmcpHandshake(t *testing.T) {
 	c, scr, d := newCmcpTest(t, testServerConfig())
 	exec(c, "/connect localhost 4101")
-	cmEventually(t, "server ready", func() bool { return d.game != nil && d.game.srv.State() == session.SrvReady })
-	if d.game.received("Core.Supports.Set") != 1 || d.game.received("Cobra.Hello") != 1 {
-		t.Fatalf("frames: %+v", d.game.got)
+	cmEventually(t, "server ready", func() bool { return d.gm() != nil && d.gm().srv.State() == session.SrvReady })
+	if d.gm().received("Core.Supports.Set") != 1 || d.gm().received("Cobra.Hello") != 1 {
+		t.Fatalf("frames: %+v", d.gm().got)
 	}
-	h := d.game.srv.Hello()
+	h := d.gm().srv.Hello()
 	if h == nil || h.Render == nil || h.Render.Kind != "cell" || h.Client.Kind != "tty" {
 		t.Fatalf("hello %+v", h)
 	}
@@ -203,4 +207,10 @@ func TestCmcpHandshake(t *testing.T) {
 	})
 	exec(c, "/cmcp status")
 	waitScreen(t, c, scr, "CMCP: ready")
+}
+
+func (d *cmcpDialer) gm() *cmcpGame {
+	d.gmu.Lock()
+	defer d.gmu.Unlock()
+	return d.gm0
 }

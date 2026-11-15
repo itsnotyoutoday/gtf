@@ -31,9 +31,32 @@ type recTerm struct {
 
 func (r *recTerm) Write(p []byte) (int, error) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.buf = append(r.buf, p...)
-	r.mu.Unlock()
 	return r.Screen.Write(p)
+}
+
+func (r *recTerm) Text() string { r.mu.Lock(); defer r.mu.Unlock(); return r.Screen.Text() }
+func (r *recTerm) Dump() string { r.mu.Lock(); defer r.mu.Unlock(); return r.Screen.Dump() }
+
+func (f *screenFixture) contain(t *testing.T, subs ...string) {
+	t.Helper()
+	txt := f.term.Text()
+	for _, s := range subs {
+		if !strings.Contains(txt, s) {
+			t.Fatalf("screen lacks %q:\n%s", s, f.term.Dump())
+		}
+	}
+}
+
+func (f *screenFixture) lack(t *testing.T, subs ...string) {
+	t.Helper()
+	txt := f.term.Text()
+	for _, s := range subs {
+		if strings.Contains(txt, s) {
+			t.Fatalf("screen has %q:\n%s", s, f.term.Dump())
+		}
+	}
 }
 
 // fakeGame executes commands and records them.
@@ -107,6 +130,13 @@ func newScreenFixture(t *testing.T, w, h int) *screenFixture {
 
 func newScreenFixtureOpt(t *testing.T, w, h int, home string, packs map[string][]byte) *screenFixture {
 	t.Helper()
+	return newScreenFixtureSetup(t, w, h, home, packs)
+}
+
+// newScreenFixtureSetup runs setup commands before connecting; with %cmcp off it returns without
+// waiting for CMCP.
+func newScreenFixtureSetup(t *testing.T, w, h int, home string, packs map[string][]byte, setup ...string) *screenFixture {
+	t.Helper()
 	var cat []msg.CommandSpec
 	readJSON(t, "commands.catalogue.json", &cat)
 	g := &fakeGame{docs: loadDocs(t), epoch: 1}
@@ -123,8 +153,23 @@ func newScreenFixtureOpt(t *testing.T, w, h int, home string, packs map[string][
 	}
 	t.Cleanup(c.Close)
 	f := &screenFixture{t: t, c: c, term: term, d: d, game: g, docs: g.docs}
+	f0 := f
+	exec(c, setup...)
 	exec(c, "/connect localhost 4101")
-	cmEventually(t, "ready", func() bool { return d.game != nil && d.game.srv.State() == session.SrvReady })
+	if len(setup) > 0 && strings.Contains(strings.Join(setup, " "), "cmcp=off") {
+		cmEventually(t, "supports", func() bool { return d.gm() != nil && d.gm().received("Core.Supports.Set") == 1 })
+		time.Sleep(200 * time.Millisecond)
+		if d.gm().srv.State() != session.SrvOff || d.gm().received("Cobra.Hello") != 0 {
+			t.Fatalf("CMCP offered or answered with %%cmcp off")
+		}
+		for _, fr := range d.gm().got {
+			if fr.Package == "Core.Supports.Set" && strings.Contains(string(fr.Payload), "Cobra") {
+				t.Fatalf("Cobra declared: %s", fr.Payload)
+			}
+		}
+		return f0
+	}
+	cmEventually(t, "ready", func() bool { return d.gm() != nil && d.gm().srv.State() == session.SrvReady })
 	cmEventually(t, "client ready", f.clientReady)
 	return f
 }
@@ -155,7 +200,7 @@ func (f *screenFixture) console(screen, console string, mutate func(*msg.Console
 	if mutate != nil {
 		mutate(&c)
 	}
-	f.d.game.with(func(s *session.Server) {
+	f.d.gm().with(func(s *session.Server) {
 		s.SetConsole(c)
 		for _, sub := range c.Subscribe {
 			if doc, ok := f.docs[sub.Pkg]; ok {
@@ -245,7 +290,7 @@ func TestCmcpDamageAssignByKeyboard(t *testing.T) {
 		t.Fatalf("ran %q", got)
 	}
 	f.render()
-	mustContain(t, f.term.Screen, "cmcp> dmg assign 1=Port_Nacelle")
+	f.contain(t, "cmcp> dmg assign 1=Port_Nacelle")
 }
 
 // The real input line always works: with focus on, a typed line is not taken by the screen.
@@ -279,7 +324,7 @@ func TestCmcpReadOnlyOffersNoCommands(t *testing.T) {
 	if n := len(f.game.commands()); n != 0 {
 		t.Fatalf("sent while read-only: %v", f.game.commands())
 	}
-	mustContain(t, f.term.Screen, "read-only")
+	f.contain(t, "read-only")
 }
 
 var updateGolden = flag.Bool("update", false, "rewrite the golden screens")
@@ -351,7 +396,7 @@ func (f *screenFixture) sendContext(c msg.Context) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.d.game.write(b)
+	f.d.gm().write(b)
 }
 
 // The context stack (spec 3.3): a higher-priority event context takes the screen, the console's
@@ -366,13 +411,13 @@ func TestCmcpContextStack(t *testing.T) {
 		Commands: []string{"power.set"}}})
 	cmEventually(t, "power screen on top", func() bool { id, _ := f.screenState(); return id == "std.power" })
 	f.render()
-	mustContain(t, f.term.Screen, "POWER", "[2 contexts]")
+	f.contain(t, "POWER", "[2 contexts]")
 	exec(f.c, "/cmcp status")
 	f.render()
-	mustContain(t, f.term.Screen, "context * event:power-surge", "context   console")
+	f.contain(t, "context * event:power-surge", "context   console")
 	f.sendContext(msg.Context{Rev: 3, Ship: ship, Op: "pop", Key: "event:power-surge", Ctx: 7})
 	cmEventually(t, "back on operations", func() bool { id, _ := f.screenState(); return id == "std.operations" })
 	f.render()
-	mustContain(t, f.term.Screen, "OPERATIONS")
-	mustNotContain(t, f.term.Screen, "[2 contexts]")
+	f.contain(t, "OPERATIONS")
+	f.lack(t, "[2 contexts]")
 }

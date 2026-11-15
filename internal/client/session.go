@@ -107,6 +107,7 @@ func (c *Client) connect(w World, o gtfparser.ConnectOptions) error {
 	if old != nil && !old.dead() {
 		return fmt.Errorf("socket to %s already exists", w.Name)
 	}
+	c.cmcpWanted.Store(c.cmcpEnabled())
 	toFg := o.Foreground || (!o.Background && c.fgContext())
 	// a dead socket of the same world is recycled: same place in the list, same screen
 	var scr *ui.Screen

@@ -35,8 +35,9 @@ func (c *Client) cmcpEnabled() bool {
 // handler reads when GMCP turns on (it then adds "Cobra 1" to Core.Supports.Set).
 func (c *Client) cmcpEnv() *telnet.Env {
 	e := telnet.NewEnv()
+	on := c.cmcpWanted.Load() // set on the client goroutine at connect: the dialer runs elsewhere
 	e.Do(func(i *telnet.EnvInfo) {
-		if c.cmcpEnabled() {
+		if on {
 			i.Extra["cmcp"] = "1"
 		}
 	})
