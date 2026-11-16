@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -32,6 +33,7 @@ type cmcpGame struct {
 	packs map[string][]byte
 	onGet func()
 	done  chan struct{}
+	mute  bool
 }
 
 type cmcpDialer struct {
@@ -42,6 +44,7 @@ type cmcpDialer struct {
 	gmu   sync.Mutex
 	gm0   *cmcpGame
 	cfg   session.ServerConfig
+	mute  bool // the game never answers CMCP (a server that does not know it)
 }
 
 func (d *cmcpDialer) Dial(ctx context.Context, w World, tr *DialTrace) (*gnet.Conn, error) {
@@ -51,7 +54,7 @@ func (d *cmcpDialer) Dial(ctx context.Context, w World, tr *DialTrace) (*gnet.Co
 	d.gmu.Lock()
 	d.gm0 = g
 	d.gmu.Unlock()
-	g.packs, g.onGet = d.packs, func() { d.gets.Add(1) }
+	g.packs, g.onGet, g.mute = d.packs, func() { d.gets.Add(1) }, d.mute
 	go g.run()
 	return gnet.NewConn(a, gnet.Options{Env: (*d.c).cmcpEnv()}), nil
 }
@@ -66,6 +69,9 @@ func (g *cmcpGame) flush() {
 	g.mu.Lock()
 	o := g.srv.Drain()
 	g.mu.Unlock()
+	if g.mute {
+		return
+	}
 	for _, f := range o.Frames {
 		b, err := frame.Encode(f.Package, f.Payload)
 		if err != nil {
@@ -182,7 +188,7 @@ func cmEventually(t *testing.T, what string, f func() bool) {
 }
 
 func testServerConfig() session.ServerConfig {
-	return session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536,
+	return session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536, Protos: []int{2},
 		Packages: []string{"Space.Power", "Space.Ship.Status"},
 		Commands: []msg.CommandSpec{{Name: "hatch.toggle", Consoles: []string{"operations"}, Mutating: true, Text: "hatch", Args: map[string]msg.ArgSpec{}}}}
 }
@@ -213,4 +219,62 @@ func (d *cmcpDialer) gm() *cmcpGame {
 	d.gmu.Lock()
 	defer d.gmu.Unlock()
 	return d.gm0
+}
+
+// The gate names the version (spec 20.2.1): gtf offers "Cobra 2" and never "Cobra 1".
+func TestCmcpGateIsCobra2(t *testing.T) {
+	c, _, d := newCmcpTest(t, testServerConfig())
+	exec(c, "/connect localhost 4101")
+	cmEventually(t, "supports", func() bool { return d.gm() != nil && d.gm().received("Core.Supports.Set") == 1 })
+	d.gm().mu.Lock()
+	defer d.gm().mu.Unlock()
+	for _, f := range d.gm().got {
+		if f.Package != "Core.Supports.Set" {
+			continue
+		}
+		var l []string
+		json.Unmarshal(f.Payload, &l)
+		var have2, have1 bool
+		for _, x := range l {
+			have2 = have2 || x == "Cobra 2"
+			have1 = have1 || x == "Cobra 1"
+		}
+		if !have2 || have1 {
+			t.Fatalf("Core.Supports.Set %v", l)
+		}
+	}
+}
+
+// A v1-only server that answers Cobra.Server{proto:[1]}: gtf sends Bye and shows ONE visible notice
+// (not only under cmcp_debug), and the connection stays (spec 20.2.2).
+func TestCmcpV1OnlyServerVisibleNotice(t *testing.T) {
+	cfg := testServerConfig()
+	cfg.Protos = []int{1}
+	c, scr, d := newCmcpTest(t, cfg)
+	exec(c, "/connect localhost 4101")
+	waitScreen(t, c, scr, "this game speaks CMCP 1 only: text mode")
+	cmEventually(t, "bye", func() bool { return d.gm().received("Cobra.Bye") == 1 })
+	if n := strings.Count(scr.Text(), "text mode"); n != 1 {
+		t.Fatalf("notice shown %d times", n)
+	}
+	exec(c, "/cmcp status")
+	if c.fg == nil || !c.fg.open() {
+		t.Fatal("the connection must stay open")
+	}
+}
+
+// A server that stays silent: after cmcp_wait gtf says it stays a plain MUD client.
+func TestCmcpSilentServerNotice(t *testing.T) {
+	c, scr, d := newCmcpTest(t, testServerConfig())
+	d.mute = true
+	exec(c, "/set cmcp_wait=0.3")
+	exec(c, "/connect localhost 4101")
+	cmEventually(t, "silence notice", func() bool {
+		c.Do(func(*gtfparser.Interp) { c.cmcpTick() }) // the poll loop is not running in tests
+		c.Flush()
+		return strings.Contains(scr.Text(), "does not answer CMCP 2")
+	})
+	if c.fg == nil || !c.fg.open() {
+		t.Fatal("the connection must stay open")
+	}
 }

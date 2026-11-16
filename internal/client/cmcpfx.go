@@ -88,8 +88,14 @@ func (c *Client) cmcpShake(s *Session, now time.Time) (dx, dy int) {
 // the text between them (spec 6.17.1). It returns false when there is nothing to show.
 func (c *Client) cmcpAmbientFrame(s *Session, u *session.UI, cs *cmcpScr, now time.Time) bool {
 	look := s.cm.Ambient(now)
-	if look.Edge == "" {
+	hit := s.cm.Shake(now).Active
+	if look.Edge == "" && !hit {
 		return false
+	}
+	label := strings.ToUpper(u.Alert) + " ALERT"
+	if look.Edge == "" {
+		// a hit with no alert: a room has no frame to shake, so the hit flashes the edge strips for the length of the shake
+		look.Edge, label = "#ff3b30", "HIT"
 	}
 	w, h := c.ui.W, c.ui.OutRows()
 	if h < 8 {
@@ -101,16 +107,21 @@ func (c *Client) cmcpAmbientFrame(s *Session, u *session.UI, cs *cmcpScr, now ti
 		col = layout.Lerp(layout.Color{Kind: layout.RGB}, col, 1-sp.Depth)
 	}
 	a := layout.Attr{FG: col, BG: layout.Color{Kind: layout.RGB}}
-	label := strings.ToUpper(u.Alert) + " ALERT"
+	// the glow: a coloured border round the output area (a strip above and below, a bar on each side); the text sits inside it
 	for _, y := range []int{1, h - 2} {
 		for x := 0; x < w; x++ {
 			g.Set(x, y, layout.Cell{R: '▀', A: a})
 		}
 	}
+	g.Set(0, 1, layout.Cell{R: '▀', A: a})
+	for y := 2; y < h-2; y++ {
+		g.Set(0, y, layout.Cell{R: '▌', A: a})
+		g.Set(w-1, y, layout.Cell{R: '▐', A: a})
+	}
 	for i, r := range []rune(" " + label + " ") {
 		g.Set(2+i, 1, layout.Cell{R: r, A: layout.Attr{FG: layout.Color{Kind: layout.RGB}, BG: col, Bold: true}})
 	}
-	text := layout.Rect{X: 0, Y: 2, W: w, H: h - 4}
+	text := layout.Rect{X: 1, Y: 2, W: w - 2, H: h - 4}
 	if dx, dy := c.cmcpShake(s, now); dx != 0 || dy != 0 {
 		g = shiftGrid(g, cmcpui.Rect{X: text.X, Y: text.Y, W: text.W, H: text.H}, dx, dy)
 	}

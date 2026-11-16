@@ -298,7 +298,7 @@ func (d *drawer) cellNav(top, bottom int) {
 			}
 			ents = append(ents, entry{strings.ToUpper(e.Title), role, e.Active || e.Cursor, e.Available, e.Active, e.Cursor})
 		}
-	} else {
+	} else if !d.env.NoNav {
 		for i, it := range items {
 			m, _ := it.(map[string]any)
 			ents = append(ents, entry{strings.ToUpper(jstr(m, "label")), jstr(m, "role"), i == cur, true, i == cur, false})

@@ -13,11 +13,11 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ GROUP Arrays
 ▀DAMAGE CO…▀▀│                                                              │   SHARE USE POWERED
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ Group power ◀─●────────────────────────▶ 5
-▀ENGINEERI…▀▀│                                                              │ ◖ REROUTE 20% -> WEAPONS ◗
+▀▀▀▀SCIENCE▀▀│                                                              │ ◖ REROUTE 20% -> WEAPONS ◗
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ DAMAGE CONTROL ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ Enter: choose a team
+▀▀▀TACTICAL▀▀│                                                              │ Enter: choose a team
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ Systems
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   Port_Nacelle      ██████████▎  86.40/10▼
+▀▀▀▀▀▀▀HELM▀▀│                                                              │   Port_Nacelle      ██████████▎  86.40/10▼
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ ORDERS AND REQUEST
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   # PRI FROM TEXT
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ ACK ◗ ◖ DONE ◗

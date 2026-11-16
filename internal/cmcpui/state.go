@@ -51,6 +51,12 @@ type Env struct {
 	Now    time.Time
 	// Alert is "green"/"yellow"/"red" (tints the frame of a red alert).
 	Alert string
+	// NoAlert leaves the alert segment out of the frame: a context that is not ambient (a world place, a
+	// shop) has no alert level to show (spec 20.6).
+	NoAlert bool
+	// NoNav leaves the default console-switch column empty when Nav has no entries: a place, a shop or a room
+	// is not one of the ship's consoles (the column's default entries are the ship's station names).
+	NoNav bool
 	// AlertRecolour is full (the whole palette switches), edge (only the frame edge, the alert segment and
 	// the title accent) or off; empty is full.
 	// TextCols is the player's width for the game output in the side layout (0 = auto, the 80-column cap).

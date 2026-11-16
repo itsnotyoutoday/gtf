@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/itsnotyoutoday/cmcp/go v0.0.1
+	github.com/itsnotyoutoday/cmcp/go v0.0.2
 	github.com/itsnotyoutoday/gtfparser v0.0.12
 	golang.org/x/crypto v0.33.0
 	golang.org/x/image v0.24.0

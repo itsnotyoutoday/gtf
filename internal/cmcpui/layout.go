@@ -413,13 +413,18 @@ func (a *arranger) flow(kids []*pack.BoundNode, r Rect, horiz bool, gap int) {
 		}
 		wt[prot], wsum = 1, 1
 		over := int(fixed) + gaps + a.need - total
-		for i := len(kids) - 1; i >= 0 && over > 0; i-- {
-			if i == prot {
-				continue
+		// Last child first (the order a screen was always cut in), except that a row of small controls (a row of
+		// buttons) is cut only when nothing else is left: a short terminal loses the end of a list or a table, not the
+		// controls that operate the screen.
+		for _, protect := range []bool{false, true} {
+			for i := len(kids) - 1; i >= 0 && over > 0; i-- {
+				if i == prot || (isContainer(kids[i]) && smallControls(visibleKids(kids[i]))) != protect {
+					continue
+				}
+				cut := min(ext[i], over)
+				ext[i] -= cut
+				over -= cut
 			}
-			cut := min(ext[i], over)
-			ext[i] -= cut
-			over -= cut
 		}
 		fixed = 0
 		for _, e := range ext {

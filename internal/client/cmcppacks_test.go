@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/itsnotyoutoday/cmcp/go/fetch"
 	"github.com/itsnotyoutoday/cmcp/go/msg"
 	"github.com/itsnotyoutoday/gtf/internal/cmcpui"
+	"github.com/itsnotyoutoday/gtf/internal/ui/vt"
 	"github.com/itsnotyoutoday/gtfparser"
 )
 
@@ -26,12 +28,9 @@ func readPack(t *testing.T) ([]byte, msg.PackRef) {
 	return raw, msg.PackRef{ID: "fspace-std", Kind: "layout", Version: "1.0.0", SHA256: hex.EncodeToString(sum[:]), Size: len(raw), Inline: true}
 }
 
-// packConsole is a console message whose screen is a pack screen of the announced pack.
+// packConsole is a console whose layout is a screen of the announced pack (announced in the Welcome by packFixture).
 func packConsole(ref msg.PackRef) func(*msg.Console) {
-	return func(c *msg.Console) {
-		c.Ship.Pack = &msg.PackIdent{ID: ref.ID, Version: ref.Version, SHA256: ref.SHA256}
-		c.Ship.Packs = []msg.PackRef{ref}
-	}
+	return func(c *msg.Console) {}
 }
 
 func (f *screenFixture) screenState() (id string, fallback bool) {
@@ -39,11 +38,11 @@ func (f *screenFixture) screenState() (id string, fallback bool) {
 	return
 }
 
-func packFixture(t *testing.T, home string, packs map[string][]byte) *screenFixture {
+func packFixture(t *testing.T, home string, ref msg.PackRef, packs map[string][]byte) *screenFixture {
 	t.Helper()
-	var f *screenFixture
-	f = newScreenFixtureOpt(t, 120, 40, home, packs)
-	return f
+	layoutAnnounce = []msg.PackRef{ref} // a v2 game announces its layout packs in the Welcome (spec 20.3.7)
+	t.Cleanup(func() { layoutAnnounce = nil })
+	return newScreenFixtureOpt(t, 120, 40, home, packs)
 }
 
 // E6: a pack announced by the console: the built-in screen shows first, the player is asked, the
@@ -52,10 +51,10 @@ func packFixture(t *testing.T, home string, packs map[string][]byte) *screenFixt
 func TestCmcpPackConsentInlineCache(t *testing.T) {
 	raw, ref := readPack(t)
 	home := t.TempDir()
-	f := packFixture(t, home, map[string][]byte{ref.SHA256: raw})
+	f := packFixture(t, home, ref, map[string][]byte{ref.SHA256: raw})
 	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
-	if id, fb := f.screenState(); id != "std.operations" || !fb {
+	if id, fb := f.screenState(); id != "std.frame" || !fb {
 		t.Fatalf("expected the built-in screen first, got %q fallback=%v", id, fb)
 	}
 	f.contain(t, "offers a layout pack")
@@ -72,7 +71,7 @@ func TestCmcpPackConsentInlineCache(t *testing.T) {
 	f.c.Close()
 
 	// second launch: same home, same host: cached and already allowed
-	f2 := packFixture(t, home, map[string][]byte{ref.SHA256: raw})
+	f2 := packFixture(t, home, ref, map[string][]byte{ref.SHA256: raw})
 	exec(f2.c, "/set cmcp_pack_consent=ask")
 	f2.console("fspace-std/damage", "operations", packConsole(ref))
 	cmEventually(t, "pack from cache", func() bool { id, fb := f2.screenState(); return id == "fspace-std/damage" && !fb })
@@ -84,12 +83,12 @@ func TestCmcpPackConsentInlineCache(t *testing.T) {
 
 func TestCmcpPackRefused(t *testing.T) {
 	raw, ref := readPack(t)
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: raw})
 	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	exec(f.c, "/cmcp pack deny")
 	time.Sleep(100 * time.Millisecond)
-	if id, fb := f.screenState(); id != "std.operations" || !fb || int(f.d.gets.Load()) != 0 {
+	if id, fb := f.screenState(); id != "std.frame" || !fb || int(f.d.gets.Load()) != 0 {
 		t.Fatalf("refused pack changed things: %q %v gets=%d", id, fb, int(f.d.gets.Load()))
 	}
 	// the answer is remembered: announcing it again does not ask again
@@ -103,12 +102,12 @@ func TestCmcpPackHashMismatchDropped(t *testing.T) {
 	raw, ref := readPack(t)
 	bad := append([]byte(nil), raw...)
 	bad[len(bad)/2] ^= 0xff
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: bad})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: bad})
 	exec(f.c, "/set cmcp_pack_consent=always")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	cmEventually(t, "transfer attempted", func() bool { return int(f.d.gets.Load()) == 1 })
 	time.Sleep(150 * time.Millisecond)
-	if id, fb := f.screenState(); id != "std.operations" || !fb {
+	if id, fb := f.screenState(); id != "std.frame" || !fb {
 		t.Fatalf("a corrupt pack was used: %q %v", id, fb)
 	}
 	exec(f.c, "/cmcp send hatch.toggle") // the session still works
@@ -117,7 +116,7 @@ func TestCmcpPackHashMismatchDropped(t *testing.T) {
 
 func TestCmcpPackNeverMode(t *testing.T) {
 	raw, ref := readPack(t)
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: raw})
 	exec(f.c, "/set cmcp_pack_consent=never")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	time.Sleep(100 * time.Millisecond)
@@ -142,12 +141,12 @@ func TestCmcpHostilePackAndFrames(t *testing.T) {
 	bad := []byte(`{"format":1,"id":"evil","version":"1.0.0","needs":{"proto":1},"screens":{"damage":{"title":"x","console":"operations","root":{"widget":"label","children":[{"widget":"label","bind":{"text":"1 +"}},{"widget":"textport"}]}}}}`)
 	sum := sha256.Sum256(bad)
 	ref := msg.PackRef{ID: "evil", Kind: "layout", Version: "1.0.0", SHA256: hex.EncodeToString(sum[:]), Size: len(bad), Inline: true}
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: bad})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: bad})
 	exec(f.c, "/set cmcp_pack_consent=always")
 	f.console("evil/damage", "operations", packConsole(ref))
 	cmEventually(t, "transfer attempted", func() bool { return int(f.d.gets.Load()) == 1 })
 	time.Sleep(150 * time.Millisecond)
-	if id, fb := f.screenState(); id != "std.operations" || !fb {
+	if id, fb := f.screenState(); id != "std.frame" || !fb {
 		t.Fatalf("hostile pack used: %q %v", id, fb)
 	}
 	// garbage and an oversize frame
@@ -159,7 +158,7 @@ func TestCmcpHostilePackAndFrames(t *testing.T) {
 	cmEventually(t, "session still works", func() bool { return len(f.game.commands()) == 1 })
 	exec(f.c, "/cmcp status")
 	f.render()
-	f.contain(t, "console: operations", "showing std.operations")
+	f.contain(t, "ship.console", "showing std.frame")
 }
 
 func TestSemverPrecedence(t *testing.T) {
@@ -226,7 +225,7 @@ func TestCmcpOneThemePerShip(t *testing.T) {
 // is only ever about the current ship's packs.
 func TestCmcpStaleConsentDroppedOnShipHop(t *testing.T) {
 	raw, ref := readPack(t)
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: raw})
 	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	f.render()
@@ -258,7 +257,7 @@ func TestCmcpMenuAvailableOnlyAndScreensList(t *testing.T) {
 	f.lack(t, "FSPACE", "fspace-")
 	exec(f.c, "/cmcp screens")
 	f.render()
-	f.contain(t, "std.operations", "to use") // a dimmed entry names the console that provides it
+	f.contain(t, "std.operations") // v2: the type's layouts are all offered; no console gates them
 	exec(f.c, "/cmcp keys")
 	f.render()
 	f.contain(t, "Esc", "F6")
@@ -267,7 +266,7 @@ func TestCmcpMenuAvailableOnlyAndScreensList(t *testing.T) {
 // The default is `always`: no question, the pack loads, and one quiet line says so.
 func TestCmcpPackDefaultAlways(t *testing.T) {
 	raw, ref := readPack(t)
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: raw})
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	cmEventually(t, "pack in use without asking", func() bool { id, fb := f.screenState(); return id == "fspace-std/damage" && !fb })
 	f.render()
@@ -321,4 +320,56 @@ func TestCmcpThemeGpuOnlyNotFetched(t *testing.T) {
 	if int(f.d.gets.Load()) != 0 {
 		t.Fatal("a gpu-only theme was fetched")
 	}
+}
+
+// A definition lives in the same cache as packs under its own kind (spec 20.10). The id carries a
+// prefix, so a pack of the same id is never confused with it, and the listing an older build reads
+// (Hello.packs.cache) still works with the unknown kind present.
+func TestCmcpDefinitionKindCoexistsWithPacks(t *testing.T) {
+	home := t.TempDir()
+	c := newBareClient(t, home)
+	ps := c.packStore()
+	raw, ref := readPack(t)
+	host := "game.example"
+	if err := ps.cache.Put(host, fetchMeta(ref.ID, ref.Version, "layout", ref.SHA256, raw), raw); err != nil {
+		t.Fatal(err)
+	}
+	def := []byte(`{"format":1,"id":"fspace-std","version":"2.0.0","scopes":{}}`)
+	sum := sha256.Sum256(def)
+	dsha := hex.EncodeToString(sum[:])
+	if err := ps.cache.Put(host, fetchMeta("fspace-std", "2.0.0", fetch.KindDef, dsha, def), def); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := ps.cache.Latest(host, ref.ID); !ok || m.Kind != "layout" || m.SHA256 != ref.SHA256 {
+		t.Fatalf("a pack lookup must not return the definition: %+v", m)
+	}
+	if d := ps.cache.RecentDefs(host, 16); len(d) != 1 || d[0].SHA256 != dsha {
+		t.Fatalf("recent defs: %+v", d)
+	}
+	if n := len(ps.cache.Recent(host, 16)); n != 1 {
+		t.Fatalf("pack listing must not include definitions: %d entries", n)
+	}
+	// a second process (a fresh cache over the same directory) reads both back
+	c2 := newBareClient(t, home)
+	if got := c2.cachedPacks(host); len(got) != 1 {
+		t.Fatalf("after reopen: %+v", got)
+	}
+	// consent.json stays as older builds write it: no definition decision is ever recorded
+	if _, ok := ps.consent[consentKey(host, "fspace-std")]; ok {
+		t.Fatal("a definition must not enter consent.json")
+	}
+}
+
+func newBareClient(t *testing.T, home string) *Client {
+	t.Helper()
+	c, err := New(Config{Term: vt.New(80, 24), HomeDir: home, NoRC: true, Quiet: true, Interactive: true, NoUpdateCheck: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.Close)
+	return c
+}
+
+func fetchMeta(id, ver, kind, sha string, raw []byte) fetch.Meta {
+	return fetch.Meta{ID: id, Version: ver, Kind: kind, SHA256: sha, Size: len(raw), Fetched: time.Now(), Host: "game.example"}
 }

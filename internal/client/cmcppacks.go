@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -96,6 +97,15 @@ func fullRef(u *session.UI, id *msg.PackIdent) msg.PackRef {
 			return p
 		}
 	}
+	for _, sv := range u.Scopes { // v2: the packs an owner brings (a ship's own pack)
+		if sv.Owner != nil {
+			for _, p := range sv.Owner.Packs {
+				if p.SHA256 == id.SHA256 {
+					return p
+				}
+			}
+		}
+	}
 	if u.Welcome != nil {
 		for _, p := range u.Welcome.Packs {
 			if p.SHA256 == id.SHA256 {
@@ -114,6 +124,15 @@ func (c *Client) cmcpEnsurePacks(s *Session) {
 	u := s.cm.UI()
 	cs := s.cmScr()
 	id := u.Screen.PackWanted
+	if id == nil && u.V2 && u.Screen.Fallback && u.Screen.PackID != "" && u.Welcome != nil {
+		// v2 names only the pack id in the layout ("<pack>/<screen>"); the Welcome has its identity
+		for _, p := range u.Welcome.Packs {
+			if p.ID == u.Screen.PackID && (p.Kind == "" || p.Kind == "layout") {
+				id = &msg.PackIdent{ID: p.ID, Version: p.Version, SHA256: p.SHA256}
+				break
+			}
+		}
+	}
 	if id == nil || !u.Screen.Fallback {
 		return
 	}
@@ -226,14 +245,7 @@ func (c *Client) packFetch(s *Session, j *packJob) {
 		s.conn.SendProto("gmcp", msg.PkgPackGet, msg.PackGet{ID: j.ref.ID, Version: j.ref.Version, SHA256: j.ref.SHA256})
 	case u.Welcome != nil && u.Welcome.Assets != nil && u.Welcome.Assets.Origin != "":
 		a := u.Welcome.Assets
-		pol := fetch.Policy{GameHost: host, AllowedOrigins: map[string]bool{}, DevTrustLoopbackTLS: onVar(c.in.Var("cmcp_dev_tls")),
-			// developer-only (%cmcp_dev_loopback_http, default off): an http:// origin is accepted only when it is
-			// loopback, equal to the one THIS connection's Welcome announced, and the game host is loopback too
-			DevAllowLoopbackHTTP: onVar(c.in.Var("cmcp_dev_loopback_http")), Announced: a.Origin}
-		for _, o := range strings.Fields(c.in.Var("cmcp_origins")) {
-			pol.AllowedOrigins[strings.ToLower(o)] = true
-		}
-		f := fetch.NewFetcher(pol)
+		f := fetch.NewFetcher(c.fetchPolicy(s, a))
 		blob := fetch.BlobFor(fetch.Origin{Origin: a.Origin, Base: a.Base}, j.ref)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), fetch.PackTotal)
@@ -251,6 +263,101 @@ func (c *Client) packFetch(s *Session, j *packJob) {
 	default:
 		c.packFailed(s, j, "no way to fetch (not inline, no origin)")
 	}
+}
+
+// fetchPolicy is the origin policy of one connection's downloads (packs and definitions).
+func (c *Client) fetchPolicy(s *Session, a *msg.Assets) fetch.Policy {
+	pol := fetch.Policy{GameHost: s.World.Host, AllowedOrigins: map[string]bool{}, DevTrustLoopbackTLS: onVar(c.in.Var("cmcp_dev_tls")),
+		// developer-only (%cmcp_dev_loopback_http, default off): an http:// origin is accepted only when it is
+		// loopback, equal to one THIS connection's Welcome announced, and the game host is loopback too
+		DevAllowLoopbackHTTP: onVar(c.in.Var("cmcp_dev_loopback_http")) || loopbackHost(s.World.Host), AnnouncedMore: fetch.Routes(a)}
+	if a != nil {
+		pol.Announced = a.Origin
+	}
+	for _, o := range strings.Fields(c.in.Var("cmcp_origins")) {
+		pol.AllowedOrigins[strings.ToLower(o)] = true
+	}
+	return pol
+}
+
+// loopbackHost reports a game running on this machine. A definition or pack announced on a loopback http origin is then
+// accepted without %cmcp_dev_loopback_http (the fetch layer still requires the origin to be the one this connection's
+// Welcome announced and loopback itself): without the definition the client would show no console at all.
+func loopbackHost(h string) bool {
+	h = strings.ToLower(strings.Trim(h, "[]"))
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// cmcpHoldCachedDefs hands the definitions held in the cache for this host to a new session (they are
+// listed in Cobra.Hello.defs and applied without a transfer when the server announces the same hash).
+func (c *Client) cmcpHoldCachedDefs(s *Session) {
+	if _, err := os.Stat(filepath.Join(c.cfg.HomeDir, ".gtf", "cmcp", "packs")); err != nil && c.cmPacks == nil {
+		return
+	}
+	ps := c.packStore()
+	for _, d := range ps.cache.RecentDefs(s.World.Host, 16) {
+		if raw, _, ok := ps.cache.Get(s.World.Host, d.SHA256); ok {
+			if err := s.cm.HoldDefinition(raw); err != nil {
+				ps.cache.Remove(s.World.Host, d.SHA256)
+			}
+		}
+	}
+}
+
+// cmcpDefFetch fetches a definition the server pointed to (Cobra.Defs.Ref; the core already checked the url
+// against Welcome.assets.routes). A definition is data: there is no consent prompt (spec 20.3.3).
+func (c *Client) cmcpDefFetch(s *Session, b fetch.Blob) {
+	var a *msg.Assets
+	if w := s.cm.UI().Welcome; w != nil {
+		a = w.Assets
+	}
+	f := fetch.NewFetcher(c.fetchPolicy(s, a))
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), fetch.PackTotal)
+		defer cancel()
+		raw, err := f.Fetch(ctx, b)
+		c.Post(func(*gtfparser.Interp) {
+			if s.cm != nil {
+				if err != nil {
+					s.cm.DefinitionFailed(c.cfg.Now(), err.Error())
+				} else {
+					s.cm.DefinitionAvailable(c.cfg.Now(), raw)
+				}
+				c.cmcpPump(s)
+			}
+			c.afterTask()
+		})
+	}()
+}
+
+// cmcpDefApplied stores a verified definition in the pack cache under its own kind, and fetches the
+// layout packs it lists (a "by:" layout finds its screen in them).
+func (c *Client) cmcpDefApplied(s *Session, n session.Note) {
+	if n.Def != nil && n.DefBytes != nil {
+		ps := c.packStore()
+		host := s.World.Host
+		ps.cache.Put(host, fetch.Meta{ID: n.Def.ID, Version: n.Def.Version, Kind: fetch.KindDef, SHA256: n.Def.SHA256, Size: len(n.DefBytes), Fetched: c.cfg.Now(), Host: host}, n.DefBytes)
+	}
+	c.cmcpDefPacks(s)
+}
+
+// cmcpDefPacks asks for every layout pack of the definition that is announced and not held yet, when
+// the active layout is a "by:" lookup (its screen is in one of them).
+func (c *Client) cmcpDefPacks(s *Session) {
+	u := s.cm.UI()
+	if !u.V2 || u.Definition == nil || !strings.HasPrefix(u.CtxLayout, "by:") {
+		return
+	}
+	for _, lp := range u.Definition.Layouts {
+		if s.cmScr().packs[lp.ID] == nil {
+			s.cm.WantPack(lp.ID)
+		}
+	}
+	c.cmcpPump(s)
 }
 
 // cmcpPackFrame takes the pack transfer messages (the session core only notes them).
@@ -339,7 +446,7 @@ func (c *Client) cmcpPacksList(s *Session) []string {
 var _ = time.Second
 
 // cmcpPackWanted starts getting a pack the core announced as wanted (the active ship, screen or context
-// names it, or WantPack asked): layout packs only; sound and theme packs are not used by gtf.
+// names it, or WantPack asked): layout packs only; sound packs are not used by gtf.
 func (c *Client) cmcpPackWanted(s *Session, ref msg.PackRef) {
 	if ref.Kind != "" && ref.Kind != "layout" && ref.Kind != "theme" {
 		return
@@ -351,7 +458,7 @@ func (c *Client) cmcpPackWanted(s *Session, ref msg.PackRef) {
 	if cs.jobs[ref.SHA256] != nil {
 		return
 	}
-	j := &packJob{ref: ref, ship: s.cm.UI().Ship.ID}
+	j := &packJob{ref: ref, ship: shipKey(s.cm.UI())}
 	cs.jobs[ref.SHA256] = j
 	c.packStart(s, j)
 }

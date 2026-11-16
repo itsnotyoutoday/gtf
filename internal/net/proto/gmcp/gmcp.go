@@ -18,6 +18,9 @@ import (
 func init() { telnet.Register(func() telnet.Handler { return New() }) }
 
 // DefaultSupports are the packages announced in Core.Supports.Set.
+// CobraGate is the Core.Supports.Set entry that offers CMCP: the number is the protocol version.
+const CobraGate = "Cobra 2"
+
 var DefaultSupports = []string{"Char 1", "Room 1", "Comm 1", "Core 1", "Group 1", "Client.Media 1"}
 
 // H is the handler.
@@ -41,8 +44,9 @@ func (h *H) OnNegotiate(s *telnet.Session, side telnet.Side, on bool) {
 	e := s.Env().Snapshot()
 	sup := h.Supports
 	if e.Extra["cmcp"] == "1" {
-		// CMCP (the CobraMUSH client protocol): the gate of its spec 1.5
-		sup = append(append([]string(nil), sup...), "Cobra 1")
+		// CMCP (the CobraMUSH client protocol): the gate of its spec 20.2.1. The number names the
+		// version: this build speaks CMCP 2 only and never announces "Cobra 1".
+		sup = append(append([]string(nil), sup...), CobraGate)
 	}
 	h.Send(s, "Core.Hello", map[string]any{"client": e.ClientName, "version": e.ClientVer})
 	h.Send(s, "Core.Supports.Set", sup)

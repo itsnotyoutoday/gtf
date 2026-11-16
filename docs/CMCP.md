@@ -110,7 +110,8 @@ AI, someone else took the console) nothing is offered.
 
 | variable | default | meaning |
 |---|---|---|
-| `%cmcp` | on | declare `Cobra 1` to servers |
+| `%cmcp` | on | declare `Cobra 2` (CMCP protocol 2) to servers |
+| `%cmcp_wait` | 3 | seconds to wait for a game that stays silent after GMCP came on, before saying gtf stays a plain MUD client |
 | `%cmcp_key_focus` | `^I` (Tab) | the key that enters the screen (see Keyboard) |
 | `%cmcp_layout` | auto | `side` stacks the widgets in a right-hand column |
 | `%cmcp_key_log`, `%cmcp_key_hide` | F3, F4 | the log view and the screen-off keys |
@@ -118,6 +119,7 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_ascii` | auto | ASCII-only drawing |
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
 | `%cmcp_theme` | (unset: the ship's theme, else `tng`) | a theme name from `/cmcp themes`, or `plain` (no frame, colours left to the terminal); setting it fixes the theme (see `%cmcp_theme_mode`) |
+| `%cmcp_room_screens` | off | `on` draws a screen for the ship's rooms (bridge, corridor, docking port, away); off (the default) keeps the text as the view and shows a yellow or red alert as a glowing border round the output; a manned console always draws |
 | `%cmcp_theme_mode` | ship | `ship` follows the ship's suggested theme (console, ship, screen); `fixed` keeps `%cmcp_theme` (`%cmcp_ship_theme on` is the old spelling of `ship`) |
 | `%cmcp_textport` | balanced | the output's size: `compact` (~20%), `balanced` (~35%), `large` (~50%); F3 expands to ~80% |
 | `%cmcp_motion` | on | `off` makes the F3 animation instant |
@@ -163,7 +165,7 @@ Any failure keeps the built-in screens and the session running.
 
 ## Architecture
 
-* `internal/client/cmcp.go`: one `session.Client` per connection, fed from the gmcp handler (`Cobra 1` is added to
+* `internal/client/cmcp.go`: one `session.Client` per connection, fed from the gmcp handler (`Cobra 2` is added to
   `Core.Supports.Set` by the handler when the connection's environment says so), output written back through the handler,
   notes turned into output lines; `cmcp_cmds.go` the `/cmcp` command and settings; `cmcpscreen.go` the screen and keys;
   `cmcppacks.go` the pack flow.

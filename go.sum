@@ -1,9 +1,7 @@
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/itsnotyoutoday/cmcp/go v0.0.1 h1:7Bp18sDRlUiFbkW3JXOVhYRU/IIfIY+cgeb6T/wrrCU=
-github.com/itsnotyoutoday/cmcp/go v0.0.1/go.mod h1:K9nfmOaZcrSqXLIjkbPjFb4cYSXpIVKuhG/VguJ+Jh0=
-github.com/itsnotyoutoday/gtfparser v0.0.11 h1:rZSY5mc/tv43MnOfGYRlvGEy5uiXqjd0r7W9n06dh3o=
-github.com/itsnotyoutoday/gtfparser v0.0.11/go.mod h1:hEgn5xkOFqtna4Vf2A/HS1XvcSUep/dFddjUH2slacM=
+github.com/itsnotyoutoday/cmcp/go v0.0.2 h1:EmSbdapWbGgQhTsWg1SUZ1SZ4UIeaVUd0NraaHgogyU=
+github.com/itsnotyoutoday/cmcp/go v0.0.2/go.mod h1:K9nfmOaZcrSqXLIjkbPjFb4cYSXpIVKuhG/VguJ+Jh0=
 github.com/itsnotyoutoday/gtfparser v0.0.12 h1:WPDTfiOffkQ2EQQ6vAECMadgeaWXNx2X0UG6vCyrIO8=
 github.com/itsnotyoutoday/gtfparser v0.0.12/go.mod h1:hEgn5xkOFqtna4Vf2A/HS1XvcSUep/dFddjUH2slacM=
 golang.org/x/crypto v0.33.0 h1:IOBPskki6Lysi0lo9qQvbxiQ+FvsCC/YWOecCHAixus=

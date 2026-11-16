@@ -144,7 +144,9 @@ func (d *drawer) tngBands() {
 	for _, t := range d.env.Tags {
 		segs = append(segs, seg{text: strings.ToUpper(t), col: d.bandColor(4)})
 	}
-	segs = append(segs, seg{text: alert, col: d.edgeColor(2)})
+	if !d.env.NoAlert {
+		segs = append(segs, seg{text: alert, col: d.edgeColor(2)})
+	}
 	right := seg{text: keys, col: d.bandColor(0)}
 	x := elbowW + 2
 	rightW := runeLen(right.text) + 4
@@ -240,7 +242,7 @@ func (d *drawer) tngColumn(topRows, botRows int) {
 	ph := cv.H
 	y := 0
 	ents := d.navEntries()
-	if len(ents) == 0 {
+	if len(ents) == 0 && !d.env.NoNav {
 		for i, n := range consoleNames {
 			ents = append(ents, NavEntry{Title: n, Available: true, Active: i == consoleTab(d.env.Title)})
 		}

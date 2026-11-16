@@ -7,17 +7,17 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │                 ⣰⢕⢕⢝◆⢆⠁⢀⠈⢆
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │                 ⡇◆⠱⢗⠽⡧⠓⠔⠥⢺
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │                 ⠱⡀⠁⢀⢙⠄⢁⠔⢀⠎
-●▀▀▀SCIENCE▀▀│                                                              │                  ⠙⠢⢄⣡◆▲⠔⠋
+▀OPERATIONS▀▀│                                                              │                  ⠙⠢⢄⣡◆▲⠔⠋
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ 11 AST5716 000+60
-▀▀▀▀▀▀▀HELM▀▀│                                                              │
+▀ENGINEERI…▀▀│                                                              │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   11  AST5716          258-89  797.8m
+▀DAMAGE CO…▀▀│                                                              │   11  AST5716          258-89  797.8m
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ HULL ◗ ◖ SHIELDS ◗ ◖ WEAPONS ◗ ◖ CREW ◗
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ DESIGNATE ◗ ◖ TAG HOSTILE ◗
+●▀▀▀SCIENCE▀▀│                                                              │ ◖ DESIGNATE ◗ ◖ TAG HOSTILE ◗
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ SCAN  -  SRS
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   CID NAME         BRG    DIST
+▀▀▀TACTICAL▀▀│                                                              │   CID NAME         BRG    DIST
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   3   Vulcan       333+22 394044km
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ ANALYSIS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+▀▀▀▀▀▀▀HELM▀▀│                                                              │ ◖ ANALYSIS ◗ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   KIND    STATE %
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   WEAKNESS EFFECT
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ TELL CAPTAIN: VIEWSCREEN ◗

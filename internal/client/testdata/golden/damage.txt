@@ -13,11 +13,11 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │            ▀▀▀▀▀▀▀▀▀▀▀
 ●DAMAGE CO…▀▀│                                                              │              ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │               ▀
-▀ENGINEERI…▀▀│                                                              │
+▀▀▀▀SCIENCE▀▀│                                                              │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ zone: hull
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ DAMAGE CONTROL  -  hull 806.16 / 875.00
+▀▀▀TACTICAL▀▀│                                                              │ DAMAGE CONTROL  -  hull 806.16 / 875.00
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ TEAMS
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   T1  crew 10  Hull
+▀▀▀▀▀▀▀HELM▀▀│                                                              │   T1  crew 10  Hull
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   T2  crew 10  Hull
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ASSIGN TO
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   Hull

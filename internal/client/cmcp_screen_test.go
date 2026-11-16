@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/itsnotyoutoday/cmcp/go/defs"
 	"github.com/itsnotyoutoday/cmcp/go/frame"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -123,6 +125,9 @@ type screenFixture struct {
 	game *fakeGame
 	docs map[string]any
 	cat  []msg.CommandSpec
+
+	owner     *msg.ScopeOwner // the ship scope's owner as last announced by console()
+	ctxSerial int64
 }
 
 func newScreenFixture(t *testing.T, w, h int) *screenFixture {
@@ -138,8 +143,64 @@ func newThemeFixture(t *testing.T, packs map[string][]byte, ref msg.PackRef) *sc
 	return newScreenFixtureOpt(t, 120, 40, t.TempDir(), packs)
 }
 
-// themeAnnounce is added to the test server's Welcome.packs.
-var themeAnnounce []msg.PackRef
+// themeAnnounce and layoutAnnounce are added to the test server's Welcome.packs (a v2 game announces its
+// packs in the Welcome, spec 20.3.7; the game's definition names the layouts it uses).
+var themeAnnounce, layoutAnnounce []msg.PackRef
+
+// defOverride replaces the fake game's definition for a test; skipDefsWait lets the fixture return when the
+// client is not going to accept it.
+// welcomeAssets, when set, is the Welcome.assets of the fake game (a pack too big for inline transfer is served from it).
+var welcomeAssets *msg.Assets
+
+var briefingPresentation = []string{"dock", "float", "screen"}
+
+var (
+	defOverride  *session.ServedDefinition
+	skipDefsWait bool
+)
+
+// servedDef turns a definition document (any JSON-encodable value) into what the server serves; badHash
+// announces another hash than the bytes have.
+func servedDef(doc any, badHash bool) *session.ServedDefinition {
+	raw, _ := json.Marshal(doc)
+	sha := defs.Hash(raw)
+	if badHash {
+		sha = defs.Hash(append([]byte("x"), raw...))
+	}
+	m := doc.(map[string]any)
+	return &session.ServedDefinition{Ref: msg.DefRef{ID: m["id"].(string), Version: m["version"].(string), SHA256: sha, Size: len(raw)}, Bytes: raw}
+}
+
+// testDefinition is the CMCP 2 definition of the fake game: a ship scope whose owner changes, a fixed
+// world scope, the ship's context types and a world place. Every Space.* package belongs to the ship.
+func testDefinition(pkgs []string) *session.ServedDefinition {
+	pk := map[string]any{}
+	for _, p := range pkgs {
+		pk[p] = map[string]any{"scope": "ship", "always": p == "Space.Ship.Status"}
+	}
+	doc := map[string]any{
+		"format": 1, "id": "fspace-test", "version": "2.0.0", "title": "Test",
+		"scopes": map[string]any{
+			"ship":  map[string]any{"owner": map[string]any{"id": "id", "epoch": true}, "title": "aboard a ship"},
+			"world": map[string]any{"owner": map[string]any{"fixed": "test"}, "title": "in the world"},
+		},
+		"packages": pk,
+		"context_types": map[string]any{
+			"ship.console": map[string]any{"scope": "ship", "priority": 100, "layout": "by:console", "ambient": true, "titled": true,
+				"layouts": []string{"std.operations", "std.power", "std.damage", "std.sensors", "std.tactical", "std.helm"}},
+			"ship.room":     map[string]any{"scope": "ship", "priority": 35, "layout": "std.shiproom", "ambient": true},
+			"ship.shiproom": map[string]any{"scope": "ship", "priority": 35, "layout": "std.shiproom", "ambient": true},
+			"ship.dock":     map[string]any{"scope": "ship", "priority": 40, "layout": "std.shiproom", "ambient": true},
+			"ship.event":    map[string]any{"scope": "ship", "priority": 80, "layout": "std.power", "ambient": true},
+			"ship.away":     map[string]any{"scope": "ship", "priority": 60, "layout": "std.away", "ambient": false},
+			"world.briefing": map[string]any{"scope": "world", "priority": 10, "layout": "fspace-concourse/briefing", "ambient": false,
+				"presentation": briefingPresentation, "title": "Briefing"},
+			"world.place": map[string]any{"scope": "world", "priority": 20, "layout": "fspace-concourse/concourse", "layouts": []string{"fspace-concourse/concourse", "fspace-concourse/concourse-compact"}, "ambient": false},
+		},
+	}
+	raw, _ := json.Marshal(doc)
+	return &session.ServedDefinition{Ref: msg.DefRef{ID: "fspace-test", Version: "2.0.0", SHA256: defs.Hash(raw), Size: len(raw)}, Bytes: raw}
+}
 
 func newScreenFixtureOpt(t *testing.T, w, h int, home string, packs map[string][]byte) *screenFixture {
 	t.Helper()
@@ -152,9 +213,16 @@ func newScreenFixtureSetup(t *testing.T, w, h int, home string, packs map[string
 	t.Helper()
 	var cat []msg.CommandSpec
 	readJSON(t, "commands.catalogue.json", &cat)
+	cat = append(cat, worldVerbs()...)
+	cat = append(cat, exampleVerbs(t, "mission.accept", "mission.decline")...)
 	g := &fakeGame{docs: loadDocs(t), epoch: 1}
-	cfg := session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536, Commands: cat, Backend: g,
-		Packages: []string{"Space.Power", "Space.Ship.Status"}, Packs: themeAnnounce}
+	cfg := session.ServerConfig{Server: "Test", GameName: "T", MaxBody: 65536, Protos: []int{2}, Commands: cat, Backend: g,
+		Packages: []string{"Space.Power", "Space.Ship.Status"}, Packs: append(append([]msg.PackRef(nil), themeAnnounce...), layoutAnnounce...),
+		Definition: testDefinition(sortedDocKeys(g.docs))}
+	if defOverride != nil {
+		cfg.Definition = defOverride
+	}
+	cfg.Assets = welcomeAssets
 	term := &recTerm{Screen: vt.New(w, h)}
 	d := &cmcpDialer{t: t, cfg: cfg, packs: packs}
 	var c *Client
@@ -183,6 +251,9 @@ func newScreenFixtureSetup(t *testing.T, w, h int, home string, packs map[string
 		return f0
 	}
 	cmEventually(t, "ready", func() bool { return d.gm() != nil && d.gm().srv.State() == session.SrvReady })
+	if !skipDefsWait {
+		cmEventually(t, "definition held", func() bool { return d.gm().srv.DefsReady() })
+	}
 	cmEventually(t, "client ready", f.clientReady)
 	return f
 }
@@ -194,8 +265,10 @@ func (f *screenFixture) clientReady() (ok bool) {
 	return
 }
 
-// console sends the manned-operations Cobra.Console with another screen and console id, then the
-// full document of every package in its implicit set.
+// console is the v1-shaped description of the manned console ("screen" is the layout), delivered as v2:
+// the ship scope's owner (Cobra.Scope, with the ship fields of the old Console: its epoch grows whenever
+// the owner's data differs from the last announcement), the console as a context of type ship.console,
+// then the full document of every package in its implicit set.
 func (f *screenFixture) console(screen, console string, mutate func(*msg.Console)) {
 	var m struct {
 		Payload msg.Console `json:"payload"`
@@ -217,11 +290,34 @@ func (f *screenFixture) console(screen, console string, mutate func(*msg.Console
 	if mutate != nil {
 		mutate(&c)
 	}
+	owner := msg.ScopeOwner{ID: c.Ship.ID, Name: c.Ship.Name, Theme: c.Ship.Theme, Class: c.Ship.Class, Empire: c.Ship.Empire, AI: c.Ship.AI, Pack: c.Ship.Pack, Packs: c.Ship.Packs}
+	f.ctxSerial++
+	serial := f.ctxSerial
 	f.d.gm().with(func(s *session.Server) {
-		s.SetConsole(c)
+		prev := f.owner
+		if prev != nil && prev.ID == owner.ID && owner.Theme == "" {
+			owner.Theme, owner.Name = prev.Theme, prev.Name // a console that carries no ship facts changes none
+		}
+		if prev == nil || prev.ID != owner.ID || !reflect.DeepEqual(prev.Theme, owner.Theme) || prev.Name != owner.Name || prev.AI != owner.AI || !reflect.DeepEqual(prev.Pack, owner.Pack) {
+			epoch := 1
+			if prev != nil && prev.ID == owner.ID {
+				epoch = prev.Epoch + 1 // same ship, other facts: a new announcement
+			} else if prev != nil {
+				epoch = prev.Epoch + 1
+			}
+			owner.Epoch = epoch
+			o := owner
+			f.owner = &o
+			s.SetScope("ship", &o)
+		}
+		if c.Console != nil {
+			s.SendContext(msg.ContextV2{Op: "push", Reason: c.Reason, Context: &msg.ContextEntryV2{
+				Key: "console", Ctx: serial, Type: "ship.console", ID: c.Console.ID, Layout: c.Screen, Name: c.Console.ID, Theme: c.Theme,
+				Readonly: c.Readonly, Subscribe: c.Subscribe, Commands: c.Commands}})
+		}
 		for _, sub := range c.Subscribe {
 			if doc, ok := f.docs[sub.Pkg]; ok {
-				s.Push(sub.Pkg, true, doc)
+				s.PushScoped("ship", sub.Pkg, true, doc)
 			}
 		}
 	})
@@ -412,14 +508,14 @@ func TestCmcpTinyTerminalKeepsText(t *testing.T) {
 	}
 }
 
-// sendContext writes a Cobra.Context as the game would (the core's Server has no push API yet).
-func (f *screenFixture) sendContext(c msg.Context) {
+// sendContext sends a v2 Cobra.Context as the game would (the rev is assigned by the server).
+func (f *screenFixture) sendContext(c msg.ContextV2) {
 	f.t.Helper()
-	b, err := frame.Encode("Cobra.Context", c)
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	f.d.gm().write(b)
+	f.d.gm().with(func(s *session.Server) {
+		if !s.SendContext(c) {
+			f.t.Errorf("context not sent: the server is not ready for the stream")
+		}
+	})
 }
 
 // The context stack (spec 3.3): a higher-priority event context takes the screen, the console's
@@ -428,9 +524,8 @@ func TestCmcpContextStack(t *testing.T) {
 	f := newScreenFixture(t, 120, 40)
 	f.console("std.operations", "", nil)
 	prio := 150
-	ship := msg.ContextShip{ID: "ss-booty-king", Epoch: 1}
-	f.sendContext(msg.Context{Rev: 2, Ship: ship, Op: "push", Reason: "event", Context: &msg.ContextEntry{
-		Key: "event:power-surge", Ctx: 7, Kind: "event", ID: "power-surge", Screen: "std.power", Priority: &prio,
+	f.sendContext(msg.ContextV2{Op: "push", Reason: "event", Context: &msg.ContextEntryV2{
+		Key: "event:power-surge", Ctx: 7, Type: "ship.event", ID: "power-surge", Layout: "std.power", Priority: &prio,
 		Commands: []string{"power.set"}}})
 	cmEventually(t, "power screen on top", func() bool { id, _ := f.screenState(); return id == "std.power" })
 	f.render()
@@ -438,7 +533,7 @@ func TestCmcpContextStack(t *testing.T) {
 	exec(f.c, "/cmcp status")
 	f.render()
 	f.contain(t, "context * event:power-surge", "context   console")
-	f.sendContext(msg.Context{Rev: 3, Ship: ship, Op: "pop", Key: "event:power-surge", Ctx: 7})
+	f.sendContext(msg.ContextV2{Op: "pop", Key: "event:power-surge", Ctx: 7})
 	cmEventually(t, "back on operations", func() bool { id, _ := f.screenState(); return id == "std.operations" })
 	f.render()
 	f.contain(t, "OPERATIONS")
@@ -1069,31 +1164,23 @@ func TestCmcpHitShake(t *testing.T) {
 	}
 }
 
-// unman sends a Cobra.Console with no console (the player left the station), so no console screen is shown.
+// unman pops the console context (the player left the station), so no console screen is shown.
 func (f *screenFixture) unman() {
 	f.t.Helper()
-	var m struct {
-		Payload msg.Console `json:"payload"`
-	}
-	readJSON(f.t, "Cobra.Console--manned-operations.json", &m)
-	c := m.Payload
-	c.Rev += 50
-	c.Console, c.Screen, c.Commands, c.Subscribe = nil, "", nil, nil
-	f.d.gm().with(func(s *session.Server) { s.SetConsole(c) })
+	f.sendContext(msg.ContextV2{Op: "pop", Key: "console", Ctx: f.ctxSerial})
 }
 
 // pushRoom puts a ship-room context (spec 3.3.3) on the stack.
 func (f *screenFixture) pushRoom(rev int64, name string) {
-	prio := 35
-	f.sendContext(msg.Context{Rev: int(rev), Ship: msg.ContextShip{ID: "ss-booty-king", Epoch: 1}, Op: "push", Reason: "room", Context: &msg.ContextEntry{
-		Key: "room:shiproom", Ctx: rev, Kind: "room", ID: "shiproom", Name: name, Screen: "std.shiproom", Priority: &prio}})
+	f.sendContext(msg.ContextV2{Op: "push", Reason: "room", Context: &msg.ContextEntryV2{
+		Key: "room:shiproom", Ctx: rev, Type: "ship.room", ID: "shiproom", Name: name}})
 }
 
 // The generic ship room (spec 3.3.3): every empire's frame, the room name from $ctx, the alert and the
 // notice row all show in a corridor with no console.
 func TestCmcpShipRoomEveryTheme(t *testing.T) {
 	for _, th := range []string{"tng", "tos", "ops", "soft", "klingon", "romulan", "ferengi"} {
-		f := newScreenFixture(t, 120, 40)
+		f := newScreenFixtureSetup(t, 120, 40, t.TempDir(), nil, "/set cmcp_room_screens=on")
 		f.docs["Space.Ship.Status"].(map[string]any)["alert"] = "red"
 		f.console("std.operations", "", func(c *msg.Console) { c.Ship.Theme = th })
 		f.unman()
@@ -1124,7 +1211,7 @@ func TestCmcpCloseKey(t *testing.T) {
 
 func TestCmcpCloseKeyRefusesPackQuestionFirst(t *testing.T) {
 	raw, ref := readPack(t)
-	f := packFixture(t, t.TempDir(), map[string][]byte{ref.SHA256: raw})
+	f := packFixture(t, t.TempDir(), ref, map[string][]byte{ref.SHA256: raw})
 	exec(f.c, "/set cmcp_pack_consent=ask")
 	f.console("fspace-std/damage", "operations", packConsole(ref))
 	f.render()
@@ -1323,4 +1410,39 @@ func TestCmcpOrdersPanelReadableInSideColumn(t *testing.T) {
 			}
 		}
 	}
+}
+
+// worldVerbs are the verbs of the world scope the concourse layout sends (spec 20.7).
+func worldVerbs() []msg.CommandSpec {
+	opt := false
+	topic := map[string]msg.ArgSpec{"topic": {Type: "string", Required: &opt}}
+	return []msg.CommandSpec{
+		{Name: "world.home", Text: "home", Args: map[string]msg.ArgSpec{}},
+		{Name: "world.map", Text: "map", Args: map[string]msg.ArgSpec{}},
+		{Name: "world.guide", Text: "guide", Args: map[string]msg.ArgSpec{}},
+		{Name: "world.about", Text: "about {topic}", Args: topic},
+		{Name: "world.view", Text: "view <mode>", Args: map[string]msg.ArgSpec{"mode": {Type: "string", Required: &opt}}},
+	}
+}
+
+// exampleVerbs takes verbs the testdata catalogue lacks from the spec's example catalogue (the ship pack uses them).
+func exampleVerbs(t testing.TB, names ...string) []msg.CommandSpec {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "cmcp", "examples", "commands.catalogue.json"))
+	if err != nil {
+		t.Skip("the spec's example catalogue is not next to gtf")
+	}
+	var all []msg.CommandSpec
+	if err := json.Unmarshal(b, &all); err != nil {
+		t.Fatal(err)
+	}
+	var out []msg.CommandSpec
+	for _, sp := range all {
+		for _, n := range names {
+			if sp.Name == n {
+				out = append(out, sp)
+			}
+		}
+	}
+	return out
 }

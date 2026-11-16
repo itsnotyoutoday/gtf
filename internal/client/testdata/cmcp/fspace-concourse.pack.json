@@ -1,0 +1,619 @@
+{
+ "format": 1,
+ "id": "fspace-concourse",
+ "version": "1.0.0",
+ "title": "Frontier Space: the Spacedock concourse (CMCP 2 world place)",
+ "description": "Two screens for the world.place context of the concourse: the full one (welcome text, a ship list with a BOARD button, buttons for map, guide, home, about) and a compact one (ships and four buttons) the server can switch to with Cobra.Layout. Core widgets only; needs CMCP 2.",
+ "needs": {
+  "proto": 2
+ },
+ "tokens": {
+  "color.bg": "#02030a",
+  "color.panel": "#14101e",
+  "color.text": "#ffe3c2",
+  "color.dim": "#9a8fb8",
+  "color.accent": "#ff9900",
+  "color.accent2": "#99ccff",
+  "color.ok": "#66dd88",
+  "color.warn": "#ffcc66",
+  "color.alert": "#ff3b30",
+  "font.body": "Antonio",
+  "font.title": "Antonio",
+  "radius": 22,
+  "stroke": 2
+ },
+ "screens": {
+  "concourse": {
+   "title": "Spacedock Concourse",
+   "suggest_theme": "tng",
+   "root": {
+    "widget": "label",
+    "props": {
+     "text": ""
+    },
+    "layout": {
+     "dir": "col",
+     "gap": 6
+    },
+    "children": [
+     {
+      "widget": "label",
+      "props": {
+       "text": "",
+       "style": "title"
+      },
+      "bind": {
+       "text": "$ctx.data.title"
+      },
+      "layout": {
+       "size": 30,
+       "cell": {
+        "size": 3
+       }
+      }
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "bind": {
+       "text": "$ctx.data.welcome"
+      },
+      "layout": {
+       "size": 96,
+       "cell": {
+        "size": 8
+       }
+      }
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "layout": {
+       "dir": "row",
+       "gap": 6,
+       "weight": 1
+      },
+      "children": [
+       {
+        "widget": "label",
+        "props": {
+         "text": ""
+        },
+        "layout": {
+         "dir": "col",
+         "gap": 6,
+         "weight": 3,
+         "cell": {
+          "order": 0
+         }
+        },
+        "children": [
+         {
+          "widget": "label",
+          "props": {
+           "text": "SHIPS  -  select one, then BOARD",
+           "style": "section"
+          },
+          "layout": {
+           "size": 24,
+           "cell": {
+            "size": 1
+           }
+          }
+         },
+         {
+          "widget": "table",
+          "id": "ships",
+          "props": {
+           "columns": [
+            {
+             "key": "name",
+             "title": "SHIP"
+            },
+            {
+             "key": "class",
+             "title": "CLASS"
+            },
+            {
+             "key": "look",
+             "title": "LOOK"
+            }
+           ],
+           "selectable": true
+          },
+          "bind": {
+           "rows": "$ctx.data.ships"
+          },
+          "on": {
+           "select": {
+            "set": "ui.ship",
+            "to": "=$value"
+           }
+          },
+          "layout": {
+           "weight": 1
+          }
+         }
+        ]
+       },
+       {
+        "widget": "label",
+        "props": {
+         "text": ""
+        },
+        "layout": {
+         "dir": "col",
+         "gap": 6,
+         "weight": 3,
+         "cell": {
+          "order": 1
+         }
+        },
+        "children": [
+         {
+          "widget": "label",
+          "props": {
+           "text": "WHAT TO TEST",
+           "style": "section"
+          },
+          "layout": {
+           "size": 24,
+           "cell": {
+            "size": 1
+           }
+          }
+         },
+         {
+          "widget": "label",
+          "props": {
+           "text": ""
+          },
+          "bind": {
+           "text": "$ctx.data.test"
+          },
+          "layout": {
+           "weight": 1
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "layout": {
+       "dir": "row",
+       "gap": 6,
+       "size": 40,
+       "cell": {
+        "size": 3
+       }
+      },
+      "children": [
+       {
+        "widget": "button",
+        "props": {
+         "text": "BOARD",
+         "tone": "accent",
+         "key": "b"
+        },
+        "on": {
+         "click": {
+          "cmd": "ship.board",
+          "args": {
+           "ship": "=$ui.ship"
+          }
+         }
+        },
+        "show_if": "has($ui.ship)"
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "MAP",
+         "tone": "accent",
+         "key": "m"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.map"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "GUIDE",
+         "tone": "accent",
+         "key": "g"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.guide"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "HOME",
+         "tone": "warn",
+         "key": "h"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.home"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "ABOUT",
+         "tone": "accent",
+         "key": "a"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.about"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "CLIENTS",
+         "tone": "accent",
+         "key": "c"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.about",
+          "args": {
+           "topic": "clients"
+          }
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "FEEDBACK",
+         "tone": "accent",
+         "key": "f"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.about",
+          "args": {
+           "topic": "feedback"
+          }
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "COMPACT",
+         "tone": "accent",
+         "key": "v"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.view",
+          "args": {
+           "mode": "compact"
+          }
+         }
+        }
+       }
+      ]
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "bind": {
+       "text": "$ctx.data.clients"
+      },
+      "layout": {
+       "size": 52,
+       "cell": {
+        "size": 6
+       }
+      }
+     },
+     {
+      "widget": "textport",
+      "id": "text",
+      "layout": {
+       "size": 150
+      }
+     }
+    ]
+   }
+  },
+  "concourse-compact": {
+   "title": "Spacedock Concourse (compact)",
+   "suggest_theme": "tng",
+   "root": {
+    "widget": "label",
+    "props": {
+     "text": ""
+    },
+    "layout": {
+     "dir": "col",
+     "gap": 6
+    },
+    "children": [
+     {
+      "widget": "label",
+      "props": {
+       "text": "",
+       "style": "title"
+      },
+      "bind": {
+       "text": "$ctx.data.title"
+      },
+      "layout": {
+       "size": 30,
+       "cell": {
+        "size": 2
+       }
+      }
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "layout": {
+       "dir": "col",
+       "gap": 6,
+       "weight": 1
+      },
+      "children": [
+       {
+        "widget": "table",
+        "id": "ships",
+        "props": {
+         "columns": [
+          {
+           "key": "name",
+           "title": "SHIP"
+          },
+          {
+           "key": "class",
+           "title": "CLASS"
+          },
+          {
+           "key": "look",
+           "title": "LOOK"
+          }
+         ],
+         "selectable": true
+        },
+        "bind": {
+         "rows": "$ctx.data.ships"
+        },
+        "on": {
+         "select": {
+          "set": "ui.ship",
+          "to": "=$value"
+         }
+        },
+        "layout": {
+         "weight": 1
+        }
+       }
+      ]
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "layout": {
+       "dir": "row",
+       "gap": 6,
+       "size": 40,
+       "cell": {
+        "size": 3
+       }
+      },
+      "children": [
+       {
+        "widget": "button",
+        "props": {
+         "text": "BOARD",
+         "tone": "accent",
+         "key": "b"
+        },
+        "on": {
+         "click": {
+          "cmd": "ship.board",
+          "args": {
+           "ship": "=$ui.ship"
+          }
+         }
+        },
+        "show_if": "has($ui.ship)"
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "HOME",
+         "tone": "warn",
+         "key": "h"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.home"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "ABOUT",
+         "tone": "accent",
+         "key": "a"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.about"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "FULL",
+         "tone": "accent",
+         "key": "v"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.view",
+          "args": {
+           "mode": "normal"
+          }
+         }
+        }
+       }
+      ]
+     },
+     {
+      "widget": "textport",
+      "id": "text",
+      "layout": {
+       "size": 150
+      }
+     }
+    ]
+   }
+  },
+  "briefing": {
+   "title": "Dock status",
+   "suggest_theme": "tng",
+   "root": {
+    "widget": "label",
+    "props": {
+     "text": ""
+    },
+    "layout": {
+     "dir": "col",
+     "gap": 6
+    },
+    "children": [
+     {
+      "widget": "label",
+      "props": {
+       "text": "",
+       "style": "title"
+      },
+      "bind": {
+       "text": "$ctx.data.title"
+      },
+      "layout": {
+       "size": 26,
+       "cell": {
+        "size": 2
+       }
+      }
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "bind": {
+       "text": "$ctx.data.status"
+      },
+      "layout": {
+       "size": 60,
+       "cell": {
+        "size": 4
+       }
+      }
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "bind": {
+       "text": "$ctx.data.hint"
+      },
+      "layout": {
+       "weight": 1
+      }
+     },
+     {
+      "widget": "label",
+      "props": {
+       "text": ""
+      },
+      "layout": {
+       "dir": "row",
+       "gap": 6,
+       "size": 40,
+       "cell": {
+        "size": 3
+       }
+      },
+      "children": [
+       {
+        "widget": "button",
+        "props": {
+         "text": "MAP",
+         "tone": "accent",
+         "key": "m"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.map"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "HOME",
+         "tone": "warn",
+         "key": "h"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.home"
+         }
+        }
+       },
+       {
+        "widget": "button",
+        "props": {
+         "text": "ABOUT",
+         "tone": "accent",
+         "key": "a"
+        },
+        "on": {
+         "click": {
+          "cmd": "world.about"
+         }
+        }
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

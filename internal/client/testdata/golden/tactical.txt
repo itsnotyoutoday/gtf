@@ -7,17 +7,17 @@
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │                 ⣰⢕⢕⢝◆⢆⠁⢀⠈⢆
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │                 ⡇◆⠱⢗⠽⡧⠓⠔⠥⢺
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │                 ⠱⡀⠁⢀⢙⠄⢁⠔⢀⠎
-●▀▀TACTICAL▀▀│                                                              │                  ⠙⠢⢄⣡◆▲⠔⠋
+▀OPERATIONS▀▀│                                                              │                  ⠙⠢⢄⣡◆▲⠔⠋
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ 11 AST5716 000+60
+▀ENGINEERI…▀▀│                                                              │
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ Weapons                                  ▼
+▀DAMAGE CO…▀▀│                                                              │ Weapons                                  ▼
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   SHIELD %
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ SHIELDS UP ◗ ◖ SHIELDS DOWN ◗ ◖ LOCK ◗
+▀▀▀▀SCIENCE▀▀│                                                              │ ◖ SHIELDS UP ◗ ◖ SHIELDS DOWN ◗ ◖ LOCK ◗
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ FIRE PHASERS ◗ ◖ TORPEDO ◗
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ ASK ENG: POWER ◗
+●▀▀TACTICAL▀▀│                                                              │ ◖ ASK ENG: POWER ◗
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ SCIENCE ANALYSIS (weak points)
-▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   KIND    STATE %
+▀▀▀▀▀▀▀HELM▀▀│                                                              │   KIND    STATE %
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   shields done  100
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │   WEAKNESS EFFECT BONUS
 ▀▀▀▀▀▀▀▀▀▀▀▀▀│                                                              │ ◖ EXPLOIT WEAKNESS ◗

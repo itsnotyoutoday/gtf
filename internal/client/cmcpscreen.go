@@ -18,6 +18,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/itsnotyoutoday/cmcp/go/notice"
@@ -50,12 +51,16 @@ type cmcpScr struct {
 	themeAsked   map[string]bool
 	shipTheme    string // the one theme of this ship (theme_mode ship), until the next ship hop
 	shipThemeGen int
-	told         bool   // the one-line CMCP notice was shown
-	lockNote     string // "MENU x - locked: hint", shown until the next key
-	reenter      bool   // a screen switch from the menu keeps the keyboard focus on the new screen
-	alertPick    string // the level the alert chooser has highlighted; empty when it is closed
-	fxKey        string // the ambience/shake settings last given to the core
-	alertLevel   string // the alert level the pulse counts from
+	told         bool      // the one-line CMCP notice was shown
+	pane         string    // the pane context shown as the main screen locally (a screen-menu choice, spec 20.14.8); "" = the active context
+	paneCtx      string    // the active context key when it was chosen: a change of the server's screen ends the local view
+	textNote     bool      // the "text mode" notice (spec 20.2.2) was shown for this connection
+	waitFrom     time.Time // cmcp_wait: when CMCP was offered and nothing has answered yet
+	lockNote     string    // "MENU x - locked: hint", shown until the next key
+	reenter      bool      // a screen switch from the menu keeps the keyboard focus on the new screen
+	alertPick    string    // the level the alert chooser has highlighted; empty when it is closed
+	fxKey        string    // the ambience/shake settings last given to the core
+	alertLevel   string    // the alert level the pulse counts from
 	alertSince   time.Time
 	pulseAt      time.Time       // the flip a redraw is already scheduled for
 	reg          *theme.Registry // downloaded theme versions, the override rule and the dev force flag (spec 19.9)
@@ -134,6 +139,9 @@ func (c *Client) cmcpThemeFor(s *Session, u *session.UI, suggest string) string 
 
 // cmcpScreenFor finds the screen to draw (a pack screen, a built-in one, or a client-local override).
 func (c *Client) cmcpScreenFor(s *Session, u *session.UI) (*pack.Screen, *pack.Pack, string) {
+	if u.V2 {
+		return c.cmcpScreenFor2(s, u)
+	}
 	cs := s.cmScr()
 	id := u.Screen.Resolved
 	if u.Screen.ID != cs.lastSrv {
@@ -164,6 +172,299 @@ func (c *Client) cmcpScreenFor(s *Session, u *session.UI) (*pack.Screen, *pack.P
 		}
 	}
 	return sc, pack.BuiltinPack(), id
+}
+
+// isShipRoomType: the context types of the ship that are rooms, not consoles (spec 20.6: ship.shiproom, ship.room,
+// ship.dock, ship.away).
+func isShipRoomType(t string) bool {
+	switch t {
+	case "ship.shiproom", "ship.room", "ship.dock", "ship.away":
+		return true
+	}
+	return false
+}
+
+// frameScreen is std.frame (spec 20.3.4, 20.3.5): the generic layout every context can fall back to,
+// a title strip, nothing in the body and the textport.
+var (
+	frameOnce sync.Once
+	frameScr  *pack.Screen
+)
+
+func frameScreen() *pack.Screen {
+	frameOnce.Do(func() {
+		p, err := pack.Parse([]byte(`{"format":1,"id":"std-frame","version":"1.0.0","needs":{"proto":1},"screens":{"frame":{"title":"","root":{"widget":"label","props":{"text":""},"layout":{"dir":"col"},"children":[{"widget":"textport","id":"text","layout":{"weight":1}}]}}}}`), pack.Options{})
+		if err == nil {
+			frameScr = p.Screens["frame"]
+		}
+	})
+	return frameScr
+}
+
+// ---- pane contexts (spec 20.14.8): gtf's own way is a screen-menu entry that shows the pane's layout as the main screen, locally ----
+
+// cmcpPanes lists the contexts the player can open from the screen menu: the ones the game presented off the main screen
+// (UI.Panes, in push order) and the other contexts of the stack that are not the main screen (a lower-priority place or
+// briefing), so every context stays reachable (spec 20.14.8 rule 4). A layout that cannot be shown by itself (a "by:"
+// lookup) is left out.
+func cmcpPanes(u *session.UI) []session.PaneView {
+	if !u.V2 {
+		return nil
+	}
+	var out []session.PaneView
+	seen := map[string]bool{}
+	var surfaces []string
+	for k := range u.Panes {
+		surfaces = append(surfaces, k)
+	}
+	sort.Strings(surfaces)
+	for _, k := range surfaces {
+		for _, p := range u.Panes[k] {
+			seen[p.Key] = true
+			out = append(out, p)
+		}
+	}
+	for i := len(u.Stack2) - 1; i >= 0; i-- {
+		e := u.Stack2[i]
+		if e.Active || seen[e.Key] || strings.HasPrefix(e.EffectiveLayout, "by:") || e.EffectiveLayout == "" {
+			continue
+		}
+		pv := session.PaneView{Surface: e.Surface, Key: e.Key, Ctx: e.Ctx, Type: e.Type, Scope: e.Scope, ID: e.ID, Name: e.Name, Title: e.Title,
+			Layout: e.EffectiveLayout, Priority: e.Priority, Readonly: e.Readonly, Commands: e.Commands}
+		if pv.Title == "" {
+			pv.Title = e.Name
+		}
+		if pv.Title == "" {
+			pv.Title = e.ID
+		}
+		if len(e.Data) > 0 {
+			var d map[string]any
+			if json.Unmarshal(e.Data, &d) == nil {
+				pv.Data = d
+			}
+		}
+		out = append(out, pv)
+	}
+	return out
+}
+
+// cmcpCurPane is the pane the player chose to see as the main screen, nil when none (or it is gone, or the
+// server moved the main screen to another context).
+func (c *Client) cmcpCurPane(s *Session, u *session.UI) *session.PaneView {
+	cs := s.cmScr()
+	if cs.pane == "" {
+		return nil
+	}
+	if u.CtxKey != cs.paneCtx {
+		cs.pane = ""
+		return nil
+	}
+	for _, p := range cmcpPanes(u) {
+		if p.Key == cs.pane {
+			p := p
+			return &p
+		}
+	}
+	cs.pane = ""
+	return nil
+}
+
+// cmcpCtxOf is $ctx: the active context's, or the pane's while one is shown.
+func (c *Client) cmcpCtxOf(s *Session, u *session.UI) any {
+	if pv := c.cmcpCurPane(s, u); pv != nil {
+		m := map[string]any{"key": pv.Key, "type": pv.Type, "scope": pv.Scope, "id": pv.ID, "layout": pv.Layout, "data": pv.Data}
+		if m["data"] == nil {
+			m["data"] = map[string]any{}
+		}
+		if pv.Name != "" {
+			m["name"] = pv.Name
+		}
+		if pv.Title != "" {
+			m["title"] = pv.Title
+		}
+		return m
+	}
+	return u.CtxLocal()
+}
+
+// cmcpPaneScreen resolves a pane's layout like any other (pack screen, built-in, else the generic frame). A layout with
+// no textport of its own keeps the normal text output: the textport is added below it.
+func (c *Client) cmcpPaneScreen(s *Session, pv *session.PaneView) (*pack.Screen, *pack.Pack, string) {
+	cs := s.cmScr()
+	var sc *pack.Screen
+	var p *pack.Pack
+	id := pv.Layout
+	switch {
+	case strings.Contains(id, "/"):
+		i := strings.IndexByte(id, '/')
+		if pk := cs.packs[id[:i]]; pk != nil && pk.Screens[id[i+1:]] != nil {
+			sc, p = pk.Screens[id[i+1:]], pk
+		}
+	case strings.HasPrefix(id, "std."):
+		if b := pack.Builtin(id); b != nil {
+			sc, p = b, pack.BuiltinPack()
+		}
+	}
+	if sc == nil {
+		return frameScreen(), pack.BuiltinPack(), "std.frame"
+	}
+	if hasTextportNode(sc.Root) {
+		return sc, p, id
+	}
+	cp := *sc
+	cp.Root = &pack.Node{Path: "w", Widget: "label", Props: map[string]any{"text": ""}, Layout: pack.Layout{Dir: "col"},
+		Children: []*pack.Node{sc.Root, {Path: "w.t", ID: "text", Widget: "textport", Layout: pack.Layout{Weight: 1}}}}
+	return &cp, p, id
+}
+
+func hasTextportNode(n *pack.Node) bool {
+	if n == nil {
+		return false
+	}
+	if n.Widget == "textport" {
+		return true
+	}
+	for _, k := range n.Children {
+		if hasTextportNode(k) {
+			return true
+		}
+	}
+	return false
+}
+
+// cmcpMenuEntry is one line of gtf's screen menu: the core's screens, then the pane contexts.
+type cmcpMenuEntry struct {
+	ID, Title string
+	Active    bool
+	Available bool
+	Pane      bool
+}
+
+func (c *Client) cmcpMenu(s *Session, u *session.UI) []cmcpMenuEntry {
+	cs := s.cmScr()
+	paneOn := c.cmcpCurPane(s, u) != nil
+	var out []cmcpMenuEntry
+	for _, o := range session.MenuScreens(u.Screens) {
+		out = append(out, cmcpMenuEntry{ID: o.ID, Title: c.cmcpLayoutTitle(cs, o.ID, o.Title), Active: o.Active && !paneOn, Available: o.Available})
+	}
+	for _, pv := range cmcpPanes(u) {
+		out = append(out, cmcpMenuEntry{ID: "pane:" + pv.Key, Title: pv.Title, Active: paneOn && cs.pane == pv.Key, Available: true, Pane: true})
+	}
+	return out
+}
+
+// cmcpLayoutTitle names a layout in the menu: the pack screen's own title when the pack is held ("Navigation"), else
+// the last part of "<pack>/<screen>" in capitals, else what the core gave (built-in screens have titles).
+func (c *Client) cmcpLayoutTitle(cs *cmcpScr, id, given string) string {
+	i := strings.IndexByte(id, '/')
+	if i < 0 || given != id {
+		return given
+	}
+	if p := cs.packs[id[:i]]; p != nil {
+		if sc := p.Screens[id[i+1:]]; sc != nil && sc.Title != "" {
+			return sc.Title
+		}
+	}
+	return strings.ToUpper(id[i+1:i+2]) + id[i+2:]
+}
+
+// cmcpShowMenu applies a menu choice: a pane becomes the local main screen; a screen goes to the core (and ends a pane view).
+func (c *Client) cmcpShowMenu(s *Session, id string) error {
+	cs := s.cmScr()
+	u := s.cm.UI()
+	if key, ok := strings.CutPrefix(id, "pane:"); ok {
+		for _, pv := range cmcpPanes(u) {
+			if pv.Key == key {
+				cs.pane, cs.paneCtx = key, u.CtxKey
+				c.cmcpPumpDirty(s)
+				return nil
+			}
+		}
+		return session.ErrNoSuchScreen
+	}
+	cs.pane = ""
+	return s.cm.ShowScreen(c.cfg.Now(), id)
+}
+
+func (c *Client) cmcpPumpDirty(s *Session) {
+	c.cmcpPump(s)
+	c.scheduleRender()
+}
+
+// cmcpScreenFor2 resolves the active context's layout (spec 20.5): "<pack>/<screen>" from a held pack,
+// "by:<field>" looked up by the context's key suffix in the definition's layout packs and then in the
+// built-in std.* screens, "std.<name>" built in, "std.frame" the generic frame. A layout that cannot be
+// resolved gives nil for an ambient context (the ship's alert frame, as in v1) and the generic frame
+// for every other (a world place is a normal screen, spec 20.9).
+func (c *Client) cmcpScreenFor2(s *Session, u *session.UI) (*pack.Screen, *pack.Pack, string) {
+	cs := s.cmScr()
+	if u.TextClient || u.CtxType == "" {
+		return nil, nil, ""
+	}
+	if pv := c.cmcpCurPane(s, u); pv != nil {
+		return c.cmcpPaneScreen(s, pv)
+	}
+	if isShipRoomType(u.CtxType) && !onVar(c.in.Var("cmcp_room_screens")) {
+		// A room of the ship draws no screen unless %cmcp_room_screens is on: the game's text stays the view and a
+		// yellow or red alert shows as a glowing edge round the text (cmcpAmbientFrame). Only a console draws always.
+		return nil, nil, ""
+	}
+	id := u.Screen.Resolved
+	if u.Screen.ID != cs.lastSrv {
+		cs.lastSrv, cs.override = u.Screen.ID, ""
+	}
+	if cs.override != "" {
+		id = cs.override
+	}
+	by := ""
+	if strings.HasPrefix(id, "by:") {
+		by = u.LayoutByValue
+	} else if u.Screen.Resolved == "" && id == "" {
+		return nil, nil, ""
+	}
+	switch {
+	case by != "":
+		if u.Definition != nil {
+			for _, lp := range u.Definition.Layouts {
+				if p := cs.packs[lp.ID]; p != nil {
+					if sc := p.Screens[by]; sc != nil {
+						return sc, p, lp.ID + "/" + by
+					}
+				}
+			}
+		}
+		if alt, ok := consoleScreens[by]; ok {
+			by = alt
+		}
+		if sc := pack.Builtin("std." + by); sc != nil {
+			return sc, pack.BuiltinPack(), "std." + by
+		}
+	case strings.Contains(id, "/"):
+		i := strings.IndexByte(id, '/')
+		if p := cs.packs[id[:i]]; p != nil {
+			if sc := p.Screens[id[i+1:]]; sc != nil {
+				return sc, p, id
+			}
+		}
+	case id == "std.frame":
+	case strings.HasPrefix(id, "std."):
+		if sc := pack.Builtin(id); sc != nil {
+			return sc, pack.BuiltinPack(), id
+		}
+	}
+	if cid := consoleID(u); cid != "" {
+		// a console whose pack layout is not usable yet: the built-in screen of that console, as in v1 (spec 16.6)
+		if alt, ok := consoleScreens[cid]; ok {
+			cid = alt
+		}
+		if sc := pack.Builtin("std." + cid); sc != nil {
+			return sc, pack.BuiltinPack(), "std." + cid
+		}
+	}
+	if u.CtxAmbient {
+		return nil, nil, "" // a room, a dock or an away scene with no screen of its own: the ambient frame
+	}
+	return frameScreen(), pack.BuiltinPack(), "std.frame"
 }
 
 var consoleScreens = map[string]string{"navigation": "helm", "science": "sensors", "comms": "communications", "ops": "operations"}
@@ -259,6 +560,9 @@ func (c *Client) cmcpSyncSurfaceInner() {
 	if u.State != session.StateReady || s.cmScr().view.State() == textport.Off {
 		return // the screen is off: data keeps streaming, the text view has the whole area
 	}
+	if u.V2 && u.EffectiveLevel == 1 {
+		return // the game (or %cmcp_level) allows text only for this context (spec 20.14.9)
+	}
 	cs := s.cmScr()
 	if u.Generation != cs.gen {
 		cs.gen = u.Generation
@@ -283,7 +587,7 @@ func (c *Client) cmcpSyncSurfaceInner() {
 		st := cmcpui.NewState()
 		cs.states[id], cs.st = st, st
 	}
-	c.cmcpDropStale(cs, u.Ship.ID)
+	c.cmcpDropStale(cs, shipKey(u))
 	w, h := c.ui.W, c.ui.OutRows()
 	fullH := h
 	if h >= 12 {
@@ -291,7 +595,7 @@ func (c *Client) cmcpSyncSurfaceInner() {
 	}
 	now := c.cfg.Now()
 	env := pack.EnvFromUI(u, cs.st.UI)
-	env.Ctx = u.CtxLocal() // $ctx: the active context (name, kind, key)
+	env.Ctx = c.cmcpCtxOf(s, u) // $ctx: the active context, or the pane being shown
 	budget := 4096
 	env.Budget = &budget
 	tree := scr.Bind(env, cmcpCaps)
@@ -309,14 +613,19 @@ func (c *Client) cmcpSyncSurfaceInner() {
 	if n := len(u.Stack); n > 0 && u.Stack[n-1].Kind == "room" && u.Stack[n-1].Name != "" {
 		title = u.Stack[n-1].Name // a ship room: the frame's title is the room's name ($ctx.name, spec 3.3.3)
 	}
+	if pv := c.cmcpCurPane(s, u); pv != nil {
+		title = pv.Title // a pane shown as the main screen
+	} else if u.V2 && u.Title != "" && (title == "" || !isConsoleCtx(u)) {
+		title = u.Title // a place, a room, a shop: the frame's title is the context's own ($ctx.title / name)
+	}
 	hdr := title
 	if hdr == "" {
 		hdr = id
 	}
-	if u.Ship.Name != "" {
-		hdr += "  -  " + u.Ship.Name
+	if sn := ctxShipName(u); sn != "" {
+		hdr += "  -  " + sn
 	}
-	if n := len(u.Stack); n > 1 {
+	if n := stackLen(u); n > 1 {
 		hdr += fmt.Sprintf("  [%d contexts]", n)
 	}
 	if u.Readonly {
@@ -341,23 +650,23 @@ func (c *Client) cmcpSyncSurfaceInner() {
 	cs.effects = live
 	textRows := c.cmcpTextRows(s, cs, w, h, th, now)
 	tags := []string{}
-	if len(u.Stack) > 1 {
-		tags = append(tags, fmt.Sprintf("%d contexts", len(u.Stack)))
+	if n := stackLen(u); n > 1 {
+		tags = append(tags, fmt.Sprintf("%d contexts", n))
 	}
 	if u.Readonly {
 		tags = append(tags, "read-only")
 	}
 	var nav []cmcpui.NavEntry
-	for _, o := range session.MenuScreens(u.Screens) { // only the screens this console may show (6.14)
+	for _, o := range c.cmcpMenu(s, u) { // only the screens this console may show (6.14), then the pane contexts
 		nav = append(nav, cmcpui.NavEntry{ID: o.ID, Title: o.Title, Active: o.Active, Available: o.Available})
 	}
-	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpRoomVars(u, c.cmcpVars(u, id, title), title), Builtin: p != nil && p.Builtin, Title: title, Ship: u.Ship.Name, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, TextCols: c.cmcpTextWidth(), AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
+	ce := cmcpui.Env{Nav: nav, Consent: c.cmcpConsentLine(cs), Status: c.cmcpStatusStrip(u), Expanded: cs.view.State() == textport.Expanded && !cs.tween.active(now), TextRows: textRows, ScreenID: id, Vars: c.cmcpRoomVars(u, c.cmcpVars(u, id, title), title), Builtin: p != nil && p.Builtin, Title: title, Ship: ctxShipName(u), NoAlert: u.V2 && !u.Ambience, NoNav: u.V2 && !isConsoleCtx(u) && len(nav) == 0, Tags: tags, ASCII: c.cmcpASCII(), Layout: strings.ToLower(strings.TrimSpace(c.in.Var("cmcp_layout"))), Mnemonics: plan.Mnemonics, Theme: th, Now: now, Alert: u.Alert, TextCols: c.cmcpTextWidth(), AlertRecolour: c.cmcpRecolourWith(th, look), PulseDim: pulse.Dim, PulseDepth: pulse.Depth, Header: hdr, Effects: live,
 		Assets: &cmAssets{c: c, s: s, p: p, env: env, th: th}}
 	f := cmcpui.Draw(tree, w, h, ce, cs.st)
 	if c.cmcpAutoSelect(s, f) {
 		// a picker had nothing selected: its first row was chosen (a $ui write only), draw again
 		env = pack.EnvFromUI(u, cs.st.UI)
-		env.Ctx = u.CtxLocal() // $ctx: the active context (name, kind, key)
+		env.Ctx = c.cmcpCtxOf(s, u) // $ctx: the active context, or the pane being shown
 		budget = 4096
 		env.Budget = &budget
 		tree = scr.Bind(env, cmcpCaps)
@@ -369,6 +678,9 @@ func (c *Client) cmcpSyncSurfaceInner() {
 	f.Grid = c.cmcpWithHint(f, cs, noteText, noteKind, u.Alert, w, fullH)
 	if dx, dy := c.cmcpShake(s, now); dx != 0 || dy != 0 {
 		f.Grid = shiftGrid(f.Grid, f.Text, dx, dy)
+	}
+	if s.cm.Shake(now).Active {
+		flashHit(f.Grid) // the jitter alone is easy to miss: the top row says what happened for as long as the shake lasts
 	}
 	cs.frame = f
 	c.ui.Surf = &ui.Surface{Grid: f.Grid, Text: layout.Rect{X: f.Text.X, Y: f.Text.Y, W: f.Text.W, H: f.Text.H}}
@@ -427,10 +739,19 @@ func (c *Client) cmcpPlan(cs *cmcpScr, tree *pack.BoundNode) cmcpui.Plan {
 			byID[mp.ID] = mp
 		}
 		var kept []focus.Panel
+		seen := map[string]bool{}
 		for _, id := range cs.st.Order {
+			seen[id] = true
 			if id == "~nav" {
 				kept = append(kept, focus.Panel{ID: id, Kind: focus.List})
 			} else if mp, ok := byID[id]; ok {
+				kept = append(kept, mp)
+			}
+		}
+		// a widget that appeared since the last draw (a BOARD button shown once a ship is selected) joins the
+		// plan; cmcpOrderPanels drops it again after the draw if it was clipped
+		for _, mp := range panels {
+			if !seen[mp.ID] {
 				kept = append(kept, mp)
 			}
 		}
@@ -529,7 +850,7 @@ func (c *Client) cmcpKeys(raw string) bool {
 	r := cmcpui.Dispatch(cs.frame, cs.st, name, empty, c.cfg.Now())
 	for _, ev := range r.Events {
 		if ev.Nav != "" {
-			err := s.cm.ShowScreen(c.cfg.Now(), ev.Nav)
+			err := c.cmcpShowMenu(s, ev.Nav)
 			var se *session.ScreenError
 			if errors.As(err, &se) {
 				title := ev.Nav
@@ -575,10 +896,12 @@ func (c *Client) cmcpPerform(s *Session, ev cmcpui.Event) {
 	cs := s.cmScr()
 	u := s.cm.UI()
 	env := pack.EnvFromUI(u, cs.st.UI)
-	env.Ctx = u.CtxLocal() // $ctx: the active context (name, kind, key)
+	env.Ctx = c.cmcpCtxOf(s, u) // $ctx: the active context, or the pane being shown
 	res := ev.Node.Perform(ev.Name, ev.Value, env, cs.st.UI, s.cm, c.cfg.Now())
 	for _, t := range res.Tickets {
-		if t.Mutating && t.Echo != "" {
+		// every action echoes the typed form it equals (spec 6.12 rule 4, 20.14.3), except the continuous
+		// controls (a slider drag would flood the output); a read-only verb such as "map" echoes too
+		if t.Echo != "" && !(u.Catalogue != nil && u.Catalogue[t.Cmd].Continuous()) {
 			c.cmcpEcho(s, t.Echo)
 		}
 	}
@@ -777,7 +1100,7 @@ func (c *Client) cmcpTextRows(s *Session, cs *cmcpScr, w, h int, th cmcpui.Theme
 
 // cmcpVars fills the closed theme variables of spec 19.5 from the subscribed documents.
 func (c *Client) cmcpVars(u *session.UI, id, title string) map[string]any {
-	v := map[string]any{"mode": strings.TrimPrefix(id, "std."), "title": title, "ship": u.Ship.Name, "class": u.Ship.Class, "alert": u.Alert}
+	v := map[string]any{"mode": strings.TrimPrefix(id, "std."), "title": title, "ship": ctxShipName(u), "class": shipClass(u), "alert": u.Alert}
 	if m, _ := u.Docs["Space.Damage.Stat"].(map[string]any); m != nil {
 		if h, _ := m["hull"].(map[string]any); h != nil {
 			cur, ok1 := h["cur"].(float64)
@@ -873,6 +1196,16 @@ func (c *Client) cmcpStatusStrip(u *session.UI) []string {
 
 // cmcpNavStep shows the previous or next screen of the menu (wrapping).
 func (c *Client) cmcpNavStep(s *Session, d int) {
+	if m := c.cmcpMenu(s, s.cm.UI()); len(cmcpPanes(s.cm.UI())) > 0 && len(m) > 0 {
+		cur := 0
+		for i, e := range m {
+			if e.Active {
+				cur = i
+			}
+		}
+		c.cmcpNavErr(s, c.cmcpShowMenu(s, m[((cur+d)%len(m)+len(m))%len(m)].ID))
+		return
+	}
 	var err error
 	if d > 0 {
 		_, err = s.cm.NextScreen(c.cfg.Now())
@@ -884,11 +1217,11 @@ func (c *Client) cmcpNavStep(s *Session, d int) {
 
 // cmcpNavTo shows the n-th (0-based) screen of the menu; it reports whether there is one.
 func (c *Client) cmcpNavTo(s *Session, n int) bool {
-	menu := session.MenuScreens(s.cm.UI().Screens)
+	menu := c.cmcpMenu(s, s.cm.UI())
 	if n < 0 || n >= len(menu) {
 		return false
 	}
-	c.cmcpNavErr(s, s.cm.ShowScreen(c.cfg.Now(), menu[n].ID))
+	c.cmcpNavErr(s, c.cmcpShowMenu(s, menu[n].ID))
 	return true
 }
 
@@ -1088,6 +1421,67 @@ func (c *Client) cmcpAlertRecolour(th cmcpui.Theme) string {
 // cmcpDropStale forgets pack and theme questions that belong to another ship: the consent question
 // is only ever about the current ship's packs (a question left from the previous ship must not
 // survive the hop). A dropped one is asked again if the new ship announces the pack.
+// ---- v1/v2 views of the ship ----
+
+// shipKey identifies the ship scope's owner ("" when nobody).
+func shipKey(u *session.UI) string {
+	if u.V2 {
+		if o := u.Owner("ship"); o != nil {
+			return fmt.Sprintf("%s#%d", o.ID, o.Epoch)
+		}
+		return ""
+	}
+	return u.Ship.ID
+}
+
+// ctxShipName is the ship the active context belongs to (shown in the frame): only a context of the ship scope has one.
+func ctxShipName(u *session.UI) string {
+	if !u.V2 {
+		return u.Ship.Name
+	}
+	if u.CtxScope != "ship" {
+		return ""
+	}
+	if o := u.Owner("ship"); o != nil {
+		return o.Name
+	}
+	return ""
+}
+
+func shipClass(u *session.UI) string {
+	if u.V2 {
+		if o := u.Owner("ship"); o != nil {
+			return o.Class
+		}
+		return ""
+	}
+	return u.Ship.Class
+}
+
+func stackLen(u *session.UI) int {
+	if u.V2 {
+		return len(u.Stack2)
+	}
+	return len(u.Stack)
+}
+
+// isConsoleCtx: the active context is a console (v1: a manned console; v2: a context of a "*.console" type).
+func isConsoleCtx(u *session.UI) bool { return consoleID(u) != "" }
+
+// consoleID is the id of the manned console ("" when none).
+func consoleID(u *session.UI) string {
+	if !u.V2 {
+		if u.Console != nil {
+			return u.Console.ID
+		}
+		return ""
+	}
+	if strings.HasSuffix(u.CtxType, ".console") {
+		return u.CtxID
+	}
+	return ""
+}
+
 func (c *Client) cmcpDropStale(cs *cmcpScr, ship string) {
 	for k, j := range cs.jobs {
 		if j.state == "asking" && j.ship != "" && ship != "" && j.ship != ship {
@@ -1161,13 +1555,13 @@ func (c *Client) cmcpAlertKey(s *Session, name, raw string) bool {
 		c.scheduleRender()
 		return true
 	}
-	if name != "f5" && name != "alt_a" || u.Console == nil {
+	if name != "f5" && name != "alt_a" || consoleID(u) == "" {
 		return false
 	}
 	if name == "f5" && c.cmcpConsentLine(cs) != "" {
 		return false
 	}
-	st := session.AlertControl(u.Catalogue, u.Console.ID, strings.ToLower(u.Alert), u.AI, u.Readonly)
+	st := session.AlertControl(u.Catalogue, consoleID(u), strings.ToLower(u.Alert), u.AI, u.Readonly)
 	if !st.Enabled {
 		hint := ""
 		if st.Hint != nil {
@@ -1208,7 +1602,14 @@ func (c *Client) cmcpRecolourWith(th cmcpui.Theme, look ambient.Look) string {
 
 // cmcpRoomVars lets a ship room's name stand where the console's mode name goes in a theme's band.
 func (c *Client) cmcpRoomVars(u *session.UI, v map[string]any, title string) map[string]any {
-	if n := len(u.Stack); n > 0 && u.Stack[n-1].Kind == "room" && v != nil {
+	if v == nil {
+		return v
+	}
+	if u.V2 {
+		if u.CtxType != "" && !isConsoleCtx(u) {
+			v["mode"] = title
+		}
+	} else if n := len(u.Stack); n > 0 && u.Stack[n-1].Kind == "room" {
 		v["mode"] = title
 	}
 	return v
@@ -1239,4 +1640,12 @@ func (c *Client) cmcpClose(s *Session) {
 	}
 	c.cmcpPump(s)
 	c.scheduleRender()
+}
+
+// flashHit writes "HIT" in reverse red on the top row of the frame (the notice row) while a hit shakes the screen.
+func flashHit(g *layout.Grid) {
+	a := layout.Attr{FG: layout.Color{Kind: layout.RGB, R: 255, G: 255, B: 255}, BG: layout.Color{Kind: layout.RGB, R: 220, G: 40, B: 30}, Bold: true}
+	for i, r := range []rune(" HIT ") {
+		g.Set(1+i, 0, layout.Cell{R: r, A: a})
+	}
 }

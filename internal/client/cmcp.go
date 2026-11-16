@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,7 +37,7 @@ func (c *Client) cmcpEnabled() bool {
 }
 
 // cmcpEnv is the telnet environment of a new connection: it carries the CMCP switch the gmcp
-// handler reads when GMCP turns on (it then adds "Cobra 1" to Core.Supports.Set).
+// handler reads when GMCP turns on (it then adds the gate "Cobra 2" to Core.Supports.Set).
 func (c *Client) cmcpEnv() *telnet.Env {
 	e := telnet.NewEnv()
 	on := c.cmcpWanted.Load() // set on the client goroutine at connect: the dialer runs elsewhere
@@ -52,6 +53,10 @@ func (c *Client) cmcpEnv() *telnet.Env {
 func (c *Client) cmcpConfig(s *Session) session.Config {
 	cfg := session.Config{
 		Name: "GTF", Version: Version, Kind: "tty",
+		Protos:         []int{2}, // CMCP 2 only (spec 20.2): never "Cobra 1"
+		CmcpWait:       c.cmcpWaitFor(),
+		LevelCap:       c.cmcpLevelCap(),
+		Surfaces:       []string{"screen", "panel"}, // spec 20.14.2: gtf draws screens and cell panels, no docks or floats
 		Render:         &msg.Render{Kind: "cell", FPS: 4},
 		Themes:         cmcpThemeNames(),
 		Theme:          c.cmcpTheme(),
@@ -76,9 +81,11 @@ func (c *Client) cmcpOption(s *Session, on bool) {
 	}
 	if s.cm == nil {
 		s.cm = session.NewClient(c.cmcpConfig(s))
+		c.cmcpHoldCachedDefs(s)
 	}
 	now := c.cfg.Now()
 	if on {
+		s.cmScr().waitFrom = now
 		s.cm.TelnetEvent(session.WillGMCP, now)
 	} else {
 		s.cm.TelnetEvent(session.DontGMCP, now)
@@ -102,6 +109,7 @@ func (c *Client) cmcpReceive(s *Session, m telnet.Message) {
 	s.cm.Receive(c.cfg.Now(), f)
 	c.cmcpPump(s)
 	c.cmcpEnsurePacks(s)
+	c.cmcpDefPacks(s)
 }
 
 // cmcpPump moves what the session produced to the game and to the user.
@@ -149,11 +157,95 @@ func (c *Client) cmcpNote(s *Session, n session.Note) {
 			c.cmcpPackWanted(s, *n.PackRef)
 		}
 	case session.NoteBye:
-		c.cmcpDebug("ended: %s", n.Text)
+		// spec 20.2.2: every negotiation outcome is visible, never only under cmcp_debug
+		c.cmcpTextMode(s, byeNotice(n.Text))
+	case session.NoteDefFetch:
+		if n.Blob != nil {
+			c.cmcpDefFetch(s, *n.Blob)
+		}
+	case session.NoteDefApplied:
+		c.cmcpDefApplied(s, n)
+	case session.NoteDefRejected:
+		c.cmcpTextMode(s, defRejectedNotice(n.Text))
 	case session.NoteError:
 		c.cmcpDebug("server error: %s", n.Text)
 	case session.NoteState, session.NoteLog:
 		c.cmcpDebug("%s", n.Text)
+	}
+}
+
+// byeNotice is the player-facing line for a Cobra.Bye reason (spec 20.2.2, 20.3.4).
+func byeNotice(reason string) string {
+	switch reason {
+	case msg.ByeNoCommonVersion:
+		return "this game speaks CMCP 1 only: text mode"
+	case msg.ByeProtocolError:
+		return "the game and this client disagree about the protocol: text mode"
+	}
+	if reason == "" {
+		return "the game ended CMCP: text mode"
+	}
+	return "the game ended CMCP (" + reason + "): text mode"
+}
+
+// cmcpTextMode tells the player once per connection that CMCP is not in use and the game stays a
+// plain text session. The connection is never touched.
+func (c *Client) cmcpTextMode(s *Session, why string) {
+	cs := s.cmScr()
+	if cs.textNote {
+		return
+	}
+	cs.textNote = true
+	c.cmcpDebug("text mode: %s", why)
+	c.echoTo(s.scr, "", "% CMCP: "+why+".")
+}
+
+// cmcpLevelCap is %cmcp_level: the most gtf draws (1 text, 2 widgets, 3 full console look; default 3, spec 20.14.9).
+func (c *Client) cmcpLevelCap() int {
+	if n, err := strconv.Atoi(strings.TrimSpace(c.in.Var("cmcp_level"))); err == nil && n >= 1 && n <= 3 {
+		return n
+	}
+	return 0
+}
+
+// defRejectedNotice is the line for a definition the client cannot use (spec 20.3.4).
+func defRejectedNotice(why string) string {
+	switch why {
+	case "format":
+		return "this game needs a newer client: text mode"
+	case "hash":
+		return "the game's definition failed its hash check: text mode"
+	case "fetch":
+		return "the game's definition could not be fetched: text mode"
+	}
+	return "the game's definition is not usable (" + why + "): text mode"
+}
+
+// cmcpWaitFor is %cmcp_wait: how long a game that stays silent after GMCP came on is given to
+// answer Cobra.Server before gtf says it is staying a plain MUD client (default 3 s).
+func (c *Client) cmcpWaitFor() time.Duration {
+	if v := strings.TrimSpace(c.in.Var("cmcp_wait")); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return time.Duration(f * float64(time.Second))
+		}
+	}
+	return 3 * time.Second
+}
+
+// cmcpSilence checks the cmcp_wait timer of one session: GMCP is on, CMCP was offered, nothing
+// came back (a v1-only server never answers "Cobra 2").
+func (c *Client) cmcpSilence(s *Session, now time.Time) {
+	cs := s.cmScr()
+	if cs.textNote || cs.waitFrom.IsZero() {
+		return
+	}
+	if u := s.cm.UI(); u.Server != nil || u.State != session.StateDeclared {
+		cs.waitFrom = time.Time{} // answered (or closed): the timer is done
+		return
+	}
+	if now.Sub(cs.waitFrom) >= c.cmcpWaitFor() {
+		cs.waitFrom = time.Time{}
+		c.cmcpTextMode(s, "this game does not answer CMCP 2 (it may speak CMCP 1 only): text mode")
 	}
 }
 
@@ -163,6 +255,7 @@ func (c *Client) cmcpTick() {
 	for _, s := range c.order {
 		if s.cm != nil {
 			s.cm.Tick(now)
+			c.cmcpSilence(s, now)
 			c.cmcpPump(s)
 		}
 	}
@@ -188,21 +281,10 @@ func (c *Client) cmcpStatus(s *Session) []string {
 	if u.Server != nil {
 		l = append(l, fmt.Sprintf("%% server: %s %s %s", u.Server.Server, u.Server.Game, u.Server.Build))
 	}
-	if u.HaveShip {
-		l = append(l, fmt.Sprintf("%% ship: %s (%s) epoch %d%s", u.Ship.Name, u.Ship.ID, u.Ship.Epoch, map[bool]string{true: ", AI", false: ""}[u.AI]))
-	}
-	if u.Console != nil {
-		l = append(l, fmt.Sprintf("%% console: %s (manned by %s)%s", u.Console.ID, u.Console.MannedBy, map[bool]string{true: ", read-only", false: ""}[u.Readonly]))
+	if u.V2 {
+		l = append(l, c.cmcpStatusV2(u)...)
 	} else {
-		l = append(l, "% console: none")
-	}
-	for i := len(u.Stack) - 1; i >= 0; i-- {
-		e := u.Stack[i]
-		mark := " "
-		if e.Active {
-			mark = "*"
-		}
-		l = append(l, fmt.Sprintf("%% context %s %s %s priority %d screen %s", mark, e.Key, e.Kind, e.Priority, e.Screen))
+		l = append(l, "% (protocol 1 state: no longer spoken by this build)")
 	}
 	if u.Screen.ID != "" {
 		x := u.Screen.ID
@@ -254,7 +336,7 @@ func (c *Client) cmcpAfterRestore() {
 		s.cm = nil
 		c.cmcpOption(s, true)
 		s.conn.SendProto("gmcp", "Core.Supports.Remove", []string{"Cobra"})
-		s.conn.SendProto("gmcp", "Core.Supports.Set", append(append([]string(nil), gmcpproto.DefaultSupports...), "Cobra 1"))
+		s.conn.SendProto("gmcp", "Core.Supports.Set", append(append([]string(nil), gmcpproto.DefaultSupports...), gmcpproto.CobraGate))
 	}
 }
 
@@ -267,4 +349,67 @@ func (c *Client) cmcpKeyDefs(in *gtfparser.Interp) {
 			in.Exec("/def -q key_" + k + " = /test 1")
 		}
 	}
+}
+
+// cmcpStatusV2 is the protocol 2 part of /cmcp status: the definition, the scopes with their
+// owners, the context stack with the types and the active layout (spec 20.4).
+func (c *Client) cmcpStatusV2(u *session.UI) []string {
+	var l []string
+	switch {
+	case u.Def != nil:
+		l = append(l, fmt.Sprintf("%% definition: %s %s (%s...)", u.Def.ID, u.Def.Version, short(u.Def.SHA256)))
+	case u.Server != nil && u.Server.Def != nil:
+		l = append(l, fmt.Sprintf("%% definition: %s %s announced, not held yet", u.Server.Def.ID, u.Server.Def.Version))
+	default:
+		l = append(l, "% definition: none")
+	}
+	if u.TextClient {
+		l = append(l, "% text client: the definition was refused ("+u.TextReason+")")
+	}
+	var names []string
+	for n := range u.Scopes {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		sv := u.Scopes[n]
+		o := "nobody"
+		if sv.Owner != nil {
+			o = sv.Owner.ID
+			if sv.Owner.Name != "" {
+				o = sv.Owner.Name + " (" + sv.Owner.ID + ")"
+			}
+			o += fmt.Sprintf(" epoch %d", sv.Owner.Epoch)
+			if sv.Owner.AI {
+				o += ", AI"
+			}
+		}
+		l = append(l, fmt.Sprintf("%% scope %s: %s", n, o))
+	}
+	for i := len(u.Stack2) - 1; i >= 0; i-- {
+		e := u.Stack2[i]
+		mark := " "
+		if e.Active {
+			mark = "*"
+		}
+		x := fmt.Sprintf("%% context %s %s %s priority %d layout %s surface %s", mark, e.Key, e.Type, e.Priority, e.EffectiveLayout, e.Surface)
+		if e.Readonly {
+			x += " read-only"
+		}
+		if e.Surface != "" && e.Surface != "screen" {
+			x += " (pane)"
+		}
+		l = append(l, x)
+	}
+	if len(u.Stack2) == 0 {
+		l = append(l, "% contexts: none")
+	}
+	return l
+}
+
+func short(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+	return sha
 }
