@@ -26,6 +26,7 @@ A game may announce a theme of its own as a pack; gtf fetches it under the same 
 | `cmcp_theme` | unset | a theme name from the table above |
 | `cmcp_theme_mode` | ship | `ship` or `fixed` |
 | `cmcp_room_screens` | off | `on` draws a screen in the ship's rooms; off keeps the text view with a coloured alert border; a manned console always draws |
+| `cmcp_level` | 3 | the most gtf draws: 3 full console look, 2 plain widgets, 1 text only; the game can cap a screen too and the lower wins |
 | `cmcp_layout` | auto | `side` puts the game output on the left and the widgets stacked on the right |
 | `cmcp_textport` | balanced | the output's size: `compact` (about 20%), `balanced` (about 35%), `large` (about 50%); F3 expands it to about 80% |
 | `cmcp_text_width` | auto | width of the game output in the side layout: `auto` (80 columns) or a number; `/cmcp width` and Alt-, Alt-. change it and remember it in `~/.gtf/cmcp/prefs.json` |

@@ -120,6 +120,7 @@ AI, someone else took the console) nothing is offered.
 | `%cmcp_screens` | on | draw console screens (off: protocol and data only, for scripts) |
 | `%cmcp_theme` | (unset: the ship's theme, else `tng`) | a theme name from `/cmcp themes`, or `plain` (no frame, colours left to the terminal); setting it fixes the theme (see `%cmcp_theme_mode`) |
 | `%cmcp_room_screens` | off | `on` draws a screen for the ship's rooms (bridge, corridor, docking port, away); off (the default) keeps the text as the view and shows a yellow or red alert as a glowing border round the output; a manned console always draws |
+| `%cmcp_level` | 3 | the most gtf draws: 3 full console look, 2 plain widgets, 1 text only. The game can also cap a screen (it never draws richer than the game allows); the lower of the two wins |
 | `%cmcp_theme_mode` | ship | `ship` follows the ship's suggested theme (console, ship, screen); `fixed` keeps `%cmcp_theme` (`%cmcp_ship_theme on` is the old spelling of `ship`) |
 | `%cmcp_textport` | balanced | the output's size: `compact` (~20%), `balanced` (~35%), `large` (~50%); F3 expands to ~80% |
 | `%cmcp_motion` | on | `off` makes the F3 animation instant |
